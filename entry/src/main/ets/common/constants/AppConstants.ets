@@ -21,6 +21,16 @@ export class AppConstants {
   static readonly SCHEDULE_DATA_KEY: string = 'schedule_data_json';
   static readonly SETTING_REMINDER_ENABLED_KEY: string = 'setting_reminder_enabled';
   static readonly SETTING_EXAM_REMINDER_ENABLED_KEY: string = 'setting_exam_reminder_enabled';
+  static readonly SETTING_SCHEDULE_REMINDER_MASTER_KEY: string = 'setting_schedule_reminder_master';
+  static readonly SETTING_SCHEDULE_REMINDER_EXAM_KEY: string = 'setting_schedule_reminder_exam';
+  static readonly SETTING_SCHEDULE_REMINDER_COURSE_KEY: string = 'setting_schedule_reminder_course';
+  static readonly SETTING_SCHEDULE_REMINDER_CUSTOM_KEY: string = 'setting_schedule_reminder_custom';
+  static readonly SETTING_SCHEDULE_REMINDER_ASSIGNMENT_KEY: string = 'setting_schedule_reminder_assignment';
+  static readonly SETTING_AUTO_SYNC_SCHEDULE_KEY: string = 'setting_auto_sync_schedule';
+  static readonly SETTING_SCHEDULE_REMIND_MINUTES_EXAM_KEY: string = 'setting_schedule_remind_minutes_exam';
+  static readonly SETTING_SCHEDULE_REMIND_MINUTES_COURSE_KEY: string = 'setting_schedule_remind_minutes_course';
+  static readonly SETTING_SCHEDULE_REMIND_MINUTES_CUSTOM_KEY: string = 'setting_schedule_remind_minutes_custom';
+  static readonly SETTING_SCHEDULE_REMIND_MINUTES_ASSIGNMENT_KEY: string = 'setting_schedule_remind_minutes_assignment';
   static readonly SCHOOL_SEMESTER_START: string = '2026-02-23';
   static readonly SCHOOL_SEMESTER_END: string = '2026-07-05';
 

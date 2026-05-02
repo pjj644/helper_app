@@ -59,6 +59,7 @@ struct Home {
 
   onPageShow(): void {
     this.loadPageData();
+    ReminderService.refreshAllReminders(getContext(this));
   }
 
   private async loadPageData(): Promise<void> {
@@ -67,7 +68,7 @@ struct Home {
       this.settings = await CourseTableStorage.loadSettings(context);
       ThemeManager.setDarkMode(this.settings.themeDark);
 
-      const localData: string = await CourseTableStorage.loadCourseData(context);
+      const localData: string = await CourseRepository.loadCourseData(context);
       const examData: string = await CourseTableStorage.loadExamData(context);
       const examSelection = await CourseTableStorage.loadExamSelectionPreference(context);
       this.selectedExamTypeIndex = this.normalizeExamTypeIndex(getExamTypeIndexById(examSelection.examTypeId));
@@ -123,6 +124,10 @@ struct Home {
 
       this.todayCourses = this.sortBySection(this.model.getCoursesForDayAndWeek(todayDay, this.currentWeek));
       this.tomorrowCourses = this.sortBySection(this.model.getCoursesForDayAndWeek(tomorrowDay, tomorrowWeek));
+
+      if (this.hasData) {
+        ReminderService.refreshAllReminders(context);
+      }
     } catch (error) {
       console.error('Home加载数据失败:', error);
       this.hasData = false;
@@ -179,6 +184,12 @@ struct Home {
     });
   }
 
+  private openSchedule(): void {
+    router.pushUrl({ url: 'pages/schedulePages/CalendarPage' }).catch((error: Error) => {
+      console.error('跳转日程页面失败:', error);
+    });
+  }
+
   private saveExamSelectionPreference(): void {
     const examTypeId: number = this.getSelectedExamTypeId();
     const semesterId: number = this.selectedSemesterId;
@@ -187,12 +198,6 @@ struct Home {
       semesterId: semesterId,
     }).catch((error: Error) => {
       console.error('保存考试筛选偏好失败', error);
-    });
-  }
-
-  private openManage(): void {
-    router.pushUrl({ url: 'pages/classTablePages/CourseManage' }).catch((error: Error) => {
-      console.error('跳转管理页面失败:', error);
     });
   }
 
@@ -275,17 +280,7 @@ struct Home {
         .width('100%');
 
       Row({ space: 8 }) {
-        Button('在线导入课表')
-          .fontSize(14)
-          .fontWeight(FontWeight.Medium)
-          .fontColor('#FFFFFF')
-          .backgroundColor('rgba(255,255,255,0.20)')
-          .borderRadius(12)
-          .height(42)
-          .layoutWeight(1)
-          .onClick(() => this.openImporter());
-
-        Button('完整课表')
+        Button('课表详情')
           .fontSize(14)
           .fontWeight(FontWeight.Medium)
           .fontColor('#2F6DFF')
@@ -294,6 +289,26 @@ struct Home {
           .height(42)
           .layoutWeight(1)
           .onClick(() => this.openTable());
+
+        Button('考试详情')
+          .fontSize(14)
+          .fontWeight(FontWeight.Medium)
+          .fontColor('#FFFFFF')
+          .backgroundColor('rgba(255,255,255,0.20)')
+          .borderRadius(12)
+          .height(42)
+          .layoutWeight(1)
+          .onClick(() => this.openExamPage());
+
+        Button('日程')
+          .fontSize(14)
+          .fontWeight(FontWeight.Medium)
+          .fontColor('#FFFFFF')
+          .backgroundColor('rgba(255,255,255,0.20)')
+          .borderRadius(12)
+          .height(42)
+          .layoutWeight(1)
+          .onClick(() => this.openSchedule());
       }
       .width('100%');
     }
@@ -303,71 +318,6 @@ struct Home {
     .backgroundColor(ThemeManager.getHeroPanelColor())
     .clickEffect({ level: ClickEffectLevel.LIGHT })
     .shadow({ radius: 16, color: 'rgba(0, 0, 0, 0.05)', offsetY: 4 });
-  }
-
-  @Builder
-  private ActionGridBuilder(): void {
-    Column({ space: 8 }) {
-      Row() {
-        Text('考试类型')
-          .fontSize(13)
-          .fontColor(ThemeManager.getTextSecondaryColor());
-
-        Blank();
-
-        Select(EXAM_TYPE_OPTIONS)
-          .selected(this.selectedExamTypeIndex)
-          .value(this.getSelectedExamTypeLabel())
-          .onSelect((index: number) => {
-            this.selectedExamTypeIndex = this.normalizeExamTypeIndex(index);
-            this.saveExamSelectionPreference();
-          })
-          .width(132);
-      }
-      .width('100%')
-      .padding({ left: 6, right: 2 });
-
-      Row({ space: 8 }) {
-        Button(`在线导入${this.getSelectedExamTypeLabel()}`)
-          .layoutWeight(1)
-          .height(44)
-          .fontSize(14)
-          .fontColor(ThemeManager.getTextPrimaryColor())
-          .backgroundColor(ThemeManager.getBackgroundSecondaryColor())
-          .borderRadius(12)
-          .clickEffect({ level: ClickEffectLevel.LIGHT })
-          .onClick(() => this.openExamImport());
-
-        Button('考试详情')
-          .layoutWeight(1)
-          .height(44)
-          .fontSize(14)
-          .fontColor(ThemeManager.getTextPrimaryColor())
-          .backgroundColor(ThemeManager.getBackgroundSecondaryColor())
-          .borderRadius(12)
-          .clickEffect({ level: ClickEffectLevel.LIGHT })
-          .onClick(() => this.openExamPage());
-      }
-      .width('100%');
-
-      Row({ space: 8 }) {
-        Button('本地课表管理')
-          .width('100%')
-          .height(44)
-          .fontSize(14)
-          .fontColor(ThemeManager.getTextPrimaryColor())
-          .backgroundColor(ThemeManager.getBackgroundSecondaryColor())
-          .borderRadius(12)
-          .clickEffect({ level: ClickEffectLevel.LIGHT })
-          .onClick(() => this.openManage());
-      }
-      .width('100%');
-    }
-    .width('100%')
-    .padding(12)
-    .borderRadius(20)
-    .backgroundColor(ThemeManager.getCardColor())
-    .shadow({ radius: 12, color: 'rgba(0, 0, 0, 0.03)', offsetY: 2 });
   }
 
   @Builder
@@ -529,7 +479,6 @@ struct Home {
       Scroll() {
         Column({ space: 12 }) {
           this.HeroBuilder();
-          this.ActionGridBuilder();
 
           if (!this.hasData) {
             this.EmptyStateBuilder();

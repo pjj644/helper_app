@@ -3,12 +3,15 @@ export interface ScheduleEvent {
   title: string;
   date: string;
   timeRange: string;
+  startTime?: string;
+  endTime?: string;
   location: string;
   type: ScheduleEventType;
   color: string;
   sourceId: string;
   description: string;
   createdAt: number;
+  remindMinutes?: number;
 }
 
 export type ScheduleEventType = 'course' | 'exam' | 'custom' | 'assignment';
@@ -36,17 +39,24 @@ export class ScheduleUtils {
   }
 
   static createEmptyEvent(): ScheduleEvent {
+    const now = new Date();
+    const hh = ScheduleUtils.twoDigit(now.getHours());
+    const mm = ScheduleUtils.twoDigit(now.getMinutes());
+    const time = `${hh}:${mm}`;
     return {
       id: '',
       title: '',
       date: '',
       timeRange: '',
+      startTime: time,
+      endTime: time,
       location: '',
       type: 'custom' as ScheduleEventType,
       color: '#FF9800',
       sourceId: '',
       description: '',
       createdAt: 0,
+      remindMinutes: 0,
     };
   }
 
@@ -98,6 +108,25 @@ export class ScheduleUtils {
       dates.add(events[i].date);
     }
     return dates;
+  }
+
+  static parseTimeRange(timeRange: string): string[] {
+    const parts: string[] = timeRange.split('-');
+    return [parts[0] ? parts[0].trim() : '', parts[1] ? parts[1].trim() : ''];
+  }
+
+  static formatTimeRange(start: string, end: string): string {
+    return `${start}-${end}`;
+  }
+
+  static getDisplayTimeRange(event: ScheduleEvent): string {
+    if (event.startTime && event.endTime) {
+      return ScheduleUtils.formatTimeRange(event.startTime, event.endTime);
+    }
+    if (event.timeRange && event.timeRange.includes('-')) {
+      return event.timeRange;
+    }
+    return '';
   }
 
   static twoDigit(n: number): string {

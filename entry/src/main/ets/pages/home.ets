@@ -112,6 +112,7 @@ struct HomePortalPage {
         this.getUIContext().getPromptAction().showToast({
           message: `云端下载完成：课表${courseCount}条，考试${examCount}条`
         });
+        ReminderService.refreshAllReminders(getContext(this));
       } else {
         const errorMsg = result.courses.error || result.exams.error || '未知错误';
         this.getUIContext().getPromptAction().showToast({ message: `云端下载失败: ${errorMsg}` });

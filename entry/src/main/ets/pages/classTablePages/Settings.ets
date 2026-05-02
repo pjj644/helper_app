@@ -3,6 +3,7 @@ import { AppSettings } from '../../repository/SettingsRepository';
 import { ThemeManager } from '../../common/utils/ThemeManager';
 import { SettingsRepository } from '../../repository/SettingsRepository';
 import { ReminderService } from '../../service/ReminderService';
+import { ScheduleService } from '../../service/ScheduleService';
 import { Logger } from '../../common/utils/Logger';
 
 const TAG = 'Settings';
@@ -19,45 +20,7 @@ struct Settings {
     courseRemindMinutes: 30,
   };
   @StorageLink(ThemeManager.THEME_STORAGE_KEY) isDarkMode: boolean = false;
-  @State reminderEnabled: boolean = false;
-
-  private courseRemindOptions: SelectOption[] = [
-    { value: '不提醒' },
-    { value: '10分钟前' },
-    { value: '20分钟前' },
-    { value: '30分钟前' },
-    { value: '45分钟前' },
-    { value: '60分钟前' }
-  ];
-  private examRemindOptions: SelectOption[] = [
-    { value: '不提醒' },
-    { value: '30分钟前' },
-    { value: '60分钟前' },
-    { value: '120分钟前' },
-    { value: '1天前' }
-  ];
-
-  private mapCourseRemindToIndex(minutes: number): number {
-    const map: number[] = [-1, 10, 20, 30, 45, 60];
-    const idx = map.indexOf(minutes);
-    return idx >= 0 ? idx : 3;
-  }
-
-  private mapExamRemindToIndex(minutes: number): number {
-    const map: number[] = [-1, 30, 60, 120, 1440];
-    const idx = map.indexOf(minutes);
-    return idx >= 0 ? idx : 1;
-  }
-
-  private mapCourseIndexToMinutes(index: number): number {
-    const map: number[] = [-1, 10, 20, 30, 45, 60];
-    return map[Math.max(0, Math.min(index, map.length - 1))];
-  }
-
-  private mapExamIndexToMinutes(index: number): number {
-    const map: number[] = [-1, 30, 60, 120, 1440];
-    return map[Math.max(0, Math.min(index, map.length - 1))];
-  }
+  @State autoSyncSchedule: boolean = true;
 
   aboutToAppear(): void {
     this.loadSettings();
@@ -68,7 +31,7 @@ struct Settings {
       const context = getContext(this);
       this.settings = await SettingsRepository.loadSettings(context);
       this.isDarkMode = this.settings.themeDark;
-      this.reminderEnabled = await ReminderService.getEnabledPref(context);
+      this.autoSyncSchedule = await ReminderService.getAutoSyncScheduleEnabled(context);
     } catch (error) {
       const e = error as Error;
       Logger.error(TAG, `加载设置失败: ${e.message || JSON.stringify(error)}`);
@@ -80,6 +43,13 @@ struct Settings {
       const context = getContext(this);
       await SettingsRepository.saveSettings(context, this.settings);
       ThemeManager.setDarkMode(this.settings.themeDark);
+      await ReminderService.saveAutoSyncScheduleEnabled(context, this.autoSyncSchedule);
+
+      if (this.autoSyncSchedule) {
+        await ScheduleService.syncCoursesToSchedule(context);
+        await ScheduleService.syncExamsToSchedule(context);
+      }
+
       this.getUIContext().getPromptAction().showToast({ message: '设置已保存' });
       router.back();
     } catch (error) {
@@ -165,57 +135,19 @@ struct Settings {
         .backgroundColor(ThemeManager.isDarkMode() ? '#2D2D2D' : '#F7F9FB');
 
         Row() {
-          Text('启用课程提醒')
+          Text('自动创建相关日程')
             .fontSize(16)
             .fontColor(ThemeManager.getTextPrimaryColor())
             .layoutWeight(1);
-          Toggle({ type: ToggleType.Switch, isOn: this.reminderEnabled })
+          Toggle({ type: ToggleType.Switch, isOn: this.autoSyncSchedule })
             .onChange((value: boolean) => {
-              this.reminderEnabled = value;
-              ReminderService.saveEnabledPref(getContext(this), value);
+              this.autoSyncSchedule = value;
+              ReminderService.saveAutoSyncScheduleEnabled(getContext(this), value);
               if (value) {
-                ReminderService.refreshAllReminders(getContext(this));
-              } else {
-                ReminderService.clearAllReminders();
+                ScheduleService.syncCoursesToSchedule(getContext(this));
+                ScheduleService.syncExamsToSchedule(getContext(this));
               }
             });
-        }
-        .width('100%')
-        .padding(12)
-        .borderRadius(10)
-        .backgroundColor(ThemeManager.isDarkMode() ? '#2D2D2D' : '#F7F9FB');
-
-        Row() {
-          Text('课程提醒时间')
-            .fontSize(16)
-            .fontColor(ThemeManager.getTextPrimaryColor())
-            .layoutWeight(1);
-          Select(this.courseRemindOptions)
-            .selected(this.mapCourseRemindToIndex(this.settings.courseRemindMinutes))
-            .onSelect((index: number) => {
-              this.settings.courseRemindMinutes = this.mapCourseIndexToMinutes(index);
-              if (this.reminderEnabled) {
-                ReminderService.refreshAllReminders(getContext(this));
-              }
-            })
-            .width(120);
-        }
-        .width('100%')
-        .padding(12)
-        .borderRadius(10)
-        .backgroundColor(ThemeManager.isDarkMode() ? '#2D2D2D' : '#F7F9FB');
-
-        Row() {
-          Text('考试提醒时间')
-            .fontSize(16)
-            .fontColor(ThemeManager.getTextPrimaryColor())
-            .layoutWeight(1);
-          Select(this.examRemindOptions)
-            .selected(this.mapExamRemindToIndex(this.settings.examRemindMinutes))
-            .onSelect((index: number) => {
-              this.settings.examRemindMinutes = this.mapExamIndexToMinutes(index);
-            })
-            .width(120);
         }
         .width('100%')
         .padding(12)

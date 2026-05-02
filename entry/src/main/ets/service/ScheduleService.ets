@@ -22,7 +22,9 @@ export class ScheduleService {
       }
       event.createdAt = event.createdAt || Date.now();
       event.color = event.color || ScheduleUtils.getTypeColor(event.type);
+      console.info(`[ReminderDebug] ScheduleService.saveSchedule: id=${event.id}, title=${event.title}, date=${event.date}, startTime=${event.startTime}, endTime=${event.endTime}, timeRange=${event.timeRange}, remindMinutes=${event.remindMinutes}, type=${event.type}`);
       await ScheduleRepository.addSchedule(context, event);
+      console.info(`[ReminderDebug] ScheduleService.saveSchedule: saved successfully`);
     } catch (error) {
       console.error('ScheduleService saveSchedule error:', JSON.stringify(error));
     }
@@ -139,5 +141,82 @@ export class ScheduleService {
     d.setDate(d.getDate() + diff);
     d.setHours(0, 0, 0, 0);
     return d;
+  }
+
+  static async removeExpiredSchedules(context: Context): Promise<void> {
+    try {
+      const existingEvents: ScheduleEvent[] = await ScheduleRepository.loadSchedules(context);
+      const todayStr: string = ScheduleUtils.formatDate(new Date().getFullYear(), new Date().getMonth() + 1, new Date().getDate());
+      const valid: ScheduleEvent[] = [];
+      for (let i = 0; i < existingEvents.length; i++) {
+        if (existingEvents[i].date >= todayStr) {
+          valid.push(existingEvents[i]);
+        }
+      }
+      const removedCount: number = existingEvents.length - valid.length;
+      if (removedCount > 0) {
+        console.info(`[ReminderDebug] removeExpiredSchedules: removed ${removedCount} expired schedules`);
+        await ScheduleRepository.saveSchedules(context, valid);
+      }
+    } catch (error) {
+      console.error('ScheduleService removeExpiredSchedules error:', JSON.stringify(error));
+    }
+  }
+
+  static async syncCoursesToSchedule(context: Context): Promise<void> {
+    try {
+      await ScheduleService.removeExpiredSchedules(context);
+      const existingEvents: ScheduleEvent[] = await ScheduleRepository.loadSchedules(context);
+      const filtered: ScheduleEvent[] = [];
+      for (let i = 0; i < existingEvents.length; i++) {
+        if (existingEvents[i].type !== 'course' || !existingEvents[i].sourceId) {
+          filtered.push(existingEvents[i]);
+        }
+      }
+      const courseEvents: ScheduleEvent[] = await ScheduleService.buildCourseEvents(context);
+      const todayStr: string = ScheduleUtils.formatDate(new Date().getFullYear(), new Date().getMonth() + 1, new Date().getDate());
+      for (let i = 0; i < courseEvents.length; i++) {
+        if (courseEvents[i].date === todayStr) {
+          filtered.push(courseEvents[i]);
+        }
+      }
+      await ScheduleRepository.saveSchedules(context, filtered);
+    } catch (error) {
+      console.error('ScheduleService syncCoursesToSchedule error:', JSON.stringify(error));
+    }
+  }
+
+  static async syncExamsToSchedule(context: Context): Promise<void> {
+    try {
+      await ScheduleService.removeExpiredSchedules(context);
+      const existingEvents: ScheduleEvent[] = await ScheduleRepository.loadSchedules(context);
+      const filtered: ScheduleEvent[] = [];
+      for (let i = 0; i < existingEvents.length; i++) {
+        if (existingEvents[i].type !== 'exam' || !existingEvents[i].sourceId) {
+          filtered.push(existingEvents[i]);
+        }
+      }
+      const examEvents: ScheduleEvent[] = await ScheduleService.buildExamEvents(context);
+      const todayStr: string = ScheduleUtils.formatDate(new Date().getFullYear(), new Date().getMonth() + 1, new Date().getDate());
+      let nearestExamDate: string = '';
+      for (let i = 0; i < examEvents.length; i++) {
+        if (examEvents[i].date >= todayStr) {
+          if (nearestExamDate === '' || examEvents[i].date < nearestExamDate) {
+            nearestExamDate = examEvents[i].date;
+          }
+        }
+      }
+      console.info(`[ReminderDebug] syncExamsToSchedule: today=${todayStr}, nearestExamDate=${nearestExamDate}`);
+      if (nearestExamDate !== '') {
+        for (let i = 0; i < examEvents.length; i++) {
+          if (examEvents[i].date === nearestExamDate) {
+            filtered.push(examEvents[i]);
+          }
+        }
+      }
+      await ScheduleRepository.saveSchedules(context, filtered);
+    } catch (error) {
+      console.error('ScheduleService syncExamsToSchedule error:', JSON.stringify(error));
+    }
   }
 }
