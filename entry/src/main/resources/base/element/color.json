@@ -1,0 +1,92 @@
+{
+  "color": [
+    {
+      "name": "white",
+      "value": "#ffffff"
+    },
+    {
+      "name": "start_window_background",
+      "value": "#ffffff"
+    },
+    {
+      "name": "action_button_background",
+      "value": "#169cd5"
+    },
+    {
+      "name": "dialog_cancel_background",
+      "value": "#D9001B"
+    },
+    {
+      "name": "black",
+      "value": "#000000"
+    },
+    {
+      "name": "body_color",
+      "value": "#333333"
+    },
+    {
+      "name": "placeholder_background",
+      "value": "#eeeeee"
+    },
+    {
+      "name": "disabled_button_background",
+      "value": "#C2C2C2"
+    },
+    {
+      "name": "border_color",
+      "value": "#FF9B9B9B"
+    },
+    {
+      "name": "login_button",
+      "value": "#007DFF"
+    },
+    {
+      "name": "course_color_1",
+      "value": "#FFB6C1"
+    },
+    {
+      "name": "course_color_2",
+      "value": "#87CEEB"
+    },
+    {
+      "name": "course_color_3",
+      "value": "#98FB98"
+    },
+    {
+      "name": "course_color_4",
+      "value": "#FFD700"
+    },
+    {
+      "name": "course_color_5",
+      "value": "#DDA0DD"
+    },
+    {
+      "name": "course_color_6",
+      "value": "#F0A0A0"
+    },
+    {
+      "name": "course_color_7",
+      "value": "#B0E0E6"
+    },
+    {
+      "name": "course_color_8",
+      "value": "#FFE4B5"
+    },
+    {
+      "name": "course_color_9",
+      "value": "#E6E6FA"
+    },
+    {
+      "name": "course_color_10",
+      "value": "#F5DEB3"
+    },
+    {
+      "name": "course_color_11",
+      "value": "#AFEEEE"
+    },
+    {
+      "name": "course_color_12",
+      "value": "#FFB347"
+    }
+  ]
+}

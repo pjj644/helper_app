@@ -1,0 +1,84 @@
+{
+  "float": [
+    {
+      "name": "main_title_font_size",
+      "value": "25fp"
+    },
+    {
+      "name": "navigation_font_size",
+      "value": "20fp"
+    },
+    {
+      "name": "body_font_size",
+      "value": "15fp"
+    },
+    {
+      "name": "list_item_font_size",
+      "value": "12fp"
+    },
+    {
+      "name": "number_0",
+      "value": "0"
+    },
+    {
+      "name": "number_1",
+      "value": "1"
+    },
+    {
+      "name": "number_2",
+      "value": "2"
+    },
+    {
+      "name": "number_5",
+      "value": "5"
+    },
+    {
+      "name": "number_10",
+      "value": "10"
+    },
+    {
+      "name": "number_15",
+      "value": "15"
+    },
+    {
+      "name": "number_20",
+      "value": "20"
+    },
+    {
+      "name": "number_75",
+      "value": "75"
+    },
+    {
+      "name": "number_70",
+      "value": "70"
+    },
+    {
+      "name": "number_25",
+      "value": "25"
+    },
+    {
+      "name": "number_100",
+      "value": "100"
+    },
+    {
+      "name": "number_40",
+      "value": "40"
+    },
+    {
+      "name": "number_250",
+      "value": "250"
+    },
+    {
+      "name": "number_30",
+      "value": "30"
+    },
+    {
+      "name": "number_3",
+      "value": "3"
+    },
+    {
+      "name": "number_0_5",
+      "value": "0.5"
+    }
+  ]
+}

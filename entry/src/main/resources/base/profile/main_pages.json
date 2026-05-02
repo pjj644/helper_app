@@ -1,0 +1,21 @@
+{
+  "src": [
+    "pages/home",
+    "pages/quick/quickIndex",
+    "pages/classTablePages/Home",
+    "pages/classTablePages/tableUI",
+    "pages/classTablePages/Index",
+    "pages/classTablePages/CourseManage",
+    "pages/classTablePages/Settings",
+    "pages/classTablePages/ExamImport",
+    "pages/classTablePages/ExamPage",
+    "pages/classTablePages/FeatureNav",
+    "pages/classTablePages/WebPage",
+    "pages/login/loginIndex",
+    "pages/login/AccountManage",
+    "pages/gradePages/GradePage",
+    "pages/gradePages/GradeImport",
+    "pages/schedulePages/CalendarPage",
+    "pages/Index"
+  ]
+}

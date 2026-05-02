@@ -1,0 +1,9 @@
+{
+  "name": "cloud_objects",
+  "version": "1.0.0",
+  "description": "This module is generated when the '[CloudDev]Empty ability' template is created. When a cloud object performs the 'Generate Invoke Interface' action, the invoked interface is generated in this module by default. For details, see https://developer.huawei.com/consumer/cn/doc/harmonyos-guides-V5/agc-harmonyos-clouddev-invokecloudobj-V5#section1143116149286.",
+  "author": "",
+  "main": "Index.ets",
+  "license": "Apache-2.0",
+  "dependencies": {}
+}
