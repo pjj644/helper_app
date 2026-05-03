@@ -158,7 +158,7 @@ export struct ScheduleSettingsPanel {
       .margin({ top: 6, bottom: 2 });
     }
     .width('100%')
-    .padding({ left: 20, right: 20, top: 10, bottom: 10 });
+    .padding({ left: 20, right: 20, top: 10, bottom: 9 });
   }
 
   private getCategoryEnabled(type: ScheduleEventType): boolean {
