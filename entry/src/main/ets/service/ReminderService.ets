@@ -7,11 +7,14 @@ import { preferences } from '@kit.ArkData';
 import { ScheduleEvent, ScheduleEventType, ScheduleUtils } from '../model/ScheduleModel';
 import { ScheduleRepository } from '../repository/ScheduleRepository';
 import { ScheduleService } from './ScheduleService';
+import { CalendarKitReminderService } from './CalendarKitReminderService';
 
 const SCHEDULE_REMINDER_PREFIX: string = 'schedule_remind_';
 const REMIND_MINUTES_DEFAULT: number = 30;
 
 export class ReminderService {
+  private static agentReminderAvailable: boolean | null = null;
+
   static async checkNotificationEnabled(): Promise<boolean> {
     try {
       const enabled = await notificationManager.isNotificationEnabled();
@@ -71,6 +74,8 @@ export class ReminderService {
         console.info('[ReminderDebug] master disabled, skipping');
         return;
       }
+
+      await ReminderService.clearAgentReminders();
 
       const allEvents: ScheduleEvent[] = await ScheduleRepository.loadSchedules(context);
       console.info(`[ReminderDebug] loaded ${allEvents.length} events from repository`);
@@ -142,53 +147,76 @@ export class ReminderService {
         console.info(`[ReminderDebug]   publishing reminder: id=${notificationId}, title=${title}, content=${content}`);
 
         let published = false;
-        try {
-          const reminderRequest: reminderAgentManager.ReminderRequestCalendar = {
-            reminderType: reminderAgentManager.ReminderType.REMINDER_TYPE_CALENDAR,
-            dateTime: {
-              year: eventDate.getFullYear(),
-              month: eventDate.getMonth() + 1,
-              day: eventDate.getDate(),
-              hour: eventDate.getHours(),
-              minute: eventDate.getMinutes(),
-            },
-            title: title,
-            content: content,
-            notificationId: notificationId,
-          };
-          await reminderAgentManager.publishReminder(reminderRequest);
-          console.info(`[ReminderDebug]   SUCCESS: scheduled reminder published`);
-          published = true;
-        } catch (err) {
-          const be = err as BusinessError;
-          console.warn(`[ReminderDebug]   scheduled reminder failed (code=${be.code}), falling back to immediate notification`);
-        }
 
-        if (!published) {
+        if (ReminderService.agentReminderAvailable !== false) {
           try {
-            const notificationRequest: notificationManager.NotificationRequest = {
-              id: notificationId,
-              content: {
-                contentType: 0,
-                normal: {
-                  title: title,
-                  text: content,
-                },
+            const reminderRequest: reminderAgentManager.ReminderRequestCalendar = {
+              reminderType: reminderAgentManager.ReminderType.REMINDER_TYPE_CALENDAR,
+              dateTime: {
+                year: eventDate.getFullYear(),
+                month: eventDate.getMonth() + 1,
+                day: eventDate.getDate(),
+                hour: eventDate.getHours(),
+                minute: eventDate.getMinutes(),
               },
+              title: title,
+              content: content,
+              notificationId: notificationId,
             };
-            await notificationManager.publish(notificationRequest);
-            console.info(`[ReminderDebug]   SUCCESS: immediate notification published`);
-          } catch (fallbackErr) {
-            const be = fallbackErr as BusinessError;
-            console.error(`[ReminderDebug]   FAILED: immediate notification error code=${be.code}, message=${be.message}`);
+            await reminderAgentManager.publishReminder(reminderRequest);
+            console.info(`[ReminderDebug]   SUCCESS: agent reminder published`);
+            ReminderService.agentReminderAvailable = true;
+            published = true;
+          } catch (err) {
+            const be = err as BusinessError;
+            console.warn(`[ReminderDebug]   agent reminder failed (code=${be.code})`);
+            if (be.code === 1700002) {
+              ReminderService.agentReminderAvailable = false;
+              console.info(`[ReminderDebug]   agent reminder not available (1700002), switching to Calendar Kit`);
+            }
           }
         }
-        createdCount++;
+
+        if (!published && event.addToCalendar === true) {
+          try {
+            const uiContext = context as common.UIAbilityContext;
+            const hasCalendarPerm = await CalendarKitReminderService.checkCalendarPermission(uiContext);
+            if (!hasCalendarPerm) {
+              console.info(`[ReminderDebug]   requesting calendar permission...`);
+              await CalendarKitReminderService.requestCalendarPermission(uiContext);
+            }
+
+            const calEventId = await CalendarKitReminderService.addEventReminder(context, event, remindMinutes);
+            if (calEventId >= 0) {
+              console.info(`[ReminderDebug]   SUCCESS: Calendar Kit reminder added, calEventId=${calEventId}`);
+              published = true;
+            } else {
+              console.error(`[ReminderDebug]   FAILED: Calendar Kit reminder returned -1`);
+            }
+          } catch (calErr) {
+            console.error(`[ReminderDebug]   FAILED: Calendar Kit error:`, JSON.stringify(calErr));
+          }
+        }
+
+        if (published) {
+          createdCount++;
+        }
       }
 
-      console.info(`[ReminderDebug] total notifications published: ${createdCount}`);
+      console.info(`[ReminderDebug] total reminders published: ${createdCount}`);
     } catch (error) {
       console.error('[ReminderDebug] refreshScheduleReminders error:', JSON.stringify(error));
+    }
+  }
+
+  private static async clearAgentReminders(): Promise<void> {
+    try {
+      if (ReminderService.agentReminderAvailable !== false) {
+        await reminderAgentManager.cancelAllReminders();
+        console.info('[ReminderDebug] cleared existing agent reminders');
+      }
+    } catch (error) {
+      console.warn('[ReminderDebug] cancelAllReminders error:', JSON.stringify(error));
     }
   }
 
@@ -260,7 +288,7 @@ export class ReminderService {
       case 'exam':
         return AppConstants.SETTING_SCHEDULE_REMIND_MINUTES_EXAM_KEY;
       case 'course':
-        return AppConstants.SETTING_SCHEDULE_REMIND_MINUTES_COURSE_KEY;
+        return AppConstants.SETTING_SCHEDULE_REMINDER_COURSE_KEY;
       case 'custom':
         return AppConstants.SETTING_SCHEDULE_REMIND_MINUTES_CUSTOM_KEY;
       case 'assignment':

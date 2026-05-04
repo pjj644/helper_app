@@ -112,6 +112,7 @@ struct GradePage {
           Blank();
           Select(this.getSelectOptions())
             .selected(this.selectedSemesterIndex)
+            .value(String(this.getSelectOptions()[this.selectedSemesterIndex].value))
             .onSelect((index: number) => {
               this.selectedSemesterIndex = index;
               this.applyFilter();

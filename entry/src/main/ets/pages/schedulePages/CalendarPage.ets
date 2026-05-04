@@ -27,6 +27,7 @@ struct CalendarPage {
   @State editingEvent: ScheduleEvent = ScheduleUtils.createEmptyEvent();
   @State isLoading: boolean = false;
   @State loadingError: string = '';
+  @State conflictingEventIds: Set<string> = new Set<string>();
   @StorageLink(ThemeManager.THEME_STORAGE_KEY) isDarkMode: boolean = false;
   private dialogController: CustomDialogController | null = null;
   private settingsDialogController: CustomDialogController | null = null;
@@ -74,10 +75,11 @@ struct CalendarPage {
         all.push(customEvents[i]);
       }
 
-      this.allEvents = all;
+      this.allEvents = [...all];
       this.eventsByDate = ScheduleUtils.groupByDate(this.allEvents);
       this.buildDayGrid();
       this.updateSelectedEvents();
+      this.calculateAllConflicts();
     } catch (error) {
       console.error('CalendarPage loadAllEvents error:', JSON.stringify(error));
       this.loadingError = '加载日程失败';
@@ -187,7 +189,15 @@ struct CalendarPage {
 
   private async loadCustomEvents(ctx: Context): Promise<ScheduleEvent[]> {
     try {
-      return await ScheduleService.loadCustomSchedules(ctx);
+      const allSchedules = await ScheduleService.loadCustomSchedules(ctx);
+      const filtered: ScheduleEvent[] = [];
+      for (let i = 0; i < allSchedules.length; i++) {
+        const evt = allSchedules[i];
+        if (evt.type === 'custom' || evt.type === 'assignment') {
+          filtered.push(evt);
+        }
+      }
+      return filtered;
     } catch (error) {
       console.error('CalendarPage loadCustomEvents error:', JSON.stringify(error));
       return [];
@@ -258,7 +268,7 @@ struct CalendarPage {
         filtered.push(this.allEvents[i]);
       }
     }
-    this.selectedEvents = filtered;
+    this.selectedEvents = [...filtered];
   }
 
   private async prevMonth(): Promise<void> {
@@ -303,7 +313,36 @@ struct CalendarPage {
     this.updateSelectedEvents();
   }
 
-  private prepareAddEvent(): void {
+  private async calculateAllConflicts(): Promise<void> {
+    const conflicts: Set<string> = new Set<string>();
+    for (let i = 0; i < this.allEvents.length; i++) {
+      for (let j = i + 1; j < this.allEvents.length; j++) {
+        const a = this.allEvents[i];
+        const b = this.allEvents[j];
+        if (a.date !== b.date) {
+          continue;
+        }
+        const aStartParts = a.startTime?.split(':').map(Number);
+        const aEndParts = a.endTime?.split(':').map(Number);
+        const bStartParts = b.startTime?.split(':').map(Number);
+        const bEndParts = b.endTime?.split(':').map(Number);
+        if (!aStartParts || !aEndParts || !bStartParts || !bEndParts) {
+          continue;
+        }
+        const aStart: number = aStartParts[0] * 60 + aStartParts[1];
+        const aEnd: number = aEndParts[0] * 60 + aEndParts[1];
+        const bStart: number = bStartParts[0] * 60 + bStartParts[1];
+        const bEnd: number = bEndParts[0] * 60 + bEndParts[1];
+        if (aStart < bEnd && aEnd > bStart) {
+          conflicts.add(a.id);
+          conflicts.add(b.id);
+        }
+      }
+    }
+    this.conflictingEventIds = conflicts;
+  }
+
+  private async prepareAddEvent(): Promise<void> {
     this.isEditingExisting = false;
     this.editingEvent = ScheduleUtils.createEmptyEvent();
     const defaultDate = this.selectedDate || ScheduleUtils.formatDate(new Date().getFullYear(), new Date().getMonth() + 1, new Date().getDate());
@@ -333,6 +372,7 @@ struct CalendarPage {
       description: event.description,
       createdAt: event.createdAt,
       remindMinutes: event.remindMinutes || 0,
+      addToCalendar: event.addToCalendar,
     };
 
     this.dialogController = new CustomDialogController({
@@ -505,6 +545,15 @@ struct CalendarPage {
           .borderRadius(14)
           .backgroundColor(ThemeManager.isDarkMode() ? '#3D3D3D' : '#F0F0F0')
           .onClick(() => this.prepareEditEvent(event));
+      }
+
+      if (this.conflictingEventIds.has(event.id)) {
+        Text('冲突')
+          .fontSize(10)
+          .fontColor(Color.White)
+          .padding({ left: 5, right: 5, top: 1, bottom: 1 })
+          .borderRadius(4)
+          .backgroundColor('#FF3B30');
       }
     }
     .width('100%')

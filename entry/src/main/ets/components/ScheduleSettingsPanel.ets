@@ -147,6 +147,7 @@ export struct ScheduleSettingsPanel {
 
         Select(REMIND_OPTIONS)
           .selected(this.getMinutesIndex(type))
+          .value(String(REMIND_OPTIONS[this.getMinutesIndex(type)].value))
           .enabled(this.masterEnabled && this.getCategoryEnabled(type))
           .onSelect((index: number) => {
             this.onMinutesChange(type, index);
@@ -158,7 +159,7 @@ export struct ScheduleSettingsPanel {
       .margin({ top: 6, bottom: 2 });
     }
     .width('100%')
-    .padding({ left: 20, right: 20, top: 10, bottom: 9 });
+    .padding({ left: 20, right: 20, top: 10, bottom: 10 });
   }
 
   private getCategoryEnabled(type: ScheduleEventType): boolean {

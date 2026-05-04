@@ -12,6 +12,7 @@ export interface ScheduleEvent {
   description: string;
   createdAt: number;
   remindMinutes?: number;
+  addToCalendar?: boolean;
 }
 
 export type ScheduleEventType = 'course' | 'exam' | 'custom' | 'assignment';
@@ -57,6 +58,7 @@ export class ScheduleUtils {
       description: '',
       createdAt: 0,
       remindMinutes: 0,
+      addToCalendar: false,
     };
   }
 

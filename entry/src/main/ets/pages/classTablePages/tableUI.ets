@@ -601,6 +601,7 @@ struct TableUI {
           .width(60);
         Select(this.getDayOptions())
           .selected(this.formDay - 1)
+          .value(String(this.getDayOptions()[this.formDay - 1].value))
           .onSelect((index: number) => this.formDay = index + 1)
           .layoutWeight(1);
       }
@@ -612,6 +613,7 @@ struct TableUI {
           .width(60);
         Select(this.getSectionOptions())
           .selected(this.formStartSection - 1)
+          .value(String(this.getSectionOptions()[this.formStartSection - 1].value))
           .onSelect((index: number) => this.formStartSection = index + 1)
           .layoutWeight(1);
       }
@@ -623,6 +625,7 @@ struct TableUI {
           .width(60);
         Select(this.getDurationOptions())
           .selected(this.formDuration - 1)
+          .value(String(this.getDurationOptions()[this.formDuration - 1].value))
           .onSelect((index: number) => this.formDuration = index + 1)
           .layoutWeight(1);
       }

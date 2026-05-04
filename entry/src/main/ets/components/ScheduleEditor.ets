@@ -17,6 +17,7 @@ export struct ScheduleEditor {
   @State startMinute: number = 0;
   @State endHour: number = 10;
   @State endMinute: number = 0;
+  @State addToCalendar: boolean = false;
   @State showDateDialog: boolean = false;
   private typeOptions: SelectOption[] = [
     { value: '考试' },
@@ -88,7 +89,8 @@ export struct ScheduleEditor {
         const timeParts: string[] = this.existingEvent.startTime.split(':');
         this.startHour = timeParts[0] ? parseInt(timeParts[0]) : 9;
         this.startMinute = timeParts[1] ? parseInt(timeParts[1]) : 0;
-      } else if (this.existingEvent.endTime) {
+      }
+      if (this.existingEvent.endTime) {
         const timeParts: string[] = this.existingEvent.endTime.split(':');
         this.endHour = timeParts[0] ? parseInt(timeParts[0]) : 10;
         this.endMinute = timeParts[1] ? parseInt(timeParts[1]) : 0;
@@ -103,6 +105,7 @@ export struct ScheduleEditor {
           this.endMinute = endParts[1] ? parseInt(endParts[1]) : 0;
         }
       }
+      this.addToCalendar = this.existingEvent?.addToCalendar === true;
     }
   }
 
@@ -158,10 +161,24 @@ export struct ScheduleEditor {
           .width(60);
         Select(this.typeOptions)
           .selected(this.selectedTypeIndex)
+          .value(String(this.typeOptions[this.selectedTypeIndex].value))
           .onSelect((index: number) => {
             this.selectedTypeIndex = index;
           })
           .width(120);
+      }
+      .width('100%')
+      .alignItems(VerticalAlign.Center);
+
+      Row() {
+        Text('添加到日历')
+          .fontSize(15)
+          .fontColor(ThemeManager.getTextSecondaryColor())
+          .layoutWeight(1);
+        Toggle({ type: ToggleType.Switch, isOn: this.addToCalendar })
+          .onChange((value: boolean) => {
+            this.addToCalendar = value;
+          });
       }
       .width('100%')
       .alignItems(VerticalAlign.Center);
@@ -212,6 +229,7 @@ export struct ScheduleEditor {
           .width(60);
         Select(this.remindOptions)
           .selected(this.remindSelectedIndex)
+          .value(String(this.remindOptions[this.remindSelectedIndex].value))
           .onSelect((index: number) => {
             this.remindSelectedIndex = index;
             this.remindMinutes = this.remindMinutesValues[index];
@@ -243,6 +261,7 @@ export struct ScheduleEditor {
           .width(60);
         Select(this.hourOptions)
           .selected(this.startHour)
+          .value(`${this.startHour}`)
           .onSelect((index: number) => {
             this.startHour = index;
           })
@@ -252,6 +271,7 @@ export struct ScheduleEditor {
           .fontColor(ThemeManager.getTextPrimaryColor());
         Select(this.minuteOptions)
           .selected(this.startMinute)
+          .value(`${this.startMinute}`)
           .onSelect((index: number) => {
             this.startMinute = index;
           })
@@ -267,6 +287,7 @@ export struct ScheduleEditor {
           .width(60);
         Select(this.hourOptions)
           .selected(this.endHour)
+          .value(`${this.endHour}`)
           .onSelect((index: number) => {
             this.endHour = index;
           })
@@ -276,6 +297,7 @@ export struct ScheduleEditor {
           .fontColor(ThemeManager.getTextPrimaryColor());
         Select(this.minuteOptions)
           .selected(this.endMinute)
+          .value(`${this.endMinute}`)
           .onSelect((index: number) => {
             this.endMinute = index;
           })
@@ -285,6 +307,19 @@ export struct ScheduleEditor {
       .alignItems(VerticalAlign.Center);
 
       Row({ space: 12 }) {
+        if (this.isEditing) {
+          Button('删除')
+            .layoutWeight(1)
+            .height(44)
+            .fontSize(15)
+            .fontColor('#FF3B30')
+            .backgroundColor(ThemeManager.getBackgroundSecondaryColor())
+            .borderRadius(12)
+            .onClick(() => {
+              this.onDelete?.(this.existingEvent!.id);
+            });
+        }
+
         Button('取消')
           .layoutWeight(1)
           .height(44)
@@ -319,13 +354,14 @@ export struct ScheduleEditor {
               timeRange: timeRange,
               startTime: startTime,
               endTime: endTime,
-              location: this.existingEvent?.location || '',
+              location: '',
               type: this.getSelectedType(),
               color: ScheduleUtils.getTypeColor(this.getSelectedType()),
               sourceId: this.existingEvent?.sourceId || '',
               description: this.description.trim(),
               createdAt: this.existingEvent?.createdAt || Date.now(),
               remindMinutes: this.remindMinutesValues[this.remindSelectedIndex],
+              addToCalendar: this.addToCalendar,
             };
             if (this.onSave) {
               this.onSave(event);

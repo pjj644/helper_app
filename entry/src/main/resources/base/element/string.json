@@ -251,6 +251,14 @@
     {
       "name": "reminder_permission_reason",
       "value": "为了在考试和上课前准时通知你，需要使用通知提醒权限"
+    },
+    {
+      "name": "read_calendar_permission_reason",
+      "value": "为了在日程开始前准时提醒你，需要读取日历权限"
+    },
+    {
+      "name": "write_calendar_permission_reason",
+      "value": "为了将日程提醒写入系统日历，需要写入日历权限"
     }
   ]
 }
