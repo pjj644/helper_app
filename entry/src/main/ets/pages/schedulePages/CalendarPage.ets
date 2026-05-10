@@ -28,6 +28,7 @@ struct CalendarPage {
   @State isLoading: boolean = false;
   @State loadingError: string = '';
   @State conflictingEventIds: Set<string> = new Set<string>();
+  @State private renderVersion: number = 0;
   @StorageLink(ThemeManager.THEME_STORAGE_KEY) isDarkMode: boolean = false;
   private dialogController: CustomDialogController | null = null;
   private settingsDialogController: CustomDialogController | null = null;
@@ -80,6 +81,7 @@ struct CalendarPage {
       this.buildDayGrid();
       this.updateSelectedEvents();
       this.calculateAllConflicts();
+      this.renderVersion++;
     } catch (error) {
       console.error('CalendarPage loadAllEvents error:', JSON.stringify(error));
       this.loadingError = '加载日程失败';
@@ -264,11 +266,27 @@ struct CalendarPage {
   private updateSelectedEvents(): void {
     const filtered: ScheduleEvent[] = [];
     for (let i = 0; i < this.allEvents.length; i++) {
-      if (this.allEvents[i].date === this.selectedDate) {
-        filtered.push(this.allEvents[i]);
+      const evt = this.allEvents[i];
+      if (evt.date === this.selectedDate) {
+        filtered.push({
+          id: evt.id,
+          title: evt.title,
+          date: evt.date,
+          timeRange: evt.timeRange,
+          startTime: evt.startTime,
+          endTime: evt.endTime,
+          location: evt.location,
+          type: evt.type,
+          color: evt.color,
+          sourceId: evt.sourceId,
+          description: evt.description,
+          createdAt: evt.createdAt,
+          remindMinutes: evt.remindMinutes,
+          addToCalendar: evt.addToCalendar,
+        });
       }
     }
-    this.selectedEvents = [...filtered];
+    this.selectedEvents = filtered;
   }
 
   private async prevMonth(): Promise<void> {
@@ -390,9 +408,9 @@ struct CalendarPage {
     }
   }
 
-  private onSaveSchedule(event: ScheduleEvent): void {
+  private async onSaveSchedule(event: ScheduleEvent): Promise<void> {
+    await this.performSaveSchedule(event);
     this.closeDialog();
-    this.performSaveSchedule(event);
   }
 
   private async performSaveSchedule(event: ScheduleEvent): Promise<void> {
@@ -409,9 +427,9 @@ struct CalendarPage {
     }
   }
 
-  private onDeleteSchedule(eventId: string): void {
+  private async onDeleteSchedule(eventId: string): Promise<void> {
+    await this.performDeleteSchedule(eventId);
     this.closeDialog();
-    this.performDeleteSchedule(eventId);
   }
 
   private async performDeleteSchedule(eventId: string): Promise<void> {
@@ -824,7 +842,7 @@ struct CalendarPage {
               .onClick(() => {
                 this.prepareEditEvent(event);
               });
-            }, (event: ScheduleEvent, index: number) => event.id);
+            }, (event: ScheduleEvent, index: number) => event.id + '_' + this.renderVersion);
           }
           .width('100%')
           .alignItems(HorizontalAlign.Start)
