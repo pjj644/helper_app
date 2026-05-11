@@ -39,6 +39,8 @@ struct Home {
   @State pageReady: boolean = false;
   @State selectedExamTypeIndex: number = 0;
   @State selectedSemesterId: number = 0;
+  @State nowTick: number = Date.now();
+  private tickTimer: number = -1;
   private model: CourseTableModel = courseTableModel;
 
   private normalizeExamTypeIndex(index: number): number {
@@ -51,6 +53,17 @@ struct Home {
   aboutToAppear(): void {
     this.pageReady = false;
     this.loadPageData();
+    this.nowTick = Date.now();
+    console.info(`[HomeDebug] aboutToAppear: nowTick=${this.nowTick} exams=${this.exams.length}`);
+    this.tickTimer = setInterval(() => {
+      const prev = this.nowTick;
+      this.nowTick = Date.now();
+      if (Math.floor(this.nowTick / 1000) % 5 === 0) {
+        const nextExam = this.getNextExam();
+        console.info(`[HomeDebug] tick: nowTick=${this.nowTick} delta=${this.nowTick - prev}ms nextExam=${nextExam?.courseName ?? 'none'} beginTime=${nextExam?.beginTime ?? 0} remaining=${nextExam ? Math.floor((nextExam.beginTime - this.nowTick) / 1000) : -1}s examsTotal=${this.exams.length}`);
+      }
+    }, 1000);
+    console.info(`[HomeDebug] tickTimer started: id=${this.tickTimer}`);
     setTimeout(() => {
       animateTo({ curve: curves.springMotion(0.6, 0.8) }, () => {
         this.pageReady = true;
@@ -58,7 +71,16 @@ struct Home {
     }, 40);
   }
 
+  aboutToDisappear(): void {
+    console.info(`[HomeDebug] aboutToDisappear: tickTimer=${this.tickTimer}`);
+    if (this.tickTimer >= 0) {
+      clearInterval(this.tickTimer);
+      this.tickTimer = -1;
+    }
+  }
+
   onPageShow(): void {
+    console.info(`[HomeDebug] onPageShow: exams=${this.exams.length} nowTick=${this.nowTick}`);
     this.loadPageData();
     ReminderService.refreshAllReminders(getContext(this));
   }
@@ -235,16 +257,23 @@ struct Home {
 
   private getNextExam(): ExamItem | undefined {
     const upcoming = this.getUpcomingExams(1);
-    return upcoming.length > 0 ? upcoming[0] : undefined;
+    const result = upcoming.length > 0 ? upcoming[0] : undefined;
+    if (Math.floor(this.nowTick / 1000) % 10 === 0) {
+      console.info(`[HomeDebug] getNextExam: result=${result?.courseName ?? 'none'} beginTime=${result?.beginTime ?? 0}`);
+    }
+    return result;
   }
 
   private getUpcomingExams(n: number): ExamItem[] {
-    const now: number = Date.now();
+    const now: number = this.nowTick;
     const result: ExamItem[] = [];
     for (let i = 0; i < this.exams.length && result.length < n; i++) {
       if (this.exams[i].beginTime > now) {
         result.push(this.exams[i]);
       }
+    }
+    if (Math.floor(now / 1000) % 10 === 0) {
+      console.info(`[HomeDebug] getUpcomingExams(${n}): nowTick=${now} total=${this.exams.length} found=${result.length}`);
     }
     if (result.length === 0 && this.exams.length > 0) {
       const zeroTimeCount = this.exams.filter(e => e.beginTime <= 0).length;
@@ -461,11 +490,18 @@ struct Home {
     this.openExamPage();
   }
 
+  private logExamCardRender(exam: ExamItem): string {
+    if (Math.floor(this.nowTick / 1000) % 10 === 0) {
+      console.info(`[HomeDebug] ExamCardBuilder render: exam=${exam.courseName} beginTime=${exam.beginTime} nowTick=${this.nowTick} remaining=${Math.floor((exam.beginTime - this.nowTick) / 1000)}s`);
+    }
+    return exam.courseName;
+  }
+
   @Builder
   private ExamCardBuilder(exam: ExamItem): void {
     Column({ space: 6 }) {
       Row({ space: 6 }) {
-        Text(exam.courseName)
+        Text(this.logExamCardRender(exam))
           .fontSize(15)
           .fontWeight(FontWeight.Medium)
           .fontColor(ThemeManager.getTextPrimaryColor())
@@ -498,6 +534,14 @@ struct Home {
     .onClick(() => this.openExamDetail(exam));
   }
 
+  private logExamSectionRender(): string {
+    const nextExam = this.getNextExam();
+    if (Math.floor(this.nowTick / 1000) % 10 === 0) {
+      console.info(`[HomeDebug] ExamCardsSection render: nowTick=${this.nowTick} nextExam=${nextExam?.courseName ?? 'none'}`);
+    }
+    return '最近考试倒计时';
+  }
+
   @Builder
   private ExamCardsSection(): void {
     Column({ space: 10 }) {
@@ -505,7 +549,7 @@ struct Home {
         Row({ space: 6 }) {
           Text('⏳')
             .fontSize(16);
-          Text('最近考试倒计时')
+          Text(this.logExamSectionRender())
             .fontSize(18)
             .fontWeight(FontWeight.Bold)
             .fontColor(ThemeManager.getTextPrimaryColor());
