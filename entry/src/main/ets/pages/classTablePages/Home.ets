@@ -7,7 +7,8 @@ import {
   getCurrentWeek,
 } from '../../model/classTableModel/CourseModel';
 import { AppSettings, CourseTableStorage } from '../../model/classTableModel/CourseTableStorage';
-import { ExamItem, formatCountDown, normalizeExam, sortExams } from '../../model/classTableModel/ExamModel';
+import { ExamItem, normalizeExam, sortExams } from '../../model/classTableModel/ExamModel';
+import { CountdownCard } from '../../components/CountdownCard';
 import {
   calculateSemesterId,
   EXAM_TYPE_OPTIONS,
@@ -430,12 +431,16 @@ struct Home {
 
   @Builder
   private ExamCardBuilder(): void {
-    Column() {
+    Column({ space: 10 }) {
       Row() {
-        Text('最近考试倒计时')
-          .fontSize(18)
-          .fontWeight(FontWeight.Bold)
-          .fontColor(ThemeManager.getTextPrimaryColor());
+        Row({ space: 6 }) {
+          Text('⏳')
+            .fontSize(16);
+          Text('最近考试倒计时')
+            .fontSize(18)
+            .fontWeight(FontWeight.Bold)
+            .fontColor(ThemeManager.getTextPrimaryColor());
+        }
         Blank();
         Button('详情')
           .height(30)
@@ -445,27 +450,15 @@ struct Home {
           .borderRadius(12)
           .onClick(() => this.openExamPage());
       }
-      .width('100%')
-      .margin({ bottom: 8 });
+      .width('100%');
 
-      Text(this.getNextExam()?.courseName ?? '')
-        .fontSize(16)
-        .fontWeight(FontWeight.Medium)
-        .fontColor(ThemeManager.getTextPrimaryColor())
-        .width('100%');
-
-      Text(`${this.getNextExam()?.examDate ?? ''} ${this.getNextExam()?.examTimeRange ?? ''}`)
-        .fontSize(12)
-        .fontColor(ThemeManager.getTextSecondaryColor())
-        .width('100%')
-        .margin({ top: 3 });
-
-      Text(formatCountDown(Date.now(), this.getNextExam()?.beginTime ?? 0))
-        .fontSize(26)
-        .fontWeight(FontWeight.Bold)
-        .fontColor(ThemeManager.getAccentColor())
-        .width('100%')
-        .margin({ top: 8 });
+      CountdownCard({
+        examName: this.getNextExam()?.courseName ?? '',
+        examDate: this.getNextExam()?.examDate ?? '',
+        examTimeRange: this.getNextExam()?.examTimeRange ?? '',
+        beginTime: this.getNextExam()?.beginTime ?? 0,
+        compact: false
+      });
     }
     .width('100%')
     .padding(12)

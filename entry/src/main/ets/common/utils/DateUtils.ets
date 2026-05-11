@@ -3,6 +3,17 @@ export interface DateTimeRange {
   end: number;
 }
 
+export interface CountdownParts {
+  days: number;
+  hours: number;
+  minutes: number;
+  seconds: number;
+  totalSeconds: number;
+  isExpired: boolean;
+  isUnknown: boolean;
+  urgency: number;
+}
+
 export class DateUtils {
   static twoDigit(value: number): string {
     return value < 10 ? `0${value}` : String(value);
@@ -69,20 +80,41 @@ export class DateUtils {
     };
   }
 
-  static formatCountDown(now: number, beginTime: number): string {
+  static getCountdownParts(now: number, beginTime: number): CountdownParts {
     if (beginTime <= 0) {
-      return '时间未知';
+      return { days: 0, hours: 0, minutes: 0, seconds: 0, totalSeconds: 0, isExpired: false, isUnknown: true, urgency: 0 };
     }
     const diff = beginTime - now;
     if (diff <= 0) {
+      return { days: 0, hours: 0, minutes: 0, seconds: 0, totalSeconds: 0, isExpired: true, isUnknown: false, urgency: 0 };
+    }
+    const totalSeconds = Math.floor(diff / 1000);
+    const days = Math.floor(totalSeconds / 86400);
+    const hours = Math.floor((totalSeconds % 86400) / 3600);
+    const minutes = Math.floor((totalSeconds % 3600) / 60);
+    const seconds = totalSeconds % 60;
+    let urgency = 0;
+    if (totalSeconds < 3600) {
+      urgency = 3;
+    } else if (totalSeconds < 86400) {
+      urgency = 2;
+    } else if (totalSeconds < 604800) {
+      urgency = 1;
+    }
+    return { days, hours, minutes, seconds, totalSeconds, isExpired: false, isUnknown: false, urgency };
+  }
+
+  static formatCountDown(now: number, beginTime: number): string {
+    const parts = DateUtils.getCountdownParts(now, beginTime);
+    if (parts.isUnknown) {
+      return '时间未知';
+    }
+    if (parts.isExpired) {
       return '进行中或已结束';
     }
-    const day = Math.floor(diff / (24 * 60 * 60 * 1000));
-    const hour = Math.floor((diff % (24 * 60 * 60 * 1000)) / (60 * 60 * 1000));
-    const minute = Math.floor((diff % (60 * 60 * 1000)) / (60 * 1000));
-    if (day > 0) {
-      return `${day}天${hour}小时${minute}分钟`;
+    if (parts.days > 0) {
+      return `${parts.days}天${DateUtils.twoDigit(parts.hours)}时${DateUtils.twoDigit(parts.minutes)}分${DateUtils.twoDigit(parts.seconds)}秒`;
     }
-    return `${hour}小时${minute}分钟`;
+    return `${DateUtils.twoDigit(parts.hours)}时${DateUtils.twoDigit(parts.minutes)}分${DateUtils.twoDigit(parts.seconds)}秒`;
   }
 }

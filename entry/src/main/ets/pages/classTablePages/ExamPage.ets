@@ -3,7 +3,8 @@ import { ExamItem } from '../../model/classTableModel/ExamModel';
 import { EXAM_TYPE_OPTIONS, calculateSemesterId, getExamTypeLabelById, getSemesterLabelById, getSemesterOptions, SemesterOptionSet } from '../../model/classTableModel/ExamAccessRules';
 import { ExamService } from '../../service/ExamService';
 import { ExamUtils } from '../../common/utils/ExamUtils';
-import { DateUtils } from '../../common/utils/DateUtils';
+import { CountdownParts, DateUtils } from '../../common/utils/DateUtils';
+import { CountdownCard } from '../../components/CountdownCard';
 import { ThemeManager } from '../../common/utils/ThemeManager';
 
 @Entry
@@ -353,6 +354,19 @@ struct ExamPage {
     .alignItems(HorizontalAlign.Center);
   }
 
+  private getUrgencyBorderColor(item: ExamItem): string {
+    const parts = DateUtils.getCountdownParts(Date.now(), item.beginTime);
+    if (parts.isExpired || parts.isUnknown) {
+      return 'transparent';
+    }
+    switch (parts.urgency) {
+      case 3: return '#EF4444';
+      case 2: return '#F59E0B';
+      case 1: return '#3B82FF';
+      default: return 'transparent';
+    }
+  }
+
   @Builder
   private ExamCardBuilder(item: ExamItem): void {
     Column({ space: 8 }) {
@@ -366,7 +380,7 @@ struct ExamPage {
             .textOverflow({ overflow: TextOverflow.Ellipsis })
             .width('100%');
 
-          Text(`${item.examDate} ${item.examTimeRange}`)
+          Text(`${item.examDate}  ${item.examTimeRange}`)
             .fontSize(13)
             .fontColor(ThemeManager.getTextSecondaryColor())
             .width('100%');
@@ -398,9 +412,13 @@ struct ExamPage {
         Blank();
 
         if (this.shouldShowCountDown(item)) {
-          Text(`倒计时 ${DateUtils.formatCountDown(this.nowTick, item.beginTime)}`)
-            .fontSize(12)
-            .fontColor(ThemeManager.getAccentColor());
+          CountdownCard({
+            examName: '',
+            examDate: '',
+            examTimeRange: '',
+            beginTime: item.beginTime,
+            compact: true
+          });
         }
       }
       .width('100%');
@@ -409,6 +427,11 @@ struct ExamPage {
     .padding(12)
     .borderRadius(14)
     .backgroundColor(ThemeManager.getCardColor())
+    .border({
+      width: 1.5,
+      color: this.getUrgencyBorderColor(item),
+      style: BorderStyle.Solid
+    })
     .onClick(() => this.openDetail(item));
   }
 
