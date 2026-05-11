@@ -67,9 +67,24 @@ export class DateUtils {
       .replace(/～/g, '-')
       .replace(/—/g, '-')
       .replace(/－/g, '-');
+
+    const timeMatch: RegExpMatchArray | null = range.match(/(\d{1,2}:\d{2})-(\d{1,2}:\d{2})/);
+    if (timeMatch) {
+      const begin = new Date(`${date} ${timeMatch[1]}`).getTime();
+      const end = new Date(`${date} ${timeMatch[2]}`).getTime();
+      const result: DateTimeRange = {
+        begin: Number.isNaN(begin) ? 0 : begin,
+        end: Number.isNaN(end) ? 0 : end,
+      };
+      if (result.begin === 0) {
+        console.info(`[ExamDebug] parseDateTime NaN after regex: date="${date}" timeRange="${timeRange}" extracted="${timeMatch[1]}-${timeMatch[2]}"`);
+      }
+      return result;
+    }
+
     const parts: string[] = range.split('-');
     if (parts.length !== 2) {
-      console.info(`[ExamDebug] parseDateTime FAILED: dateText="${dateText}" timeRange="${timeRange}" normalizedDate="${date}" normalizedRange="${range}" parts=${parts.length}`);
+      console.info(`[ExamDebug] parseDateTime FAILED: dateText="${dateText}" timeRange="${timeRange}" date="${date}" range="${range}" parts=${parts.length}`);
       return { begin: 0, end: 0 };
     }
 

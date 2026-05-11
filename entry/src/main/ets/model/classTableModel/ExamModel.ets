@@ -90,19 +90,28 @@ function parseDateTime(dateText: string, timeRange: string): DateTimeRange {
     .replace(/～/g, '-')
     .replace(/—/g, '-')
     .replace(/－/g, '-');
+
+  const timeMatch: RegExpMatchArray | null = range.match(/(\d{1,2}:\d{2})-(\d{1,2}:\d{2})/);
+  if (timeMatch) {
+    const begin = new Date(`${date} ${timeMatch[1]}`).getTime();
+    const end = new Date(`${date} ${timeMatch[2]}`).getTime();
+    return {
+      begin: Number.isNaN(begin) ? 0 : begin,
+      end: Number.isNaN(end) ? 0 : end,
+    };
+  }
+
   const parts: string[] = range.split('-');
   if (parts.length !== 2) {
-    const emptyRange: DateTimeRange = { begin: 0, end: 0 };
-    return emptyRange;
+    return { begin: 0, end: 0 };
   }
 
   const begin = new Date(`${date} ${parts[0]}`).getTime();
   const end = new Date(`${date} ${parts[1]}`).getTime();
-  const rangeResult: DateTimeRange = {
+  return {
     begin: Number.isNaN(begin) ? 0 : begin,
     end: Number.isNaN(end) ? 0 : end,
   };
-  return rangeResult;
 }
 
 export function normalizeExam(input: ExamInput): ExamItem {
