@@ -11,14 +11,34 @@ import {
 export class ExamService {
   static async loadExams(context: Object): Promise<ExamItem[]> {
     const dataText = await ExamRepository.loadExamData(context);
+    console.info(`[ExamDebug] loadExams: rawDataLength=${dataText ? dataText.length : 0}`);
     if (!dataText) {
+      console.info('[ExamDebug] loadExams: no exam data in storage, returning empty');
       return [];
     }
     try {
       const parsed = JSON.parse(dataText) as ExamItem[];
-      return parsed.map(item => ExamUtils.normalizeStoredExam(item));
+      console.info(`[ExamDebug] loadExams: parsedCount=${parsed.length}`);
+      const normalized = parsed.map(item => ExamUtils.normalizeStoredExam(item));
+      let withBeginTime = 0;
+      let zeroBeginTime = 0;
+      for (let i = 0; i < normalized.length; i++) {
+        if (normalized[i].beginTime > 0) {
+          withBeginTime++;
+          if (i < 3) {
+            console.info(`[ExamDebug] loadExams: exam[${i}] name=${normalized[i].courseName} date=${normalized[i].examDate} timeRange=${normalized[i].examTimeRange} beginTime=${normalized[i].beginTime} semesterLabel=${normalized[i].semesterLabel}`);
+          }
+        } else {
+          zeroBeginTime++;
+          if (i < 5) {
+            console.info(`[ExamDebug] loadExams: exam[${i}] name=${normalized[i].courseName} date=${normalized[i].examDate} timeRange=${normalized[i].examTimeRange} beginTime=0 (MISSING)`);
+          }
+        }
+      }
+      console.info(`[ExamDebug] loadExams: total=${normalized.length} withBeginTime=${withBeginTime} zeroBeginTime=${zeroBeginTime}`);
+      return normalized;
     } catch (error) {
-      console.error('解析考试数据失败:', error);
+      console.error('[ExamDebug] loadExams parse error:', JSON.stringify(error));
       return [];
     }
   }

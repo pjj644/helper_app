@@ -69,15 +69,20 @@ export class DateUtils {
       .replace(/－/g, '-');
     const parts: string[] = range.split('-');
     if (parts.length !== 2) {
+      console.info(`[ExamDebug] parseDateTime FAILED: dateText="${dateText}" timeRange="${timeRange}" normalizedDate="${date}" normalizedRange="${range}" parts=${parts.length}`);
       return { begin: 0, end: 0 };
     }
 
     const begin = new Date(`${date} ${parts[0]}`).getTime();
     const end = new Date(`${date} ${parts[1]}`).getTime();
-    return {
+    const result: DateTimeRange = {
       begin: Number.isNaN(begin) ? 0 : begin,
       end: Number.isNaN(end) ? 0 : end,
     };
+    if (result.begin === 0) {
+      console.info(`[ExamDebug] parseDateTime NaN: date="${date}" timeRange="${timeRange}" parts=[${parts[0]}, ${parts[1]}]`);
+    }
+    return result;
   }
 
   static getCountdownParts(now: number, beginTime: number): CountdownParts {

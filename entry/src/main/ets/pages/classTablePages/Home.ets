@@ -78,6 +78,7 @@ struct Home {
       if (examData) {
         try {
           const parsedExam: ExamItem[] = JSON.parse(examData) as ExamItem[];
+          console.info(`[ExamDebug] Home: examData length=${examData.length} parsed=${parsedExam.length}`);
           this.exams = sortExams(parsedExam.map((item: ExamItem) => normalizeExam({
             courseNo: item.courseNo,
             courseName: item.courseName,
@@ -93,10 +94,23 @@ struct Home {
             beginTime: item.beginTime,
             endTime: item.endTime,
           })));
+          const now = Date.now();
+          let futureCount = 0;
+          for (let i = 0; i < this.exams.length; i++) {
+            if (this.exams[i].beginTime > now) {
+              futureCount++;
+            }
+            if (i < 3) {
+              console.info(`[ExamDebug] Home: exam[${i}] name=${this.exams[i].courseName} date=${this.exams[i].examDate} timeRange=${this.exams[i].examTimeRange} beginTime=${this.exams[i].beginTime} endTime=${this.exams[i].endTime}`);
+            }
+          }
+          console.info(`[ExamDebug] Home: total=${this.exams.length} futureCount=${futureCount} now=${now}`);
         } catch (error) {
+          console.error('[ExamDebug] Home: parse exam error', JSON.stringify(error));
           this.exams = [];
         }
       } else {
+        console.info('[ExamDebug] Home: examData is empty/null, no exams stored');
         this.exams = [];
       }
 
@@ -129,8 +143,11 @@ struct Home {
       if (this.hasData) {
         ReminderService.refreshAllReminders(context);
       }
+
+      const upcoming = this.getUpcomingExams(3);
+      console.info(`[ExamDebug] Home: loadPageData done hasData=${this.hasData} showExamCountdown=${this.settings.showExamCountdown} upcomingCount=${upcoming.length} examTotal=${this.exams.length}`);
     } catch (error) {
-      console.error('Home加载数据失败:', error);
+      console.error('[ExamDebug] Home加载数据失败:', JSON.stringify(error));
       this.hasData = false;
     }
   }

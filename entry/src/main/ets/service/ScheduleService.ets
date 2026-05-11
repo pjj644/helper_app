@@ -87,9 +87,13 @@ export class ScheduleService {
     const events: ScheduleEvent[] = [];
     try {
       const exams: ExamItem[] = await ExamService.loadExams(context);
+      console.info(`[ExamDebug] buildExamEvents: loaded ${exams.length} exams from ExamService`);
+      let skippedZeroTime = 0;
+      let builtEvents = 0;
       for (let i = 0; i < exams.length; i++) {
         const e: ExamItem = exams[i];
         if (e.beginTime <= 0) {
+          skippedZeroTime++;
           continue;
         }
         const examDate: Date = new Date(e.beginTime);
@@ -106,7 +110,9 @@ export class ScheduleService {
           createdAt: Date.now(),
         };
         events.push(evt);
+        builtEvents++;
       }
+      console.info(`[ExamDebug] buildExamEvents: built=${builtEvents} skippedZeroTime=${skippedZeroTime}`);
     } catch (error) {
       console.error('ScheduleService buildExamEvents error:', JSON.stringify(error));
     }
@@ -258,13 +264,17 @@ export class ScheduleService {
       const examEvents: ScheduleEvent[] = await ScheduleService.buildExamEvents(context);
       const todayStr: string = ScheduleUtils.formatDate(new Date().getFullYear(), new Date().getMonth() + 1, new Date().getDate());
       let addedCount: number = 0;
+      let skippedPastCount: number = 0;
       for (let i = 0; i < examEvents.length; i++) {
         if (examEvents[i].date >= todayStr) {
           filtered.push(examEvents[i]);
           addedCount++;
+        } else {
+          skippedPastCount++;
+          console.info(`[ExamDebug] syncExamsToSchedule: SKIPPED past exam date=${examEvents[i].date} title=${examEvents[i].title} today=${todayStr}`);
         }
       }
-      console.info(`[ReminderDebug] syncExamsToSchedule: today=${todayStr}, added ${addedCount} exam events`);
+      console.info(`[ExamDebug] syncExamsToSchedule: today=${todayStr} built=${examEvents.length} added=${addedCount} skippedPast=${skippedPastCount}`);
       await ScheduleRepository.saveSchedules(context, filtered);
     } catch (error) {
       console.error('ScheduleService syncExamsToSchedule error:', JSON.stringify(error));
