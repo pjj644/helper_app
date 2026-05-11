@@ -18,6 +18,7 @@ struct ExamPage {
   @State semesterOptions: SelectOption[] = [{ value: '全部学期' }];
   @State semesterOptionIds: number[] = [0];
   @State selectedSemesterIndex: number = 0;
+  private tickTimer: number = -1;
 
   private normalizeExamTypeIndex(index: number): number {
     if (index < 0 || index >= EXAM_TYPE_OPTIONS.length) {
@@ -46,6 +47,16 @@ struct ExamPage {
     this.semesterOptions = semesterSet.options;
     this.semesterOptionIds = semesterSet.semesterIds;
     this.initSelection();
+    this.tickTimer = setInterval(() => {
+      this.nowTick = Date.now();
+    }, 1000);
+  }
+
+  aboutToDisappear(): void {
+    if (this.tickTimer >= 0) {
+      clearInterval(this.tickTimer);
+      this.tickTimer = -1;
+    }
   }
 
   private async initSelection(): Promise<void> {
