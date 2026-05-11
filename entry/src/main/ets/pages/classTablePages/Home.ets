@@ -217,13 +217,24 @@ struct Home {
   }
 
   private getNextExam(): ExamItem | undefined {
+    const upcoming = this.getUpcomingExams(1);
+    return upcoming.length > 0 ? upcoming[0] : undefined;
+  }
+
+  private getUpcomingExams(n: number): ExamItem[] {
     const now: number = Date.now();
-    return this.exams.find((item: ExamItem) => {
-      if (item.beginTime <= now) {
-        return false;
+    const result: ExamItem[] = [];
+    for (let i = 0; i < this.exams.length && result.length < n; i++) {
+      if (this.exams[i].beginTime > now) {
+        result.push(this.exams[i]);
       }
-      return true;
-    });
+    }
+    if (result.length === 0 && this.exams.length > 0) {
+      const zeroTimeCount = this.exams.filter(e => e.beginTime <= 0).length;
+      const pastCount = this.exams.filter(e => e.beginTime > 0 && e.beginTime <= now).length;
+      console.info(`Home: 无未来考试 total=${this.exams.length} beginTime=0:${zeroTimeCount} past:${pastCount}`);
+    }
+    return result;
   }
 
   private getSelectedExamTypeId(): number {
@@ -235,12 +246,12 @@ struct Home {
   }
 
   private getHeroHint(): string {
-    if (!this.hasData) {
-      return '尚未导入课表，先完成一次在线导入吧';
-    }
     const nextExam: ExamItem | undefined = this.getNextExam();
     if (nextExam && this.settings.showExamCountdown) {
       return `最近考试：${nextExam.courseName}`;
+    }
+    if (!this.hasData) {
+      return '尚未导入课表，先完成一次在线导入吧';
     }
     return `今日课程 ${this.todayCourses.length} 门，明日课程 ${this.tomorrowCourses.length} 门`;
   }
@@ -429,20 +440,61 @@ struct Home {
     .shadow({ radius: 16, color: 'rgba(0, 0, 0, 0.04)', offsetY: 4 });
   }
 
+  private openExamDetail(_exam: ExamItem): void {
+    this.openExamPage();
+  }
+
   @Builder
-  private ExamCardBuilder(): void {
+  private ExamCardBuilder(exam: ExamItem): void {
+    Column({ space: 6 }) {
+      Row({ space: 6 }) {
+        Text(exam.courseName)
+          .fontSize(15)
+          .fontWeight(FontWeight.Medium)
+          .fontColor(ThemeManager.getTextPrimaryColor())
+          .maxLines(1)
+          .textOverflow({ overflow: TextOverflow.Ellipsis })
+          .layoutWeight(1);
+
+        Text(exam.examType || '未知')
+          .fontSize(10)
+          .fontColor(ThemeManager.getAccentColor())
+          .padding({ left: 6, right: 6, top: 2, bottom: 2 })
+          .backgroundColor(ThemeManager.getAccentBgColor())
+          .borderRadius(8);
+      }
+      .width('100%');
+
+      CountdownCard({
+        examName: '',
+        examDate: exam.examDate,
+        examTimeRange: exam.examTimeRange,
+        beginTime: exam.beginTime,
+        compact: false
+      });
+    }
+    .width('100%')
+    .padding(12)
+    .borderRadius(20)
+    .backgroundColor(ThemeManager.getBackgroundSecondaryColor())
+    .shadow({ radius: 16, color: 'rgba(0, 0, 0, 0.04)', offsetY: 4 })
+    .onClick(() => this.openExamDetail(exam));
+  }
+
+  @Builder
+  private ExamCardsSection(): void {
     Column({ space: 10 }) {
       Row() {
         Row({ space: 6 }) {
           Text('⏳')
             .fontSize(16);
-          Text('最近考试倒计时')
+          Text(this.getUpcomingExamCountLabel())
             .fontSize(18)
             .fontWeight(FontWeight.Bold)
             .fontColor(ThemeManager.getTextPrimaryColor());
         }
         Blank();
-        Button('详情')
+        Button('全部')
           .height(30)
           .fontSize(12)
           .fontColor(ThemeManager.getAccentColor())
@@ -452,12 +504,8 @@ struct Home {
       }
       .width('100%');
 
-      CountdownCard({
-        examName: this.getNextExam()?.courseName ?? '',
-        examDate: this.getNextExam()?.examDate ?? '',
-        examTimeRange: this.getNextExam()?.examTimeRange ?? '',
-        beginTime: this.getNextExam()?.beginTime ?? 0,
-        compact: false
+      ForEach(this.getUpcomingExams(3), (exam: ExamItem, index: number) => {
+        this.ExamCardBuilder(exam);
       });
     }
     .width('100%')
@@ -467,18 +515,24 @@ struct Home {
     .shadow({ radius: 16, color: 'rgba(0, 0, 0, 0.04)', offsetY: 4 });
   }
 
+  private getUpcomingExamCountLabel(): string {
+    const count = this.getUpcomingExams(3).length;
+    return count > 1 ? `最近 ${count} 场考试倒计时` : '最近考试倒计时';
+  }
+
   build() {
     Column() {
       Scroll() {
         Column({ space: 12 }) {
           this.HeroBuilder();
 
+          if (this.settings.showExamCountdown && this.getUpcomingExams(1).length > 0) {
+            this.ExamCardsSection();
+          }
+
           if (!this.hasData) {
             this.EmptyStateBuilder();
           } else {
-            if (this.settings.showExamCountdown && this.getNextExam()) {
-              this.ExamCardBuilder();
-            }
             if (this.settings.showToday) {
               this.CourseListBuilder('今日课程', this.todayCourses);
             }
