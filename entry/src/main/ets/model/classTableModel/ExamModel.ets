@@ -107,17 +107,17 @@ function parseDateTime(dateText: string, timeRange: string): DateTimeRange {
 
 export function normalizeExam(input: ExamInput): ExamItem {
   const dateText: string = normalizeExamDate(input.examDate || '');
-  const timeRange: string = input.examTimeRange || '';
+  const timeRange: string = input.examTimeRange || '未知';
   const parsed = parseDateTime(dateText, timeRange);
   return {
-    courseNo: input.courseNo || '',
+    courseNo: input.courseNo || '未知',
     courseName: input.courseName || '',
     examDate: dateText,
     examTimeRange: timeRange,
-    examLocation: input.examLocation || '',
-    seatNo: input.seatNo || '',
-    examStatus: input.examStatus || '',
-    examType: input.examType || '',
+    examLocation: input.examLocation || '未知',
+    seatNo: input.seatNo || '未知',
+    examStatus: input.examStatus || '未知',
+    examType: input.examType || '未知',
     remark: input.remark || '',
     semesterId: input.semesterId && input.semesterId > 0 ? input.semesterId : 0,
     semesterLabel: input.semesterLabel || '',

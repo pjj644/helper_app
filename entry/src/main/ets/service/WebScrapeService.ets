@@ -77,28 +77,34 @@ export class WebScrapeService {
           }
 
           var exams = [];
+          var UNKNOWN = '未知';
+          function cellText(cells, idx) {
+            if (idx < cells.length) {
+              var t = (cells[idx].innerText || '').trim();
+              return t || UNKNOWN;
+            }
+            return UNKNOWN;
+          }
           for (var k = 0; k < candidateRows.length; k++) {
             var cells = candidateRows[k].querySelectorAll('td');
-            if (!cells || cells.length < 9) {
+            if (!cells || cells.length < 3) {
               continue;
             }
-            var c1 = (cells[0].innerText || '').trim();
             var c2 = (cells[1].innerText || '').trim();
             var c3 = (cells[2].innerText || '').trim();
-            var c4 = (cells[3].innerText || '').trim();
-            if (!c2 || c2 === '课程名称') {
+            if (!c2 || c2 === '课程名称' || !c3) {
               continue;
             }
             exams.push({
-              courseNo: c1,
+              courseNo: cellText(cells, 0),
               courseName: c2,
               examDate: c3,
-              examTimeRange: c4,
-              examLocation: (cells[4].innerText || '').trim(),
-              seatNo: (cells[5].innerText || '').trim(),
-              examStatus: (cells[6].innerText || '').trim(),
-              examType: (cells[7].innerText || '').trim(),
-              remark: (cells[8].innerText || '').trim()
+              examTimeRange: cellText(cells, 3),
+              examLocation: cellText(cells, 4),
+              seatNo: cellText(cells, 5),
+              examStatus: cellText(cells, 6),
+              examType: cellText(cells, 7),
+              remark: cellText(cells, 8)
             });
           }
 
