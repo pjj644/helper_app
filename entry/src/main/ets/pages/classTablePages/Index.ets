@@ -5,6 +5,7 @@ import { router } from '@kit.ArkUI';
 import { WebScrapeService } from '../../service/WebScrapeService';
 import { CourseService } from '../../service/CourseService';
 import { CourseRepository } from '../../repository/CourseRepository';
+import { LoadingOverlay } from '../../components/LoadingOverlay';
 
 interface CourseActivity {
   teacherId: string;
@@ -49,6 +50,7 @@ struct Index {
   @State autoNavigateTriggered: boolean = false;
   @State showWebView: boolean = true;
   @State manualMode: boolean = false;
+  @State isProcessing: boolean = true;
   controller: webview.WebviewController = new webview.WebviewController();
 
   private loginUrlPattern: string = 'idas.uestc.edu.cn/authserver/login';
@@ -84,20 +86,21 @@ struct Index {
   }
 
   build() {
-    Column() {
-      Text(this.message)
-        .fontSize(14)
-        .fontColor('#666666')
-        .margin({ top: 8, bottom: 4, left: 12, right: 12 });
+    Stack() {
+      Column() {
+        Text(this.message)
+          .fontSize(14)
+          .fontColor('#666666')
+          .margin({ top: 8, bottom: 4, left: 12, right: 12 });
 
-      if (this.needManualClick) {
-        Text('自动处理失败，请在当前页面手动操作')
-          .fontSize(13)
-          .fontColor('#D32F2F')
-          .margin({ left: 12, right: 12, bottom: 8 });
-      }
+        if (this.needManualClick) {
+          Text('自动处理失败，请在当前页面手动操作')
+            .fontSize(13)
+            .fontColor('#D32F2F')
+            .margin({ left: 12, right: 12, bottom: 8 });
+        }
 
-      Web({ src: this.currentUrl, controller: this.controller })
+        Web({ src: this.currentUrl, controller: this.controller })
         .width('100%')
         .height('100%')
         .layoutWeight(1)
@@ -235,6 +238,11 @@ struct Index {
           console.error('testTag页面加载错误:', error.error.getErrorInfo());
           this.handlePageLoadFailure('页面加载失败');
         });
+    }
+    .width('100%')
+    .height('100%');
+
+      LoadingOverlay({ isVisible: this.isProcessing, message: this.message });
     }
     .width('100%')
     .height('100%');
@@ -473,6 +481,7 @@ struct Index {
             this.hasRefreshedAfterFetchFail = false;
             this.parseAndPrintCourses(courseData);
             this.message = '课表数据已获取，正在跳转...';
+            this.isProcessing = false;
             if (!this.autoNavigateTriggered) {
               this.autoNavigateTriggered = true;
               const latestCourseData: string = JSON.stringify({
@@ -555,6 +564,7 @@ struct Index {
   }
 
   private enableManualMode(reason: string): void {
+    this.isProcessing = false;
     this.message = reason;
     this.needManualClick = true;
     this.manualMode = true;

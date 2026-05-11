@@ -13,6 +13,7 @@ import {
 import { WebScrapeService } from '../../service/WebScrapeService';
 import { ExamService } from '../../service/ExamService';
 import { ExamUtils, RawExamRow } from '../../common/utils/ExamUtils';
+import { LoadingOverlay } from '../../components/LoadingOverlay';
 
 interface ParseError {
   error: string;
@@ -40,6 +41,7 @@ interface ParsePayload {
 struct ExamImport {
   @State message: string = '请登录后等待自动抓取考试信息';
   @State autoDone: boolean = false;
+  @State isProcessing: boolean = true;
   controller: webview.WebviewController = new webview.WebviewController();
   @State currentUrl: string = EAMS_EXAM_MENU_URL;
   private returnHome: boolean = false;
@@ -89,6 +91,7 @@ struct ExamImport {
   private retryParseWithDelay(reason: string): void {
     if (this.parseRetryCount >= this.MAX_PARSE_RETRY) {
       this.message = '解析失败：页面数据未就绪，请停留考试页后手动重试';
+      this.isProcessing = false;
       console.error(`testTag ExamImport retry exhausted reason=${reason}`);
       return;
     }
@@ -167,12 +170,14 @@ struct ExamImport {
         const sorted: ExamItem[] = ExamUtils.sortExams(normalized);
         if (sorted.length === 0) {
           this.message = '未抓取到考试信息，请先切换到有数据的考试类型后重试';
+          this.isProcessing = false;
           console.info('testTag ExamImport sorted empty after normalization');
           return;
         }
 
         this.parseRetryCount = 0;
         this.autoDone = true;
+        this.isProcessing = false;
         this.message = `抓取完成，正在保存${getSemesterLabelById(this.selectedSemesterId)} ${getExamTypeLabelById(this.selectedExamTypeId)} ${sorted.length} 条数据`;
         console.info(`testTag ExamImport parse success count=${sorted.length}`);
         await this.saveAndReturn(sorted);
@@ -185,11 +190,12 @@ struct ExamImport {
   }
 
   build() {
-    Column() {
-      Text(this.message)
-        .fontSize(14)
-        .fontColor('#666666')
-        .margin({ top: 8, bottom: 8, left: 12, right: 12 });
+    Stack() {
+      Column() {
+        Text(this.message)
+          .fontSize(14)
+          .fontColor('#666666')
+          .margin({ top: 8, bottom: 8, left: 12, right: 12 });
 
       Row({ space: 8 }) {
         Button('返回')
@@ -251,6 +257,11 @@ struct ExamImport {
           const err = event.error.getErrorInfo();
           console.error(`testTag ExamImport web error=${err}`);
         });
+    }
+    .width('100%')
+    .height('100%');
+
+      LoadingOverlay({ isVisible: this.isProcessing, message: this.message });
     }
     .width('100%')
     .height('100%');

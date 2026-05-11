@@ -6,6 +6,7 @@ import { AppConstants } from '../common/constants/AppConstants';
 import { ThemeManager } from '../common/utils/ThemeManager';
 import { ReminderService } from '../service/ReminderService';
 import { BottomTabBar, TabItem } from '../components/BottomTabBar';
+import { LoadingOverlay } from '../components/LoadingOverlay';
 
 @Entry
 @Component
@@ -126,9 +127,10 @@ struct HomePortalPage {
   }
 
   build() {
-    Column() {
+    Stack() {
       Column() {
-        Row() {
+        Column() {
+          Row() {
           Text('UESTC Online')
             .fontSize(20)
             .fontWeight(FontWeight.Bold)
@@ -215,5 +217,13 @@ struct HomePortalPage {
     .width('100%')
     .height('100%')
     .backgroundColor(ThemeManager.getBackgroundSecondaryColor());
+
+      LoadingOverlay({
+        isVisible: this.syncingToCloud || this.downloadingFromCloud,
+        message: this.syncingToCloud ? '正在上传到云端...' : '正在从云端下载...'
+      });
+    }
+    .width('100%')
+    .height('100%');
   }
 }

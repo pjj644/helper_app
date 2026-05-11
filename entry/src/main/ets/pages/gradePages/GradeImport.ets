@@ -5,6 +5,7 @@ import { WebScrapeService } from '../../service/WebScrapeService';
 import { GradeService } from '../../service/GradeService';
 import { AppConstants } from '../../common/constants/AppConstants';
 import { Logger } from '../../common/utils/Logger';
+import { LoadingOverlay } from '../../components/LoadingOverlay';
 
 const TAG = 'GradeImport';
 
@@ -13,6 +14,7 @@ const TAG = 'GradeImport';
 struct GradeImport {
   @State message: string = '请登录后等待自动抓取成绩信息';
   @State autoDone: boolean = false;
+  @State isProcessing: boolean = true;
   controller: webview.WebviewController = new webview.WebviewController();
   @State currentUrl: string = AppConstants.EAMS_HOME_URL;
   private returnHome: boolean = false;
@@ -202,6 +204,7 @@ struct GradeImport {
     }
     if (this.parseRetryCount >= this.MAX_PARSE_RETRY) {
       this.message = '解析失败：页面数据未就绪，请停留成绩页后手动重试';
+      this.isProcessing = false;
       Logger.error(TAG, `retry exhausted reason=${reason}`);
       return;
     }
@@ -271,12 +274,14 @@ struct GradeImport {
         const grades: GradeItem[] = GradeService.parseRawGrades(payload.grades, this.semesterId);
         if (grades.length === 0) {
           this.message = '未抓取到成绩信息，请先确认该学期有成绩后重试';
+          this.isProcessing = false;
           Logger.debug(TAG, 'grades empty after normalization');
           return;
         }
 
         this.parseRetryCount = 0;
         this.autoDone = true;
+        this.isProcessing = false;
         this.message = `抓取完成，正在保存${grades.length} 条数据`;
         Logger.info(TAG, `parse success count=${grades.length}`);
         this.saveAndReturn(grades);
@@ -289,11 +294,12 @@ struct GradeImport {
   }
 
   build() {
-    Column() {
-      Text(this.message)
-        .fontSize(14)
-        .fontColor('#666666')
-        .margin({ top: 8, bottom: 8, left: 12, right: 12 });
+    Stack() {
+      Column() {
+        Text(this.message)
+          .fontSize(14)
+          .fontColor('#666666')
+          .margin({ top: 8, bottom: 8, left: 12, right: 12 });
 
       Row({ space: 8 }) {
         Button('返回')
@@ -355,6 +361,11 @@ struct GradeImport {
           const err = event.error.getErrorInfo();
           Logger.error(TAG, `web error=${err}`);
         });
+    }
+    .width('100%')
+    .height('100%');
+
+      LoadingOverlay({ isVisible: this.isProcessing, message: this.message });
     }
     .width('100%')
     .height('100%');
