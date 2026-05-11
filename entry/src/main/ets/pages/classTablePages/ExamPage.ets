@@ -3,8 +3,7 @@ import { ExamItem } from '../../model/classTableModel/ExamModel';
 import { EXAM_TYPE_OPTIONS, calculateSemesterId, getExamTypeLabelById, getSemesterLabelById, getSemesterOptions, SemesterOptionSet } from '../../model/classTableModel/ExamAccessRules';
 import { ExamService } from '../../service/ExamService';
 import { ExamUtils } from '../../common/utils/ExamUtils';
-import { CountdownParts, DateUtils } from '../../common/utils/DateUtils';
-import { CountdownCard } from '../../components/CountdownCard';
+import { DateUtils } from '../../common/utils/DateUtils';
 import { ThemeManager } from '../../common/utils/ThemeManager';
 
 @Entry
@@ -412,13 +411,9 @@ struct ExamPage {
         Blank();
 
         if (this.shouldShowCountDown(item)) {
-          CountdownCard({
-            examName: '',
-            examDate: '',
-            examTimeRange: '',
-            beginTime: item.beginTime,
-            compact: true
-          });
+          Text(`倒计时 ${DateUtils.formatCountDown(this.nowTick, item.beginTime)}`)
+            .fontSize(12)
+            .fontColor(ThemeManager.getAccentColor());
         }
       }
       .width('100%');

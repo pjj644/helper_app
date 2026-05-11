@@ -144,7 +144,7 @@ struct Home {
         ReminderService.refreshAllReminders(context);
       }
 
-      const upcoming = this.getUpcomingExams(3);
+      const upcoming = this.getUpcomingExams(1);
       console.info(`[ExamDebug] Home: loadPageData done hasData=${this.hasData} showExamCountdown=${this.settings.showExamCountdown} upcomingCount=${upcoming.length} examTotal=${this.exams.length}`);
     } catch (error) {
       console.error('[ExamDebug] Home加载数据失败:', JSON.stringify(error));
@@ -505,7 +505,7 @@ struct Home {
         Row({ space: 6 }) {
           Text('⏳')
             .fontSize(16);
-          Text(this.getUpcomingExamCountLabel())
+          Text('最近考试倒计时')
             .fontSize(18)
             .fontWeight(FontWeight.Bold)
             .fontColor(ThemeManager.getTextPrimaryColor());
@@ -521,20 +521,13 @@ struct Home {
       }
       .width('100%');
 
-      ForEach(this.getUpcomingExams(3), (exam: ExamItem, index: number) => {
-        this.ExamCardBuilder(exam);
-      });
+      this.ExamCardBuilder(this.getNextExam()!);
     }
     .width('100%')
     .padding(12)
     .borderRadius(20)
     .backgroundColor(ThemeManager.getBackgroundSecondaryColor())
     .shadow({ radius: 16, color: 'rgba(0, 0, 0, 0.04)', offsetY: 4 });
-  }
-
-  private getUpcomingExamCountLabel(): string {
-    const count = this.getUpcomingExams(3).length;
-    return count > 1 ? `最近 ${count} 场考试倒计时` : '最近考试倒计时';
   }
 
   build() {
