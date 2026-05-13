@@ -2,7 +2,7 @@ import { ScheduleEvent, ScheduleUtils, ScheduleEventType } from '../model/Schedu
 import { ScheduleRepository } from '../repository/ScheduleRepository';
 import { CourseService } from './CourseService';
 import { ExamService } from './ExamService';
-import { Course } from '../model/classTableModel/CourseModel';
+import { Course, SECTION_TIMES } from '../model/classTableModel/CourseModel';
 import { ExamItem } from '../model/classTableModel/ExamModel';
 
 export class ScheduleService {
@@ -55,14 +55,10 @@ export class ScheduleService {
         const c: Course = courses[i];
         const targetDate: Date = new Date(monday);
         targetDate.setDate(monday.getDate() + c.time.dayOfWeek - 1);
-        const sectionMins: number = (c.time.startSection - 1) * 45 + Math.floor((c.time.startSection - 1) / 2) * 10;
-        const startMins: number = 8 * 60 + sectionMins;
-        const startHour: number = Math.floor(startMins / 60);
-        const startMin: number = startMins % 60;
-        const endMins: number = startMins + c.time.duration * 45 + Math.floor(c.time.duration / 2) * 10;
-        const endHour: number = Math.floor(endMins / 60);
-        const endMin: number = endMins % 60;
-        const timeStr: string = `${ScheduleUtils.twoDigit(startHour)}:${ScheduleUtils.twoDigit(startMin)}-${ScheduleUtils.twoDigit(endHour)}:${ScheduleUtils.twoDigit(endMin)}`;
+        const endSection: number = c.time.startSection + c.time.duration - 1;
+        const startTime: string = SECTION_TIMES[c.time.startSection - 1]?.startTime || '8:30';
+        const endTime: string = SECTION_TIMES[endSection - 1]?.endTime || '9:15';
+        const timeStr: string = `${startTime}-${endTime}`;
         const evt: ScheduleEvent = {
           id: 'course_' + c.id,
           title: c.name,

@@ -4,7 +4,7 @@ import { ScheduleService } from '../../service/ScheduleService';
 import { ReminderService } from '../../service/ReminderService';
 import { CourseService } from '../../service/CourseService';
 import { ExamService } from '../../service/ExamService';
-import { Course } from '../../model/classTableModel/CourseModel';
+import { Course, SECTION_TIMES } from '../../model/classTableModel/CourseModel';
 import { ExamItem } from '../../model/classTableModel/ExamModel';
 import { ThemeManager } from '../../common/utils/ThemeManager';
 import { ScheduleEditor } from '../../components/ScheduleEditor';
@@ -115,23 +115,18 @@ struct CalendarPage {
           }
 
           const dateStr: string = ScheduleUtils.formatDate(current.getFullYear(), current.getMonth() + 1, current.getDate());
-          const sectionMins: number = (course.time.startSection - 1) * 45 + Math.floor((course.time.startSection - 1) / 2) * 10;
-          const startMins: number = 8 * 60 + sectionMins;
-          const startHour: number = Math.floor(startMins / 60);
-          const startMin: number = startMins % 60;
-          const durationSections: number = course.time.duration;
-          const endMins: number = startMins + durationSections * 45 + Math.floor(durationSections / 2) * 10;
-          const endHour: number = Math.floor(endMins / 60);
-          const endMin: number = endMins % 60;
-          const timeRange: string = `${ScheduleUtils.twoDigit(startHour)}:${ScheduleUtils.twoDigit(startMin)}-${ScheduleUtils.twoDigit(endHour)}:${ScheduleUtils.twoDigit(endMin)}`;
+          const endSection: number = course.time.startSection + course.time.duration - 1;
+          const startTime: string = SECTION_TIMES[course.time.startSection - 1]?.startTime || '8:30';
+          const endTime: string = SECTION_TIMES[endSection - 1]?.endTime || '9:15';
+          const timeRange: string = `${startTime}-${endTime}`;
 
           const evt: ScheduleEvent = {
             id: 'course_' + course.id + '_' + dateStr,
             title: course.name,
             date: dateStr,
             timeRange: timeRange,
-            startTime: `${ScheduleUtils.twoDigit(startHour)}:${ScheduleUtils.twoDigit(startMin)}`,
-            endTime: `${ScheduleUtils.twoDigit(endHour)}:${ScheduleUtils.twoDigit(endMin)}`,
+            startTime: startTime,
+            endTime: endTime,
             location: course.roomName,
             type: 'course' as ScheduleEventType,
             color: '#2196F3',
