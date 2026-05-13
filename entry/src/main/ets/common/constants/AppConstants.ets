@@ -53,6 +53,13 @@ export class AppConstants {
   static readonly UESTC_URL: string = 'https://www.uestc.edu.cn';
   static readonly EAMS_PORTAL_URL: string = 'https://eams.uestc.edu.cn/eams/home!childmenus.action?menu.id=844';
 
+  static readonly WEBVPN_BASE_URL: string = 'https://webvpn.uestc.edu.cn';
+  static readonly WEBVPN_LOGIN_URL: string = 'https://webvpn.uestc.edu.cn';
+  static readonly WEBVPN_EAMS_ENCODED_DOMAIN: string =
+    '77726476706e69737468656265737421f5f64c8f69256d436a0bc7a99c406d36c2';
+  static readonly WEBVPN_EAMS_DOMAIN: string = 'eams.uestc.edu.cn';
+  static readonly SETTING_VPN_MODE_KEY: string = 'setting_vpn_mode';
+
   static readonly CLOUD_DB_ZONE_NAME: string = 'classData';
   static readonly MAX_FETCH_RETRY: number = 2;
   static readonly MAX_PAGE_RETRY: number = 2;

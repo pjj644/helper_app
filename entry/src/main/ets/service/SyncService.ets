@@ -467,7 +467,7 @@ export class SyncService {
       const startSection = (i % 12) + 1;
 
       for (const rawActivity of slotActivities) {
-        const key = `${rawActivity.courseId}_${rawActivity.courseName}_${dayOfWeek}_${startSection}`;
+        const key = `${rawActivity.courseId}_${rawActivity.courseName}_${dayOfWeek}_${startSection}_${rawActivity.vaildWeeks}`;
         if (processed.has(key)) {
           continue;
         }

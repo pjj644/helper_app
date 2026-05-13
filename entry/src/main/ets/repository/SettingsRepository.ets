@@ -9,6 +9,7 @@ export interface AppSettings {
   showExamCountdown: boolean;
   examRemindMinutes: number;
   courseRemindMinutes: number;
+  vpnMode: boolean;
 }
 
 export interface RecentLinkItem {
@@ -27,6 +28,7 @@ export class SettingsRepository {
     await pref.put(AppConstants.SETTING_SHOW_EXAM_KEY, settings.showExamCountdown);
     await pref.put(AppConstants.SETTING_EXAM_REMIND_MINUTES_KEY, settings.examRemindMinutes);
     await pref.put(AppConstants.SETTING_COURSE_REMIND_MINUTES_KEY, settings.courseRemindMinutes);
+    await pref.put(AppConstants.SETTING_VPN_MODE_KEY, settings.vpnMode);
     await pref.flush();
   }
 
@@ -40,6 +42,7 @@ export class SettingsRepository {
       showExamCountdown: (await pref.get(AppConstants.SETTING_SHOW_EXAM_KEY, true)) as boolean,
       examRemindMinutes: (await pref.get(AppConstants.SETTING_EXAM_REMIND_MINUTES_KEY, 30)) as number,
       courseRemindMinutes: (await pref.get(AppConstants.SETTING_COURSE_REMIND_MINUTES_KEY, 30)) as number,
+      vpnMode: (await pref.get(AppConstants.SETTING_VPN_MODE_KEY, false)) as boolean,
     };
   }
 

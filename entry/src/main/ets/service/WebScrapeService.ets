@@ -154,6 +154,10 @@ export class WebScrapeService {
             return JSON.stringify({ status: 'logged_in', reason: 'url_check' });
           }
 
+          if (currentUrl.includes('webvpn.uestc.edu.cn') && currentUrl.includes('/eams/') && !currentUrl.includes('login')) {
+            return JSON.stringify({ status: 'logged_in', reason: 'vpn_url_check' });
+          }
+
           var bodyText = document.body ? document.body.innerText : '';
           if (bodyText.includes('我的课表') || bodyText.includes('退出') || bodyText.includes('个人信息')) {
             return JSON.stringify({ status: 'logged_in', reason: 'content_check' });
@@ -430,6 +434,53 @@ export class WebScrapeService {
     });
   } catch(e) {
     return JSON.stringify({ semesterId: 0, ids: '', error: e.message });
+  }
+})()
+`;
+  }
+
+  static buildVpnSemesterSwitchScript(semesterId: number, vpnActionUrl: string): string {
+    return `
+(function() {
+  try {
+    var idsInput = document.querySelector('input[name="ids"]');
+    var idsValue = idsInput ? idsInput.value : '';
+    if (!idsValue) {
+      var semInput = document.querySelector('input[name="semester.id"]');
+      if (semInput && semInput.value) {
+        var formEl = semInput.closest('form');
+        if (formEl) {
+          var hiddenIds = formEl.querySelector('input[name="ids"]');
+          if (hiddenIds) {
+            idsValue = hiddenIds.value;
+          }
+        }
+      }
+    }
+
+    var formData = 'ignoreHead=1&setting.kind=std&startWeek=1&project.id=1&isEng=0&semester.id=${semesterId}&ids=' + encodeURIComponent(idsValue);
+
+    var xhr = new XMLHttpRequest();
+    xhr.open('POST', '${vpnActionUrl}', false);
+    xhr.setRequestHeader('Content-Type', 'application/x-www-form-urlencoded');
+    xhr.withCredentials = true;
+    xhr.send(formData);
+
+    if (xhr.status === 200) {
+      var contentDiv = document.querySelector('.grid-container') || document.querySelector('#content') || document.querySelector('.content-container');
+      if (contentDiv) {
+        contentDiv.innerHTML = xhr.responseText;
+      }
+      var semInput2 = document.querySelector('input[name="semester.id"]');
+      if (semInput2) {
+        semInput2.value = '${semesterId}';
+      }
+      return JSON.stringify({ success: true, semesterId: ${semesterId} });
+    } else {
+      return JSON.stringify({ success: false, error: 'HTTP ' + xhr.status });
+    }
+  } catch(e) {
+    return JSON.stringify({ success: false, error: e.message });
   }
 })()
 `;

@@ -4,6 +4,8 @@ import { GradeItem, GradeParsePayload } from '../../model/GradeModel';
 import { WebScrapeService } from '../../service/WebScrapeService';
 import { GradeService } from '../../service/GradeService';
 import { AppConstants } from '../../common/constants/AppConstants';
+import { SettingsRepository } from '../../repository/SettingsRepository';
+import { VpnEncoder } from '../../common/utils/VpnEncoder';
 import { Logger } from '../../common/utils/Logger';
 import { LoadingOverlay } from '../../components/LoadingOverlay';
 
@@ -15,6 +17,7 @@ struct GradeImport {
   @State message: string = '请登录后等待自动抓取成绩信息';
   @State autoDone: boolean = false;
   @State isProcessing: boolean = true;
+  @State isVpnMode: boolean = false;
   controller: webview.WebviewController = new webview.WebviewController();
   @State currentUrl: string = AppConstants.EAMS_HOME_URL;
   private returnHome: boolean = false;
@@ -25,6 +28,8 @@ struct GradeImport {
   private destroyed: boolean = false;
   private pendingTimer: number = -1;
   private hasNavigatedToGrade: boolean = false;
+  private vpnAutoDetected: boolean = false;
+  private vpnPortalNavigated: boolean = false;
 
   aboutToAppear(): void {
     const params = router.getParams() as Record<string, Object>;
@@ -35,6 +40,19 @@ struct GradeImport {
     this.destroyed = false;
     this.hasNavigatedToGrade = false;
     Logger.debug(TAG, `aboutToAppear semesterId=${this.semesterId} gradeUrl=${this.gradeUrl}`);
+    this.initVpnMode();
+  }
+
+  private async initVpnMode(): Promise<void> {
+    try {
+      const settings = await SettingsRepository.loadSettings(getContext(this));
+      this.isVpnMode = settings.vpnMode;
+      if (this.isVpnMode) {
+        this.message = 'VPN模式：正在尝试直连，失败后将切换VPN...';
+      }
+    } catch (e) {
+      Logger.error(TAG, `读取VPN设置失败=${JSON.stringify(e)}`);
+    }
   }
 
   aboutToDisappear(): void {
@@ -48,13 +66,29 @@ struct GradeImport {
 
   private navigateToGradePage(): void {
     this.message = '已进入教务系统，正在跳转成绩查询页面...';
-    Logger.debug(TAG, `navigateToGradePage target=${this.gradeUrl}`);
-    this.controller.loadUrl(this.gradeUrl);
+    const currentUrl = this.controller.getUrl();
+    const onCampusNetwork = currentUrl.includes('eams.uestc.edu.cn');
+    const useVpn = this.isVpnMode && !onCampusNetwork;
+    const targetUrl = useVpn ?
+      VpnEncoder.buildVpnGradeUrl(this.semesterId) :
+      this.gradeUrl;
+    Logger.debug(TAG, `navigateToGradePage useVpn=${useVpn} target=${targetUrl}`);
+    this.controller.loadUrl(targetUrl);
   }
 
   private findAndNavigateToGradeLink(): void {
     this.message = '正在查找成绩查询链接...';
     Logger.debug(TAG, '查找成绩链接，等待页面完全加载');
+
+    const currentUrl = this.controller.getUrl();
+    const onCampusNetwork = currentUrl.includes('eams.uestc.edu.cn');
+    const useVpn = this.isVpnMode && !onCampusNetwork;
+
+    if (useVpn) {
+      Logger.debug(TAG, 'VPN模式：直接导航到VPN代理的成绩URL');
+      this.navigateToGradePage();
+      return;
+    }
 
     const findGradeLinkJs: string = `
       (function() {
@@ -203,6 +237,11 @@ struct GradeImport {
       return;
     }
     if (this.parseRetryCount >= this.MAX_PARSE_RETRY) {
+      if (!this.isVpnMode && !this.vpnAutoDetected) {
+        Logger.info(TAG, `GradeImport retry exhausted, switching to VPN mode`);
+        this.switchToVpnMode();
+        return;
+      }
       this.message = '解析失败：页面数据未就绪，请停留成绩页后手动重试';
       this.isProcessing = false;
       Logger.error(TAG, `retry exhausted reason=${reason}`);
@@ -293,6 +332,21 @@ struct GradeImport {
     });
   }
 
+  private switchToVpnMode(): void {
+    if (this.vpnAutoDetected) {
+      Logger.debug(TAG, 'VPN mode already switched, skip');
+      return;
+    }
+    Logger.info(TAG, '检测到非校园网环境，自动切换VPN模式');
+    this.vpnAutoDetected = true;
+    this.isVpnMode = true;
+    this.hasNavigatedToGrade = false;
+    this.vpnPortalNavigated = false;
+    this.message = '检测到非校园网环境，已切换到VPN模式，正在加载WebVPN...';
+    this.currentUrl = AppConstants.WEBVPN_LOGIN_URL;
+    this.controller.loadUrl(AppConstants.WEBVPN_LOGIN_URL);
+  }
+
   build() {
     Stack() {
       Column() {
@@ -334,9 +388,23 @@ struct GradeImport {
           Logger.debug(TAG, `onPageEnd url=${url}`);
 
           if (url.includes('authserver/login')) {
-            this.message = '请先登录教务系统，登录后会自动跳转成绩页';
+            this.message = this.isVpnMode ? 'VPN模式：请先完成统一身份认证登录' : '请先登录教务系统，登录后会自动跳转成绩页';
+            this.isProcessing = false;
             this.hasNavigatedToGrade = false;
+            this.vpnPortalNavigated = false;
             Logger.debug(TAG, 'on login page, waiting for auth');
+            return;
+          }
+
+          if (this.isVpnMode && VpnEncoder.isWebvpnPortal(url)) {
+            if (!this.vpnPortalNavigated) {
+              this.vpnPortalNavigated = true;
+              this.message = 'VPN登录成功，正在跳转教务系统...';
+              Logger.debug(TAG, 'VPN portal detected, navigating to EAMS');
+              setTimeout(() => {
+                this.controller.loadUrl(VpnEncoder.buildVpnEamsPortalUrl());
+              }, 1000);
+            }
             return;
           }
 
@@ -344,6 +412,16 @@ struct GradeImport {
             this.message = '已进入成绩页面，正在抓取';
             Logger.debug(TAG, 'entered grade page, schedule parse');
             setTimeout(() => this.waitForDataLoad(), 1500);
+            return;
+          }
+
+          if (this.isVpnMode && VpnEncoder.isVpnEamsUrl(url) && !url.includes('person!search.action') && !url.includes('login')) {
+            if (!this.hasNavigatedToGrade) {
+              this.hasNavigatedToGrade = true;
+              this.message = '已登录，正在准备进入成绩页面...';
+              Logger.debug(TAG, 'VPN EAMS page, will navigate to grade (once)');
+              setTimeout(() => this.navigateToGradePage(), 2500);
+            }
             return;
           }
 
@@ -357,9 +435,24 @@ struct GradeImport {
             return;
           }
         })
+        .onHttpErrorReceive((event) => {
+          const statusCode = event.response.getResponseCode();
+          Logger.error(TAG, `Grade HTTP error status=${statusCode}`);
+          if (!this.vpnAutoDetected && statusCode === 403) {
+            Logger.info(TAG, 'GradeImport detected 403, switching to VPN mode');
+            this.switchToVpnMode();
+            return;
+          }
+        })
         .onErrorReceive((event) => {
           const err = event.error.getErrorInfo();
           Logger.error(TAG, `web error=${err}`);
+          if (!this.isVpnMode && !this.vpnAutoDetected &&
+              (err.includes('net::ERR_CONNECTION') ||
+               err.includes('net::ERR_NAME_NOT_RESOLVED'))) {
+            this.switchToVpnMode();
+            return;
+          }
         });
     }
     .width('100%')

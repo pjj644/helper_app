@@ -5,6 +5,8 @@ import { router } from '@kit.ArkUI';
 import { WebScrapeService } from '../../service/WebScrapeService';
 import { CourseService } from '../../service/CourseService';
 import { CourseRepository } from '../../repository/CourseRepository';
+import { SettingsRepository } from '../../repository/SettingsRepository';
+import { VpnEncoder } from '../../common/utils/VpnEncoder';
 import { LoadingOverlay } from '../../components/LoadingOverlay';
 
 interface CourseActivity {
@@ -51,6 +53,7 @@ struct Index {
   @State showWebView: boolean = true;
   @State manualMode: boolean = false;
   @State isProcessing: boolean = true;
+  @State isVpnMode: boolean = false;
   controller: webview.WebviewController = new webview.WebviewController();
 
   private loginUrlPattern: string = 'idas.uestc.edu.cn/authserver/login';
@@ -67,6 +70,8 @@ struct Index {
   private courseTableTargetSemesterId: number = 0;
   private pendingSemesterSwitchId: number = 0;
   private isPageActive: boolean = false;
+  private vpnAutoDetected: boolean = false;
+  private vpnNavigatedFromPortal: boolean = false;
 
   aboutToAppear(): void {
     this.isPageActive = true;
@@ -78,6 +83,19 @@ struct Index {
         this.courseTableTargetSemesterId = parsed;
         this.pendingSemesterSwitchId = parsed;
       }
+    }
+    this.initVpnMode();
+  }
+
+  private async initVpnMode(): Promise<void> {
+    try {
+      const settings = await SettingsRepository.loadSettings(getContext(this));
+      this.isVpnMode = settings.vpnMode;
+      if (this.isVpnMode) {
+        this.message = 'VPN模式：正在尝试直连，失败后将切换VPN...';
+      }
+    } catch (e) {
+      console.error('testTag读取VPN设置失败:', e);
     }
   }
 
@@ -136,7 +154,7 @@ struct Index {
           const url: string = this.controller.getUrl();
           console.info('testTag页面加载完成:', url);
 
-          if (url.includes(this.loginUrlPattern)) {
+          if (VpnEncoder.isLoginPage(url) || url.includes(this.loginUrlPattern)) {
             return;
           }
 
@@ -172,18 +190,31 @@ struct Index {
                   const currentSemesterId: number = (paramsObj['semesterId'] as number) || 0;
                   console.info('testTag当前学期ID:', currentSemesterId, '目标学期ID:', this.pendingSemesterSwitchId);
                   if (currentSemesterId !== this.pendingSemesterSwitchId) {
+                    const onCampusForSwitch: boolean = url.includes('eams.uestc.edu.cn');
+                    const useVpnForSwitch: boolean = this.isVpnMode && !onCampusForSwitch;
                     try {
-                      webview.WebCookieManager.configCookieSync('https://eams.uestc.edu.cn', 'semester.id=' + this.pendingSemesterSwitchId);
-                      console.info('testTag已设置Cookie semester.id=', this.pendingSemesterSwitchId);
+                      const cookieDomain = useVpnForSwitch ?
+                        AppConstants.WEBVPN_BASE_URL : 'https://eams.uestc.edu.cn';
+                      webview.WebCookieManager.configCookieSync(cookieDomain,
+                        'semester.id=' + this.pendingSemesterSwitchId);
+                      console.info('testTag已设置Cookie semester.id=', this.pendingSemesterSwitchId, 'useVpn=', useVpnForSwitch);
                     } catch (cookieErr) {
                       console.error('testTag设置Cookie失败:', cookieErr);
                     }
-                    const switchJs: string = WebScrapeService.buildSemesterSwitchScript(this.pendingSemesterSwitchId);
+                    const switchJs: string = useVpnForSwitch ?
+                      WebScrapeService.buildVpnSemesterSwitchScript(this.pendingSemesterSwitchId,
+                        VpnEncoder.buildVpnEamsUrl('/eams/courseTableForStd!courseTable.action')) :
+                      WebScrapeService.buildSemesterSwitchScript(this.pendingSemesterSwitchId);
                     this.controller.runJavaScript(switchJs, (switchError: Error | null, switchResult: string) => {
                       if (switchError) {
                         console.error('testTag切换学期失败:', switchError);
                       } else {
                         console.info('testTag切换学期结果:', switchResult);
+                        if (switchResult && switchResult.includes('403') && !this.vpnAutoDetected) {
+                          console.info('testTag学期切换403，切换到VPN模式');
+                          this.switchToVpnMode();
+                          return;
+                        }
                       }
                       this.pendingSemesterSwitchId = 0;
                       setTimeout(() => {
@@ -234,8 +265,25 @@ struct Index {
             }
           }
         })
+        .onHttpErrorReceive((event) => {
+          const statusCode = event.response.getResponseCode();
+          console.error('testTag HTTP错误状态码:', statusCode);
+          if (!this.vpnAutoDetected && statusCode === 403) {
+            console.info('testTag检测到HTTP 403，切换到VPN模式');
+            this.switchToVpnMode();
+            return;
+          }
+          this.handlePageLoadFailure('HTTP错误: ' + statusCode);
+        })
         .onErrorReceive((error) => {
           console.error('testTag页面加载错误:', error.error.getErrorInfo());
+          const errorInfo = error.error.getErrorInfo();
+          if (!this.isVpnMode && !this.vpnAutoDetected &&
+              (errorInfo.includes('net::ERR_CONNECTION') ||
+               errorInfo.includes('net::ERR_NAME_NOT_RESOLVED'))) {
+            this.switchToVpnMode();
+            return;
+          }
           this.handlePageLoadFailure('页面加载失败');
         });
     }
@@ -248,30 +296,82 @@ struct Index {
     .height('100%');
   }
 
+  private switchToVpnMode(): void {
+    if (this.vpnAutoDetected) {
+      console.info('testTag VPN mode already switched, skip');
+      return;
+    }
+    console.info('testTag检测到非校园网环境，自动切换VPN模式');
+    this.vpnAutoDetected = true;
+    this.isVpnMode = true;
+    this.pageRetryCount = 0;
+    this.hasRefreshedAfterLoadFail = false;
+    this.vpnNavigatedFromPortal = false;
+    this.message = '检测到非校园网环境，已切换到VPN模式，正在加载WebVPN...';
+    this.currentUrl = AppConstants.WEBVPN_LOGIN_URL;
+    this.controller.loadUrl(AppConstants.WEBVPN_LOGIN_URL);
+  }
+
   checkCurrentPage(): void {
     const url: string = this.controller.getUrl();
     console.info('testTag当前页面URL:', url);
 
-    if (url.includes(this.loginUrlPattern)) {
-      this.message = '请完成登录';
+    if (VpnEncoder.isLoginPage(url) || url.includes(this.loginUrlPattern)) {
+      this.message = this.isVpnMode ? 'VPN模式：请完成统一身份认证登录' : '请完成登录';
       this.isLoggedIn = false;
       this.needManualClick = false;
       this.manualMode = false;
-    } else if (url.includes('courseTableForStd')) {
+      this.vpnNavigatedFromPortal = false;
+      this.isProcessing = false;
+      return;
+    }
+
+    if (url.includes('courseTableForStd')) {
       this.message = '已进入课表页面';
       this.isLoggedIn = true;
       if (!this.manualMode) {
         this.needManualClick = false;
       }
-    } else if (url.includes('eams.uestc.edu.cn') && !url.includes('login')) {
-      if (this.manualMode) {
+      return;
+    }
+
+    if (this.isVpnMode) {
+      if (VpnEncoder.isWebvpnPortal(url)) {
+        if (this.manualMode) {
+          return;
+        }
+        if (this.vpnNavigatedFromPortal) {
+          console.info('testTag VPN模式：已从门户导航过，跳过重复导航');
+          return;
+        }
+        console.info('testTag VPN模式：检测到WebVPN门户页，等待加载教务系统...');
+        this.vpnNavigatedFromPortal = true;
+        this.message = 'VPN登录成功，等待加载教务系统...';
         return;
       }
-      console.info('testTag当前在eams页面，设置为已登录状态，准备跳转课表...');
-      this.isLoggedIn = true;
-      setTimeout(() => {
-        this.navigateToCourseTable();
-      }, 1000);
+
+      if (VpnEncoder.isVpnEamsUrl(url)) {
+        if (this.manualMode) {
+          return;
+        }
+        console.info('testTag VPN模式：检测到VPN代理的EAMS页面，使用VPN URL导航课表');
+        this.isLoggedIn = true;
+        setTimeout(() => {
+          this.doNavigateToCourseTable();
+        }, 1000);
+        return;
+      }
+    } else {
+      if (url.includes('eams.uestc.edu.cn') && !url.includes('login')) {
+        if (this.manualMode) {
+          return;
+        }
+        console.info('testTag当前在eams页面，设置为已登录状态，准备跳转课表...');
+        this.isLoggedIn = true;
+        setTimeout(() => {
+          this.navigateToCourseTable();
+        }, 1000);
+      }
     }
   }
 
@@ -284,19 +384,38 @@ struct Index {
     const currentUrl: string = this.controller.getUrl();
     console.info('testTag检查登录状态，当前URL:', currentUrl);
 
-    if (currentUrl.includes('idas.uestc.edu.cn/authserver/login')) {
+    if (VpnEncoder.isLoginPage(currentUrl) || currentUrl.includes(this.loginUrlPattern)) {
       console.info('testTag当前在登录页面，需要登录');
-      this.message = '请完成登录';
+      this.message = this.isVpnMode ? 'VPN模式：请完成统一身份认证登录' : '请完成登录';
       return;
     }
 
-    if (currentUrl.includes('eams.uestc.edu.cn')) {
-      console.info('testTag已登录（基于URL判断），准备跳转课表...');
-      this.message = '已登录，正在跳转课表...';
-      setTimeout(() => {
-        this.navigateToCourseTable();
-      }, 1000);
-      return;
+    if (this.isVpnMode) {
+      if (VpnEncoder.isVpnEamsUrl(currentUrl)) {
+        console.info('testTag VPN模式：已登录（VPN代理EAMS页面），准备跳转课表...');
+        this.message = '已登录，正在跳转课表...';
+        setTimeout(() => {
+          this.navigateToCourseTable();
+        }, 1000);
+        return;
+      }
+      if (VpnEncoder.isWebvpnPortal(currentUrl)) {
+        console.info('testTag VPN模式：在WebVPN门户页，导航到EAMS...');
+        this.message = 'VPN登录成功，正在跳转教务系统...';
+        setTimeout(() => {
+          this.controller.loadUrl(VpnEncoder.buildVpnEamsPortalUrl());
+        }, 1000);
+        return;
+      }
+    } else {
+      if (currentUrl.includes('eams.uestc.edu.cn')) {
+        console.info('testTag已登录（基于URL判断），准备跳转课表...');
+        this.message = '已登录，正在跳转课表...';
+        setTimeout(() => {
+          this.navigateToCourseTable();
+        }, 1000);
+        return;
+      }
     }
 
     const checkLoginJs: string = WebScrapeService.buildLoginCheckScript();
@@ -352,6 +471,19 @@ struct Index {
   }
 
   doNavigateToCourseTable(): void {
+    const currentUrl: string = this.controller.getUrl();
+    const onCampusNetwork: boolean = currentUrl.includes('eams.uestc.edu.cn');
+
+    if (this.isVpnMode && !onCampusNetwork) {
+      console.info('testTag VPN模式：直接导航到VPN代理的课表URL');
+      this.message = '正在跳转到课表页面...';
+      const vpnCourseTableUrl = VpnEncoder.buildVpnCourseTableUrl();
+      setTimeout(() => {
+        this.controller.loadUrl(vpnCourseTableUrl);
+      }, 500);
+      return;
+    }
+
     const findCourseTableJs: string = WebScrapeService.buildFindCourseTableLinkScript();
 
     this.controller.runJavaScript(findCourseTableJs, (error: Error | null, result: string) => {
@@ -524,6 +656,12 @@ struct Index {
       setTimeout(() => {
         this.reloadCurrentPage();
       }, 1200);
+      return;
+    }
+
+    if (!this.isVpnMode && !this.vpnAutoDetected) {
+      console.info('testTag Course fetch failed, switching to VPN mode');
+      this.switchToVpnMode();
       return;
     }
 

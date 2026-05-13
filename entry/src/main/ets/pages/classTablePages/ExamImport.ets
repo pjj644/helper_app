@@ -13,6 +13,9 @@ import {
 import { WebScrapeService } from '../../service/WebScrapeService';
 import { ExamService } from '../../service/ExamService';
 import { ExamUtils, RawExamRow } from '../../common/utils/ExamUtils';
+import { SettingsRepository } from '../../repository/SettingsRepository';
+import { VpnEncoder } from '../../common/utils/VpnEncoder';
+import { AppConstants } from '../../common/constants/AppConstants';
 import { LoadingOverlay } from '../../components/LoadingOverlay';
 
 interface ParseError {
@@ -42,6 +45,7 @@ struct ExamImport {
   @State message: string = '请登录后等待自动抓取考试信息';
   @State autoDone: boolean = false;
   @State isProcessing: boolean = true;
+  @State isVpnMode: boolean = false;
   controller: webview.WebviewController = new webview.WebviewController();
   @State currentUrl: string = EAMS_EXAM_MENU_URL;
   private returnHome: boolean = false;
@@ -52,6 +56,8 @@ struct ExamImport {
   private hasJumpedToExam: boolean = false;
   private parseRetryCount: number = 0;
   private readonly MAX_PARSE_RETRY: number = 5;
+  private vpnAutoDetected: boolean = false;
+  private vpnPortalNavigated: boolean = false;
 
   aboutToAppear(): void {
     const params = router.getParams() as Record<string, string>;
@@ -62,12 +68,31 @@ struct ExamImport {
     this.message = `请登录后等待自动抓取${getSemesterLabelById(this.selectedSemesterId)} ${getExamTypeLabelById(this.selectedExamTypeId)}信息`;
     console.info(`testTag ExamImport aboutToAppear returnHome=${this.returnHome}`);
     console.info(`testTag ExamImport params examTypeId=${this.selectedExamTypeId} semesterId=${this.selectedSemesterId}`);
+    this.initVpnMode();
+  }
+
+  private async initVpnMode(): Promise<void> {
+    try {
+      const settings = await SettingsRepository.loadSettings(getContext(this));
+      this.isVpnMode = settings.vpnMode;
+      if (this.isVpnMode) {
+        this.message = `VPN模式：正在尝试直连，失败后将切换VPN...`;
+      }
+    } catch (e) {
+      console.error('testTag ExamImport读取VPN设置失败:', e);
+    }
   }
 
   private navigateToExamPage(): void {
     this.message = `已进入教务系统，正在跳转${getSemesterLabelById(this.selectedSemesterId)} ${getExamTypeLabelById(this.selectedExamTypeId)}页面`;
-    console.info(`testTag ExamImport navigateToExamPage menuUrl=${this.menuUrl} target=${this.examUrl}`);
-    this.controller.loadUrl(this.examUrl);
+    const currentUrl = this.controller.getUrl();
+    const onCampusNetwork = currentUrl.includes('eams.uestc.edu.cn');
+    const useVpn = this.isVpnMode && !onCampusNetwork;
+    const targetUrl = useVpn ?
+      VpnEncoder.buildVpnExamTableUrl(this.selectedSemesterId, this.selectedExamTypeId) :
+      this.examUrl;
+    console.info(`testTag ExamImport navigateToExamPage useVpn=${useVpn} target=${targetUrl}`);
+    this.controller.loadUrl(targetUrl);
   }
 
   private async mergeWithLocalExams(importedExams: ExamItem[]): Promise<ExamItem[]> {
@@ -90,6 +115,11 @@ struct ExamImport {
 
   private retryParseWithDelay(reason: string): void {
     if (this.parseRetryCount >= this.MAX_PARSE_RETRY) {
+      if (!this.isVpnMode && !this.vpnAutoDetected) {
+        console.info(`testTag ExamImport retry exhausted, switching to VPN mode`);
+        this.switchToVpnMode();
+        return;
+      }
       this.message = '解析失败：页面数据未就绪，请停留考试页后手动重试';
       this.isProcessing = false;
       console.error(`testTag ExamImport retry exhausted reason=${reason}`);
@@ -189,6 +219,21 @@ struct ExamImport {
     });
   }
 
+  private switchToVpnMode(): void {
+    if (this.vpnAutoDetected) {
+      console.info('testTag ExamImport VPN mode already switched, skip');
+      return;
+    }
+    console.info('testTag ExamImport检测到非校园网环境，自动切换VPN模式');
+    this.vpnAutoDetected = true;
+    this.isVpnMode = true;
+    this.hasJumpedToExam = false;
+    this.vpnPortalNavigated = false;
+    this.message = '检测到非校园网环境，已切换到VPN模式，正在加载WebVPN...';
+    this.currentUrl = AppConstants.WEBVPN_LOGIN_URL;
+    this.controller.loadUrl(AppConstants.WEBVPN_LOGIN_URL);
+  }
+
   build() {
     Stack() {
       Column() {
@@ -223,6 +268,28 @@ struct ExamImport {
         .onPageEnd(() => {
           const url = this.controller.getUrl();
           console.info(`testTag ExamImport onPageEnd url=${url}`);
+
+          if (url.includes('authserver/login')) {
+            this.message = this.isVpnMode ? 'VPN模式：请先完成统一身份认证登录' : '请先登录教务系统，登录后会自动跳转考试页';
+            this.isProcessing = false;
+            this.hasJumpedToExam = false;
+            this.vpnPortalNavigated = false;
+            console.info('testTag ExamImport on login page, waiting for auth');
+            return;
+          }
+
+          if (this.isVpnMode && VpnEncoder.isWebvpnPortal(url)) {
+            if (!this.vpnPortalNavigated) {
+              this.vpnPortalNavigated = true;
+              this.message = 'VPN登录成功，正在跳转教务系统...';
+              console.info('testTag ExamImport VPN portal detected, navigating to EAMS');
+              setTimeout(() => {
+                this.controller.loadUrl(VpnEncoder.buildVpnExamMenuUrl());
+              }, 1000);
+            }
+            return;
+          }
+
           if (url.includes('home!childmenus.action') && url.includes('menu.id=844')) {
             if (!this.hasJumpedToExam) {
               this.hasJumpedToExam = true;
@@ -239,10 +306,11 @@ struct ExamImport {
             return;
           }
 
-          if (url.includes('authserver/login')) {
-            this.message = '请先登录教务系统，登录后会自动跳转考试页';
+          if (this.isVpnMode && VpnEncoder.isVpnEamsUrl(url) && !url.includes('stdExamTable!examTable.action') && !url.includes('home!childmenus.action')) {
+            this.message = '已登录，正在定位考试页面';
             this.hasJumpedToExam = false;
-            console.info('testTag ExamImport on login page, waiting for auth');
+            console.info('testTag ExamImport VPN EAMS non-target page, will jump to exam page');
+            setTimeout(() => this.navigateToExamPage(), 600);
             return;
           }
 
@@ -253,9 +321,24 @@ struct ExamImport {
             setTimeout(() => this.navigateToExamPage(), 600);
           }
         })
+        .onHttpErrorReceive((event) => {
+          const statusCode = event.response.getResponseCode();
+          console.error(`testTag ExamImport HTTP error status=${statusCode}`);
+          if (!this.vpnAutoDetected && statusCode === 403) {
+            console.info('testTag ExamImport detected 403, switching to VPN mode');
+            this.switchToVpnMode();
+            return;
+          }
+        })
         .onErrorReceive((event) => {
           const err = event.error.getErrorInfo();
           console.error(`testTag ExamImport web error=${err}`);
+          if (!this.isVpnMode && !this.vpnAutoDetected &&
+              (err.includes('net::ERR_CONNECTION') ||
+               err.includes('net::ERR_NAME_NOT_RESOLVED'))) {
+            this.switchToVpnMode();
+            return;
+          }
         });
     }
     .width('100%')
