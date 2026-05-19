@@ -210,6 +210,7 @@ export struct CountdownCard {
       .width('100%')
       .padding(this.compact ? 10 : 16)
       .borderRadius(18)
+      .justifyContent(FlexAlign.Center)
       .linearGradient({
         angle: 135,
         colors: [

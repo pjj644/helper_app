@@ -5,7 +5,6 @@ import { router } from '@kit.ArkUI';
 import { WebScrapeService } from '../../service/WebScrapeService';
 import { CourseService } from '../../service/CourseService';
 import { CourseRepository } from '../../repository/CourseRepository';
-import { SettingsRepository } from '../../repository/SettingsRepository';
 import { VpnEncoder } from '../../common/utils/VpnEncoder';
 import { LoadingOverlay } from '../../components/LoadingOverlay';
 
@@ -54,6 +53,7 @@ struct Index {
   @State manualMode: boolean = false;
   @State isProcessing: boolean = true;
   @State isVpnMode: boolean = false;
+  @State showRefreshBtn: boolean = false;
   controller: webview.WebviewController = new webview.WebviewController();
 
   private loginUrlPattern: string = 'idas.uestc.edu.cn/authserver/login';
@@ -72,6 +72,10 @@ struct Index {
   private isPageActive: boolean = false;
   private vpnAutoDetected: boolean = false;
   private vpnNavigatedFromPortal: boolean = false;
+  private semesterSwitchRetryCount: number = 0;
+  private readonly MAX_SEMESTER_SWITCH_RETRY: number = 2;
+  private table0NotFoundCount: number = 0;
+  private readonly MAX_TABLE0_NOT_FOUND: number = 5;
 
   aboutToAppear(): void {
     this.isPageActive = true;
@@ -88,15 +92,7 @@ struct Index {
   }
 
   private async initVpnMode(): Promise<void> {
-    try {
-      const settings = await SettingsRepository.loadSettings(getContext(this));
-      this.isVpnMode = settings.vpnMode;
-      if (this.isVpnMode) {
-        this.message = 'VPN模式：正在尝试直连，失败后将切换VPN...';
-      }
-    } catch (e) {
-      console.error('testTag读取VPN设置失败:', e);
-    }
+    this.isVpnMode = false;
   }
 
   aboutToDisappear(): void {
@@ -145,6 +141,8 @@ struct Index {
           console.info('testTag页面加载完成');
           this.pageRetryCount = 0;
           this.hasRefreshedAfterLoadFail = false;
+          this.showRefreshBtn = false;
+          this.table0NotFoundCount = 0;
           this.checkCurrentPage();
 
           if (this.manualMode) {
@@ -205,25 +203,48 @@ struct Index {
                       WebScrapeService.buildVpnSemesterSwitchScript(this.pendingSemesterSwitchId,
                         VpnEncoder.buildVpnEamsUrl('/eams/courseTableForStd!courseTable.action')) :
                       WebScrapeService.buildSemesterSwitchScript(this.pendingSemesterSwitchId);
-                    this.controller.runJavaScript(switchJs, (switchError: Error | null, switchResult: string) => {
-                      if (switchError) {
-                        console.error('testTag切换学期失败:', switchError);
-                      } else {
-                        console.info('testTag切换学期结果:', switchResult);
-                        if (switchResult && switchResult.includes('403') && !this.vpnAutoDetected) {
-                          console.info('testTag学期切换403，切换到VPN模式');
-                          this.switchToVpnMode();
+                    const executeSemesterSwitch = (): void => {
+                      this.controller.runJavaScript(switchJs, (sErr: Error | null, sRes: string) => {
+                        if (sErr) {
+                          console.error('testTag切换学期失败:', sErr);
+                        } else {
+                          console.info('testTag切换学期结果:', sRes);
+                          if (sRes && sRes.includes('403') && !this.vpnAutoDetected) {
+                            console.info('testTag学期切换403，切换到VPN模式');
+                            this.switchToVpnMode();
+                            return;
+                          }
+                          if (sRes && sRes.includes('500') && this.semesterSwitchRetryCount < this.MAX_SEMESTER_SWITCH_RETRY) {
+                            this.semesterSwitchRetryCount++;
+                            console.info('testTag学期切换HTTP 500，延迟3秒重试，第', this.semesterSwitchRetryCount, '次');
+                            setTimeout(() => {
+                              if (!this.isPageActive) {
+                                return;
+                              }
+                              executeSemesterSwitch();
+                            }, 3000);
+                            return;
+                          }
+                        }
+                        if (this.semesterSwitchRetryCount >= this.MAX_SEMESTER_SWITCH_RETRY) {
+                          console.info('testTag学期切换重试次数已用尽，刷新课表页面');
+                          this.semesterSwitchRetryCount = 0;
+                          this.pendingSemesterSwitchId = 0;
+                          const refreshUrl = this.controller.getUrl();
+                          this.controller.loadUrl(refreshUrl);
                           return;
                         }
-                      }
-                      this.pendingSemesterSwitchId = 0;
-                      setTimeout(() => {
-                        if (!this.isPageActive) {
-                          return;
-                        }
-                        this.extractCourseData();
-                      }, 2000);
-                    });
+                        this.semesterSwitchRetryCount = 0;
+                        this.pendingSemesterSwitchId = 0;
+                        setTimeout(() => {
+                          if (!this.isPageActive) {
+                            return;
+                          }
+                          this.extractCourseData();
+                        }, 2000);
+                      });
+                    };
+                    executeSemesterSwitch();
                   } else {
                     console.info('testTag当前学期与目标学期一致，无需切换');
                     this.pendingSemesterSwitchId = 0;
@@ -291,6 +312,27 @@ struct Index {
     .height('100%');
 
       LoadingOverlay({ isVisible: this.isProcessing, message: this.message });
+
+      if (this.showRefreshBtn) {
+        Button() {
+          Text('↻')
+            .fontSize(22)
+            .fontColor('#FFFFFF')
+        }
+        .width(40)
+        .height(40)
+        .borderRadius(20)
+        .backgroundColor('#FF6200EE')
+        .position({ x: '85%', y: 16 })
+        .onClick(() => {
+          this.showRefreshBtn = false;
+          this.pageRetryCount = 0;
+          this.hasRefreshedAfterLoadFail = false;
+          this.table0NotFoundCount = 0;
+          this.semesterSwitchRetryCount = 0;
+          this.reloadCurrentPage();
+        })
+      }
     }
     .width('100%')
     .height('100%');
@@ -474,6 +516,11 @@ struct Index {
     const currentUrl: string = this.controller.getUrl();
     const onCampusNetwork: boolean = currentUrl.includes('eams.uestc.edu.cn');
 
+    if (currentUrl.includes('courseTableForStd')) {
+      console.info('testTag已在课表页面，无需再次导航');
+      return;
+    }
+
     if (this.isVpnMode && !onCampusNetwork) {
       console.info('testTag VPN模式：直接导航到VPN代理的课表URL');
       this.message = '正在跳转到课表页面...';
@@ -587,9 +634,20 @@ struct Index {
 
           if (courseData.error) {
             console.error('testTag获取数据错误:', courseData.error);
+            if (courseData.error.includes('未找到table0')) {
+              this.table0NotFoundCount++;
+              if (this.table0NotFoundCount >= this.MAX_TABLE0_NOT_FOUND) {
+                console.error('testTag未找到table0次数过多，停止自动重试');
+                this.enableManualMode('课表数据加载异常，请点击刷新重试');
+                this.showRefreshBtn = true;
+                return;
+              }
+            }
             this.handleCourseFetchFailure('返回错误: ' + courseData.error);
             return;
           }
+
+          this.table0NotFoundCount = 0;
 
           if (!courseData.activities) {
             console.error('testTag activities为undefined, courseData:', JSON.stringify(courseData).substring(0, 500));
@@ -690,6 +748,7 @@ struct Index {
     }
 
     this.enableManualMode('页面加载失败，请手动操作');
+    this.showRefreshBtn = true;
   }
 
   private reloadCurrentPage(): void {

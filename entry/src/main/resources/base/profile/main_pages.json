@@ -1,12 +1,13 @@
 {
   "src": [
-    "pages/home",
-    "pages/quick/quickIndex",
     "pages/classTablePages/Home",
+    "pages/quick/quickIndex",
+    "pages/quick/AssistantPage",
     "pages/classTablePages/tableUI",
     "pages/classTablePages/Index",
     "pages/classTablePages/CourseManage",
     "pages/classTablePages/Settings",
+    "pages/classTablePages/AppSettings",
     "pages/classTablePages/ExamImport",
     "pages/classTablePages/ExamPage",
     "pages/classTablePages/FeatureNav",

@@ -13,7 +13,6 @@ import {
 import { WebScrapeService } from '../../service/WebScrapeService';
 import { ExamService } from '../../service/ExamService';
 import { ExamUtils, RawExamRow } from '../../common/utils/ExamUtils';
-import { SettingsRepository } from '../../repository/SettingsRepository';
 import { VpnEncoder } from '../../common/utils/VpnEncoder';
 import { AppConstants } from '../../common/constants/AppConstants';
 import { LoadingOverlay } from '../../components/LoadingOverlay';
@@ -46,6 +45,7 @@ struct ExamImport {
   @State autoDone: boolean = false;
   @State isProcessing: boolean = true;
   @State isVpnMode: boolean = false;
+  @State showRefreshBtn: boolean = false;
   controller: webview.WebviewController = new webview.WebviewController();
   @State currentUrl: string = EAMS_EXAM_MENU_URL;
   private returnHome: boolean = false;
@@ -72,15 +72,7 @@ struct ExamImport {
   }
 
   private async initVpnMode(): Promise<void> {
-    try {
-      const settings = await SettingsRepository.loadSettings(getContext(this));
-      this.isVpnMode = settings.vpnMode;
-      if (this.isVpnMode) {
-        this.message = `VPN模式：正在尝试直连，失败后将切换VPN...`;
-      }
-    } catch (e) {
-      console.error('testTag ExamImport读取VPN设置失败:', e);
-    }
+    this.isVpnMode = false;
   }
 
   private navigateToExamPage(): void {
@@ -267,6 +259,7 @@ struct ExamImport {
         .javaScriptAccess(true)
         .onPageEnd(() => {
           const url = this.controller.getUrl();
+          this.showRefreshBtn = false;
           console.info(`testTag ExamImport onPageEnd url=${url}`);
 
           if (url.includes('authserver/login')) {
@@ -329,6 +322,9 @@ struct ExamImport {
             this.switchToVpnMode();
             return;
           }
+          if (statusCode !== 403) {
+            this.showRefreshBtn = true;
+          }
         })
         .onErrorReceive((event) => {
           const err = event.error.getErrorInfo();
@@ -339,12 +335,30 @@ struct ExamImport {
             this.switchToVpnMode();
             return;
           }
+          this.showRefreshBtn = true;
         });
     }
     .width('100%')
     .height('100%');
 
       LoadingOverlay({ isVisible: this.isProcessing, message: this.message });
+
+      if (this.showRefreshBtn) {
+        Button() {
+          Text('↻')
+            .fontSize(22)
+            .fontColor('#FFFFFF')
+        }
+        .width(40)
+        .height(40)
+        .borderRadius(20)
+        .backgroundColor('#FF6200EE')
+        .position({ x: '85%', y: 16 })
+        .onClick(() => {
+          this.showRefreshBtn = false;
+          this.controller.loadUrl(this.currentUrl);
+        })
+      }
     }
     .width('100%')
     .height('100%');

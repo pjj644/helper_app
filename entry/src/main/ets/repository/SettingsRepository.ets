@@ -3,13 +3,11 @@ import { ContextUtils } from '../common/utils/ContextUtils';
 import { AppConstants } from '../common/constants/AppConstants';
 
 export interface AppSettings {
-  themeDark: boolean;
   showToday: boolean;
   showTomorrow: boolean;
   showExamCountdown: boolean;
   examRemindMinutes: number;
   courseRemindMinutes: number;
-  vpnMode: boolean;
 }
 
 export interface RecentLinkItem {
@@ -22,13 +20,11 @@ export class SettingsRepository {
   static async saveSettings(context: Object, settings: AppSettings): Promise<void> {
     const abilityContext = ContextUtils.getAbilityContext(context);
     const pref = await preferences.getPreferences(abilityContext, AppConstants.COURSE_TABLE_PREF_NAME);
-    await pref.put(AppConstants.SETTING_THEME_DARK_KEY, settings.themeDark);
     await pref.put(AppConstants.SETTING_SHOW_TODAY_KEY, settings.showToday);
     await pref.put(AppConstants.SETTING_SHOW_TOMORROW_KEY, settings.showTomorrow);
     await pref.put(AppConstants.SETTING_SHOW_EXAM_KEY, settings.showExamCountdown);
     await pref.put(AppConstants.SETTING_EXAM_REMIND_MINUTES_KEY, settings.examRemindMinutes);
     await pref.put(AppConstants.SETTING_COURSE_REMIND_MINUTES_KEY, settings.courseRemindMinutes);
-    await pref.put(AppConstants.SETTING_VPN_MODE_KEY, settings.vpnMode);
     await pref.flush();
   }
 
@@ -36,13 +32,11 @@ export class SettingsRepository {
     const abilityContext = ContextUtils.getAbilityContext(context);
     const pref = await preferences.getPreferences(abilityContext, AppConstants.COURSE_TABLE_PREF_NAME);
     return {
-      themeDark: (await pref.get(AppConstants.SETTING_THEME_DARK_KEY, false)) as boolean,
       showToday: (await pref.get(AppConstants.SETTING_SHOW_TODAY_KEY, true)) as boolean,
       showTomorrow: (await pref.get(AppConstants.SETTING_SHOW_TOMORROW_KEY, true)) as boolean,
       showExamCountdown: (await pref.get(AppConstants.SETTING_SHOW_EXAM_KEY, true)) as boolean,
       examRemindMinutes: (await pref.get(AppConstants.SETTING_EXAM_REMIND_MINUTES_KEY, 30)) as number,
       courseRemindMinutes: (await pref.get(AppConstants.SETTING_COURSE_REMIND_MINUTES_KEY, 30)) as number,
-      vpnMode: (await pref.get(AppConstants.SETTING_VPN_MODE_KEY, false)) as boolean,
     };
   }
 

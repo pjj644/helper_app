@@ -8,7 +8,6 @@ export class AppConstants {
   static readonly EXAM_DATA_KEY: string = 'exam_data_json';
   static readonly RECENT_LINKS_KEY: string = 'recent_links_json';
 
-  static readonly SETTING_THEME_DARK_KEY: string = 'setting_theme_dark';
   static readonly SETTING_SHOW_TODAY_KEY: string = 'setting_show_today';
   static readonly SETTING_SHOW_TOMORROW_KEY: string = 'setting_show_tomorrow';
   static readonly SETTING_SHOW_EXAM_KEY: string = 'setting_show_exam';
@@ -58,12 +57,14 @@ export class AppConstants {
   static readonly WEBVPN_EAMS_ENCODED_DOMAIN: string =
     '77726476706e69737468656265737421f5f64c8f69256d436a0bc7a99c406d36c2';
   static readonly WEBVPN_EAMS_DOMAIN: string = 'eams.uestc.edu.cn';
-  static readonly SETTING_VPN_MODE_KEY: string = 'setting_vpn_mode';
 
   static readonly CLOUD_DB_ZONE_NAME: string = 'classData';
   static readonly MAX_FETCH_RETRY: number = 2;
   static readonly MAX_PAGE_RETRY: number = 2;
   static readonly MAX_PARSE_RETRY: number = 5;
+
+  static readonly AI_CHAT_SESSIONS_KEY: string = 'ai_chat_sessions';
+  static readonly AI_CHAT_MAX_SESSIONS: number = 20;
 
   static readonly CONTENT_MAX_LINE: number = 2;
   static readonly MAX_ID: number = 100;

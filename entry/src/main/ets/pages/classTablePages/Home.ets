@@ -19,6 +19,7 @@ import {
 import { ThemeManager } from '../../common/utils/ThemeManager';
 import { CourseRepository } from '../../repository/CourseRepository';
 import { ReminderService } from '../../service/ReminderService';
+import { BottomTabBar, TabItem } from '../../components/BottomTabBar';
 
 @Entry
 @Component
@@ -28,7 +29,6 @@ struct Home {
   @State todayCourses: Course[] = [];
   @State tomorrowCourses: Course[] = [];
   @State settings: AppSettings = {
-    themeDark: false,
     showToday: true,
     showTomorrow: true,
     showExamCountdown: true,
@@ -40,8 +40,13 @@ struct Home {
   @State selectedExamTypeIndex: number = 0;
   @State selectedSemesterId: number = 0;
   @State nowTick: number = Date.now();
+  @State currentTabIndex: number = 1;
   private tickTimer: number = -1;
   private model: CourseTableModel = courseTableModel;
+  private tabs: TabItem[] = [
+    { label: '发现' },
+    { label: '课表' },
+  ];
 
   private normalizeExamTypeIndex(index: number): number {
     if (index < 0 || index >= EXAM_TYPE_OPTIONS.length) {
@@ -81,15 +86,25 @@ struct Home {
 
   onPageShow(): void {
     console.info(`[HomeDebug] onPageShow: exams=${this.exams.length} nowTick=${this.nowTick}`);
+    this.currentTabIndex = 1;
     this.loadPageData();
     ReminderService.refreshAllReminders(getContext(this));
+  }
+
+  private navToQuick(): void {
+    router.pushUrl({ url: 'pages/quick/quickIndex' }, router.RouterMode.Standard)
+      .catch((error: Error) => console.error('跳转 quick 页面失败:', error));
+  }
+
+  private onTabChange(index: number): void {
+    this.currentTabIndex = index;
+    if (index === 0) { this.navToQuick(); }
   }
 
   private async loadPageData(): Promise<void> {
     try {
       const context = getContext(this);
       this.settings = await CourseTableStorage.loadSettings(context);
-      ThemeManager.setDarkMode(this.settings.themeDark);
 
       const localData: string = await CourseRepository.loadCourseData(context);
       const examData: string = await CourseTableStorage.loadExamData(context);
@@ -242,7 +257,7 @@ struct Home {
   }
 
   private openSettings(): void {
-    router.pushUrl({ url: 'pages/classTablePages/Settings' }).catch((error: Error) => {
+    router.pushUrl({ url: 'pages/classTablePages/AppSettings' }).catch((error: Error) => {
       console.error('跳转设置页面失败:', error);
     });
   }
@@ -604,6 +619,9 @@ struct Home {
     }
     .width('100%')
     .height('100%')
-    .backgroundColor(ThemeManager.getBackgroundColor());
+    .backgroundColor(ThemeManager.getBackgroundColor())
+    .justifyContent(FlexAlign.Start)
+
+    BottomTabBar({ currentIndex: $currentTabIndex, tabs: this.tabs, onChange: (index: number) => this.onTabChange(index) });
   }
 }

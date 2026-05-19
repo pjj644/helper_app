@@ -69,6 +69,13 @@ struct LoginIndexPage {
 				return;
 			}
 
+			const agcUser = auth.getCurrentUser();
+			if (!agcUser) {
+				await pref.delete(this.SESSION_KEY);
+				await pref.flush();
+				return;
+			}
+
 			this.jumpToHome();
 		} catch (error) {
 			console.error('读取登录状态失败:', error);

@@ -4,7 +4,6 @@ import { GradeItem, GradeParsePayload } from '../../model/GradeModel';
 import { WebScrapeService } from '../../service/WebScrapeService';
 import { GradeService } from '../../service/GradeService';
 import { AppConstants } from '../../common/constants/AppConstants';
-import { SettingsRepository } from '../../repository/SettingsRepository';
 import { VpnEncoder } from '../../common/utils/VpnEncoder';
 import { Logger } from '../../common/utils/Logger';
 import { LoadingOverlay } from '../../components/LoadingOverlay';
@@ -18,6 +17,7 @@ struct GradeImport {
   @State autoDone: boolean = false;
   @State isProcessing: boolean = true;
   @State isVpnMode: boolean = false;
+  @State showRefreshBtn: boolean = false;
   controller: webview.WebviewController = new webview.WebviewController();
   @State currentUrl: string = AppConstants.EAMS_HOME_URL;
   private returnHome: boolean = false;
@@ -44,15 +44,7 @@ struct GradeImport {
   }
 
   private async initVpnMode(): Promise<void> {
-    try {
-      const settings = await SettingsRepository.loadSettings(getContext(this));
-      this.isVpnMode = settings.vpnMode;
-      if (this.isVpnMode) {
-        this.message = 'VPN模式：正在尝试直连，失败后将切换VPN...';
-      }
-    } catch (e) {
-      Logger.error(TAG, `读取VPN设置失败=${JSON.stringify(e)}`);
-    }
+    this.isVpnMode = false;
   }
 
   aboutToDisappear(): void {
@@ -385,6 +377,7 @@ struct GradeImport {
         .javaScriptAccess(true)
         .onPageEnd(() => {
           const url = this.controller.getUrl();
+          this.showRefreshBtn = false;
           Logger.debug(TAG, `onPageEnd url=${url}`);
 
           if (url.includes('authserver/login')) {
@@ -443,6 +436,9 @@ struct GradeImport {
             this.switchToVpnMode();
             return;
           }
+          if (statusCode !== 403) {
+            this.showRefreshBtn = true;
+          }
         })
         .onErrorReceive((event) => {
           const err = event.error.getErrorInfo();
@@ -453,12 +449,30 @@ struct GradeImport {
             this.switchToVpnMode();
             return;
           }
+          this.showRefreshBtn = true;
         });
     }
     .width('100%')
     .height('100%');
 
       LoadingOverlay({ isVisible: this.isProcessing, message: this.message });
+
+      if (this.showRefreshBtn) {
+        Button() {
+          Text('↻')
+            .fontSize(22)
+            .fontColor('#FFFFFF')
+        }
+        .width(40)
+        .height(40)
+        .borderRadius(20)
+        .backgroundColor('#FF6200EE')
+        .position({ x: '85%', y: 16 })
+        .onClick(() => {
+          this.showRefreshBtn = false;
+          this.controller.loadUrl(this.currentUrl);
+        })
+      }
     }
     .width('100%')
     .height('100%');

@@ -23,11 +23,11 @@ struct QuickIndexPage {
   @StorageLink(ThemeManager.THEME_STORAGE_KEY) isDarkMode: boolean = false;
   private tabs: TabItem[] = [
     { label: '发现' },
-    { label: 'Home' },
-    { label: 'Class' },
+    { label: '课表' },
   ];
 
   private tools: ToolItem[] = [
+    { title: 'AI 助手', icon: '🤖', color: '#6366F1', route: 'pages/quick/AssistantPage', iconImage: $r('app.media.ic_ai_assistant') },
     { title: '校园地图', icon: '🗺️', color: '#3B82FF', url: AppConstants.GIS_MAP_URL, iconImage: $r('app.media.ic_campus_map') },
     { title: '图书馆', icon: '📚', color: '#10B981', url: AppConstants.LIB_FULL_URL },
     { title: '校园卡', icon: '💳', color: '#F59E0B' },
@@ -75,16 +75,6 @@ struct QuickIndexPage {
     }
   }
 
-  private navToQuick(): void {
-    router.pushUrl({ url: 'pages/quick/quickIndex' })
-      .catch((error: Error) => console.error('跳转 quick 页面失败:', error));
-  }
-
-  private navToHome(): void {
-    router.pushUrl({ url: 'pages/home' })
-      .catch((error: Error) => console.error('跳转 home 页面失败:', error));
-  }
-
   private navToClass(): void {
     router.pushUrl({ url: 'pages/classTablePages/Home' })
       .catch((error: Error) => console.error('跳转 class 页面失败:', error));
@@ -92,8 +82,7 @@ struct QuickIndexPage {
 
   private onTabChange(index: number): void {
     this.currentTabIndex = index;
-    if (index === 1) { this.navToHome(); return; }
-    if (index === 2) { this.navToClass(); }
+    if (index === 1) { this.navToClass(); }
   }
 
   private onToolClick(tool: ToolItem): void {

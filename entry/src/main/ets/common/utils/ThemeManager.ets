@@ -33,6 +33,11 @@ export class ThemeManager {
     AppStorage.setOrCreate(ThemeManager.THEME_STORAGE_KEY, isDark);
   }
 
+  static syncWithSystem(colorMode: string): void {
+    const isDark = colorMode === 'dark';
+    ThemeManager.setDarkMode(isDark);
+  }
+
   static getBackgroundColor(): string {
     return ThemeManager.isDarkMode() ? ThemeColors.DARK_BG : ThemeColors.LIGHT_BG;
   }

@@ -1,4 +1,5 @@
 import { preferences } from '@kit.ArkData';
+import auth from '@hw-agconnect/auth';
 import { ContextUtils } from '../common/utils/ContextUtils';
 import { AppConstants } from '../common/constants/AppConstants';
 
@@ -57,5 +58,6 @@ export class AuthService {
     const pref = await preferences.getPreferences(abilityContext, AppConstants.LOGIN_PREF_NAME);
     await pref.delete(AppConstants.LOGIN_SESSION_KEY);
     await pref.flush();
+    await auth.signOut();
   }
 }

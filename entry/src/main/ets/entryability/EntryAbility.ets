@@ -1,8 +1,9 @@
-import { ConfigurationConstant, UIAbility } from '@kit.AbilityKit';
+import { ConfigurationConstant, UIAbility, Configuration } from '@kit.AbilityKit';
 import { hilog } from '@kit.PerformanceAnalysisKit';
 import { window } from '@kit.ArkUI';
 import { buffer } from '@kit.ArkTS';
 import auth from '@hw-agconnect/auth';
+import { ThemeManager } from '../common/utils/ThemeManager';
 
 const HILOG_DOMAIN = 0x0000;
 const TAG = '[EntryAbility]';
@@ -20,6 +21,13 @@ export default class EntryAbility extends UIAbility {
     hilog.info(HILOG_DOMAIN, TAG, '%{public}s', 'Ability onCreate');
   }
 
+  onConfigurationUpdate(newConfig: Configuration): void {
+    if (newConfig.colorMode !== undefined) {
+      ThemeManager.syncWithSystem(newConfig.colorMode.toString());
+      hilog.info(HILOG_DOMAIN, TAG, 'Color mode changed: %{public}s', newConfig.colorMode.toString());
+    }
+  }
+
   onDestroy(): void {
     hilog.info(HILOG_DOMAIN, TAG, '%{public}s', 'Ability onDestroy');
   }
@@ -28,7 +36,7 @@ export default class EntryAbility extends UIAbility {
     // Main window is created, set main page for this ability
     hilog.info(HILOG_DOMAIN, TAG, '%{public}s', 'Ability onWindowStageCreate');
 
-    windowStage.loadContent('pages/home', (err) => {
+    windowStage.loadContent('pages/classTablePages/Home', (err) => {
       if (err.code) {
         hilog.error(HILOG_DOMAIN, TAG, 'Failed to load the content. Cause: %{public}s', JSON.stringify(err));
         return;

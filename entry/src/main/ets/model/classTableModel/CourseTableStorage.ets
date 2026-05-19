@@ -3,7 +3,6 @@ import { common } from '@kit.AbilityKit';
 import { AppConstants } from '../../common/constants/AppConstants';
 
 export interface AppSettings {
-  themeDark: boolean;
   showToday: boolean;
   showTomorrow: boolean;
   showExamCountdown: boolean;
@@ -56,7 +55,6 @@ export class CourseTableStorage {
   static async saveSettings(context: Object, settings: AppSettings): Promise<void> {
     const abilityContext: common.UIAbilityContext = CourseTableStorage.getAbilityContext(context);
     const pref = await preferences.getPreferences(abilityContext, AppConstants.COURSE_TABLE_PREF_NAME);
-    await pref.put(AppConstants.SETTING_THEME_DARK_KEY, settings.themeDark);
     await pref.put(AppConstants.SETTING_SHOW_TODAY_KEY, settings.showToday);
     await pref.put(AppConstants.SETTING_SHOW_TOMORROW_KEY, settings.showTomorrow);
     await pref.put(AppConstants.SETTING_SHOW_EXAM_KEY, settings.showExamCountdown);
@@ -69,7 +67,6 @@ export class CourseTableStorage {
     const abilityContext: common.UIAbilityContext = CourseTableStorage.getAbilityContext(context);
     const pref = await preferences.getPreferences(abilityContext, AppConstants.COURSE_TABLE_PREF_NAME);
     return {
-      themeDark: (await pref.get(AppConstants.SETTING_THEME_DARK_KEY, false)) as boolean,
       showToday: (await pref.get(AppConstants.SETTING_SHOW_TODAY_KEY, true)) as boolean,
       showTomorrow: (await pref.get(AppConstants.SETTING_SHOW_TOMORROW_KEY, true)) as boolean,
       showExamCountdown: (await pref.get(AppConstants.SETTING_SHOW_EXAM_KEY, true)) as boolean,
