@@ -2,7 +2,7 @@ import { preferences } from '@kit.ArkData';
 import { common } from '@kit.AbilityKit';
 import { AppConstants } from '../../common/constants/AppConstants';
 
-export interface AppSettings {
+export interface DisplaySettings {
   showToday: boolean;
   showTomorrow: boolean;
   showExamCountdown: boolean;
@@ -52,7 +52,7 @@ export class CourseTableStorage {
     return !!courseDataJson;
   }
 
-  static async saveSettings(context: Object, settings: AppSettings): Promise<void> {
+  static async saveSettings(context: Object, settings: DisplaySettings): Promise<void> {
     const abilityContext: common.UIAbilityContext = CourseTableStorage.getAbilityContext(context);
     const pref = await preferences.getPreferences(abilityContext, AppConstants.COURSE_TABLE_PREF_NAME);
     await pref.put(AppConstants.SETTING_SHOW_TODAY_KEY, settings.showToday);
@@ -63,7 +63,7 @@ export class CourseTableStorage {
     await pref.flush();
   }
 
-  static async loadSettings(context: Object): Promise<AppSettings> {
+  static async loadSettings(context: Object): Promise<DisplaySettings> {
     const abilityContext: common.UIAbilityContext = CourseTableStorage.getAbilityContext(context);
     const pref = await preferences.getPreferences(abilityContext, AppConstants.COURSE_TABLE_PREF_NAME);
     return {

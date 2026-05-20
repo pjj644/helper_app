@@ -2,7 +2,7 @@ import { preferences } from '@kit.ArkData';
 import { ContextUtils } from '../common/utils/ContextUtils';
 import { AppConstants } from '../common/constants/AppConstants';
 
-export interface AppSettings {
+export interface DisplaySettings {
   showToday: boolean;
   showTomorrow: boolean;
   showExamCountdown: boolean;
@@ -17,7 +17,7 @@ export interface RecentLinkItem {
 }
 
 export class SettingsRepository {
-  static async saveSettings(context: Object, settings: AppSettings): Promise<void> {
+  static async saveSettings(context: Object, settings: DisplaySettings): Promise<void> {
     const abilityContext = ContextUtils.getAbilityContext(context);
     const pref = await preferences.getPreferences(abilityContext, AppConstants.COURSE_TABLE_PREF_NAME);
     await pref.put(AppConstants.SETTING_SHOW_TODAY_KEY, settings.showToday);
@@ -28,7 +28,7 @@ export class SettingsRepository {
     await pref.flush();
   }
 
-  static async loadSettings(context: Object): Promise<AppSettings> {
+  static async loadSettings(context: Object): Promise<DisplaySettings> {
     const abilityContext = ContextUtils.getAbilityContext(context);
     const pref = await preferences.getPreferences(abilityContext, AppConstants.COURSE_TABLE_PREF_NAME);
     return {

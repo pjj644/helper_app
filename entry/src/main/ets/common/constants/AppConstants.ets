@@ -72,4 +72,67 @@ export class AppConstants {
   static readonly UPDATE_PROGRESS_MIN_VALUE: number = 0;
   static readonly UPDATE_PROGRESS_MAX_VALUE: number = 100;
   static readonly UPDATE_PROGRESS_LENGTH: number = 5;
+
+  // ==================== UI配置 ====================
+  static readonly PAGE_PADDING: number = 16;
+  static readonly CARD_RADIUS: number = 16;
+  static readonly SMALL_RADIUS: number = 12;
+  static readonly CARD_SPACE: number = 16;
+  static readonly LIST_ITEM_SPACE: number = 12;
+
+  // ==================== 尺寸配置 ====================
+  static readonly ICON_SIZE: number = 24;
+  static readonly SMALL_ICON_SIZE: number = 20;
+  static readonly LARGE_ICON_SIZE: number = 32;
+  static readonly AVATAR_SIZE: number = 52;
+  static readonly SMALL_AVATAR_SIZE: number = 40;
+
+  // ==================== 字体大小 ====================
+  static readonly FONT_TITLE: number = 24;
+  static readonly FONT_SUBTITLE: number = 18;
+  static readonly FONT_BODY: number = 15;
+  static readonly FONT_CAPTION: number = 13;
+  static readonly FONT_SMALL: number = 12;
+  static readonly FONT_TINY: number = 11;
+
+  // ==================== 动画配置 ====================
+  static readonly ANIMATION_FAST: number = 100;
+  static readonly ANIMATION_NORMAL: number = 300;
+  static readonly ANIMATION_SLOW: number = 500;
+  static readonly SWIPER_INTERVAL: number = 3500;
+
+  // ==================== 阴影配置 ====================
+  static readonly SHADOW_SMALL: number = 4;
+  static readonly SHADOW_MEDIUM: number = 8;
+  static readonly SHADOW_LARGE: number = 16;
+
+  // ==================== 沉浸光感配置 ====================
+  static readonly LIGHT_INTENSITY_DEFAULT: number = 2.5;
+  static readonly LIGHT_INTENSITY_WEAK: number = 1.5;
+  static readonly LIGHT_INTENSITY_STRONG: number = 3.0;
+
+  // ==================== 网格配置 ====================
+  static readonly SERVICE_GRID_COLUMNS: number = 3;
+  static readonly SERVICE_GRID_ROWS: number = 2;
+  static readonly GRID_GAP: number = 12;
+
+  // ==================== 其他UI配置 ====================
+  static readonly MAX_LINES: number = 2;
+  static readonly SINGLE_LINE: number = 1;
+  static readonly UNREAD_DOT_SIZE: number = 8;
+}
+
+export class RouterConstants {
+  static readonly PAGE_INDEX: string = 'pages/Index';
+  static readonly PAGE_TABLE_UI: string = 'pages/classTablePages/tableUI';
+  static readonly PAGE_COURSE_IMPORT: string = 'pages/classTablePages/Index';
+  static readonly PAGE_EXAM: string = 'pages/classTablePages/ExamPage';
+  static readonly PAGE_EXAM_IMPORT: string = 'pages/classTablePages/ExamImport';
+  static readonly PAGE_GRADE: string = 'pages/gradePages/GradePage';
+  static readonly PAGE_CALENDAR: string = 'pages/schedulePages/CalendarPage';
+  static readonly PAGE_SETTINGS: string = 'pages/classTablePages/AppSettings';
+  static readonly PAGE_LOGIN: string = 'pages/login/loginIndex';
+  static readonly PAGE_ACCOUNT_MANAGE: string = 'pages/login/AccountManage';
+  static readonly PAGE_ASSISTANT: string = 'pages/quick/AssistantPage';
+  static readonly PAGE_WEB: string = 'pages/classTablePages/WebPage';
 }

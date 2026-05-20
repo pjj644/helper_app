@@ -6,7 +6,7 @@ import {
   courseTableModel,
   getCurrentWeek,
 } from '../../model/classTableModel/CourseModel';
-import { AppSettings, CourseTableStorage } from '../../model/classTableModel/CourseTableStorage';
+import { DisplaySettings, CourseTableStorage } from '../../model/classTableModel/CourseTableStorage';
 import { ExamItem, normalizeExam, sortExams } from '../../model/classTableModel/ExamModel';
 import { CountdownCard } from '../../components/CountdownCard';
 import {
@@ -28,7 +28,7 @@ struct Home {
   @State hasData: boolean = false;
   @State todayCourses: Course[] = [];
   @State tomorrowCourses: Course[] = [];
-  @State settings: AppSettings = {
+  @State settings: DisplaySettings = {
     showToday: true,
     showTomorrow: true,
     showExamCountdown: true,
@@ -616,12 +616,11 @@ struct Home {
       }
       .layoutWeight(1)
       .width('100%');
+
+      BottomTabBar({ currentIndex: $currentTabIndex, tabs: this.tabs, onChange: (index: number) => this.onTabChange(index) });
     }
     .width('100%')
     .height('100%')
     .backgroundColor(ThemeManager.getBackgroundColor())
-    .justifyContent(FlexAlign.Start)
-
-    BottomTabBar({ currentIndex: $currentTabIndex, tabs: this.tabs, onChange: (index: number) => this.onTabChange(index) });
   }
 }

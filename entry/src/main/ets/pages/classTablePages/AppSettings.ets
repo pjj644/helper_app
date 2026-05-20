@@ -1,5 +1,5 @@
 import { router } from '@kit.ArkUI';
-import { AppSettings } from '../../repository/SettingsRepository';
+import { DisplaySettings as DisplaySettingsType } from '../../repository/SettingsRepository';
 import { ThemeManager } from '../../common/utils/ThemeManager';
 import { SettingsRepository } from '../../repository/SettingsRepository';
 import { ReminderService } from '../../service/ReminderService';
@@ -14,7 +14,7 @@ const TAG = 'AppSettings';
 @Entry
 @Component
 struct AppSettings {
-  @State settings: AppSettings = {
+  @State settings: DisplaySettingsType = {
     showToday: true,
     showTomorrow: true,
     showExamCountdown: true,
