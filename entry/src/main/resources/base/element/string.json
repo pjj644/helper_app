@@ -259,6 +259,10 @@
     {
       "name": "write_calendar_permission_reason",
       "value": "为了将日程提醒写入系统日历，需要写入日历权限"
+    },
+    {
+      "name": "read_media_permission_reason",
+      "value": "为了选择自定义背景图片，需要读取媒体文件权限"
     }
   ]
 }

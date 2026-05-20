@@ -4,6 +4,8 @@ import { window } from '@kit.ArkUI';
 import { buffer } from '@kit.ArkTS';
 import auth from '@hw-agconnect/auth';
 import { ThemeManager } from '../common/utils/ThemeManager';
+import { UISettings } from '../common/UISettings';
+import { PreferencesUtil } from '../common/PreferencesUtil';
 
 const HILOG_DOMAIN = 0x0000;
 const TAG = '[EntryAbility]';
@@ -15,6 +17,8 @@ export default class EntryAbility extends UIAbility {
       const file = this.context.resourceManager.getRawFileContentSync('agconnect-services.json');
       const jsonConfig: string = buffer.from(file.buffer).toString();
       auth.init(this.context, jsonConfig);
+      PreferencesUtil.getInstance().init(this.context);
+      UISettings.getInstance().initDarkMode(this.context);
     } catch (err) {
       hilog.error(HILOG_DOMAIN, TAG, 'Failed to set colorMode. Cause: %{public}s', JSON.stringify(err));
     }
@@ -36,7 +40,7 @@ export default class EntryAbility extends UIAbility {
     // Main window is created, set main page for this ability
     hilog.info(HILOG_DOMAIN, TAG, '%{public}s', 'Ability onWindowStageCreate');
 
-    windowStage.loadContent('pages/classTablePages/Home', (err) => {
+    windowStage.loadContent('pages/Index', (err) => {
       if (err.code) {
         hilog.error(HILOG_DOMAIN, TAG, 'Failed to load the content. Cause: %{public}s', JSON.stringify(err));
         return;
