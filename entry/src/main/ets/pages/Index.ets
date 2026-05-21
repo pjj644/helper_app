@@ -5,33 +5,29 @@ import {
   SECTION_TIMES,
   courseTableModel,
   getCurrentWeek,
-} from '../../model/classTableModel/CourseModel';
-import { DisplaySettings, CourseTableStorage } from '../../model/classTableModel/CourseTableStorage';
-import { ExamItem, normalizeExam, sortExams } from '../../model/classTableModel/ExamModel';
-import { CountdownCard } from '../../components/CountdownCard';
+} from '../model/classTableModel/CourseModel';
+import { DisplaySettings, CourseTableStorage } from '../model/classTableModel/CourseTableStorage';
+import { ExamItem, normalizeExam, sortExams } from '../model/classTableModel/ExamModel';
+import { CountdownCard } from '../components/CountdownCard';
 import {
   calculateSemesterId,
   EXAM_TYPE_OPTIONS,
   getExamTypeIdByIndex,
   getExamTypeIndexById,
   getExamTypeLabelById,
-} from '../../model/classTableModel/ExamAccessRules';
-import { CourseRepository } from '../../repository/CourseRepository';
-import { ReminderService } from '../../service/ReminderService';
-import { AppConstants, RouterConstants } from '../../common/constants/AppConstants';
-import { ImmersiveLightWrapper } from '../../common/ImmersiveLightWrapper';
-import { AnimationSettings } from '../../common/AnimationSettings';
-import { UISettings } from '../../common/UISettings';
-import { FeatureDetector } from '../../common/FeatureDetector';
-import { QuickStatComponent } from '../../components/QuickStatComponent';
-import { ServiceGridComponent } from '../../components/ServiceGridComponent';
-import { AnimatedCard, AnimatedListItem } from '../../components/AnimatedComponents';
-import { ToastComponent } from '../../components/ToastComponents';
-import { HomeModel } from '../../model/HomeModel';
-import { HomeViewModel } from '../../viewmodel/HomeViewModel';
-import { StatData, ServiceItem } from '../../common/types/ModelTypes';
-import { GradeService } from '../../service/GradeService';
-import { ScheduleService } from '../../service/ScheduleService';
+} from '../model/classTableModel/ExamAccessRules';
+import { CourseRepository } from '../repository/CourseRepository';
+import { ReminderService } from '../service/ReminderService';
+import { AppConstants, RouterConstants } from '../common/constants/AppConstants';
+import { ImmersiveLightWrapper } from '../common/ImmersiveLightWrapper';
+import { UISettings } from '../common/UISettings';
+import { QuickStatComponent } from '../components/QuickStatComponent';
+import { ServiceGridComponent } from '../components/ServiceGridComponent';
+import { AnimatedCard, AnimatedListItem } from '../components/AnimatedComponents';
+import { ToastComponent } from '../components/ToastComponents';
+import { ServiceItem } from '../common/types/ModelTypes';
+import { GradeService } from '../service/GradeService';
+import { ScheduleService } from '../service/ScheduleService';
 
 interface ToolItem {
   title: string;
@@ -158,7 +154,7 @@ struct MainPage {
         try {
           const parsedExam: ExamItem[] = JSON.parse(examData) as ExamItem[];
           console.info(`[ExamDebug] Home: examData length=${examData.length} parsed=${parsedExam.length}`);
-          this.exams = sortExams(parsedExam.map((item: ExamItem) => normalizeExam({
+          this.exams = sortExams(parsedExam.map((item: ExamItem): ExamItem => normalizeExam({
             courseNo: item.courseNo,
             courseName: item.courseName,
             examDate: item.examDate,
@@ -184,7 +180,7 @@ struct MainPage {
             }
           }
           console.info(`[ExamDebug] Home: total=${this.exams.length} futureCount=${futureCount} now=${now}`);
-        } catch (error) {
+        } catch (error: Error) {
           console.error('[ExamDebug] Home: parse exam error', JSON.stringify(error));
           this.exams = [];
         }
@@ -225,7 +221,7 @@ struct MainPage {
 
       const upcoming = this.getUpcomingExams(1);
       console.info(`[ExamDebug] Home: loadPageData done hasData=${this.hasData} showExamCountdown=${this.settings.showExamCountdown} upcomingCount=${upcoming.length} examTotal=${this.exams.length}`);
-    } catch (error) {
+    } catch (error: Error) {
       console.error('[ExamDebug] Home加载数据失败:', JSON.stringify(error));
       this.hasData = false;
     }
@@ -252,7 +248,7 @@ struct MainPage {
         }
       }
       this.todayEventCount = count;
-    } catch (error) {
+    } catch (error: Error) {
       console.error('loadQuickInfo error:', JSON.stringify(error));
     }
   }
@@ -531,7 +527,7 @@ struct MainPage {
               { label: '今日课程', value: this.todayCourses.length.toString(), color: $r('app.color.primary_color') },
               { label: '待考科目', value: this.getFutureExamCount().toString(), color: $r('app.color.warning_color') },
               { label: '本周课程', value: this.getWeekCourseCount().toString(), color: $r('app.color.success_color') },
-            ] as StatData[]
+            ]
           });
         }
         .width('100%')
@@ -935,7 +931,7 @@ struct MainPage {
           .width('100%')
           .padding(20);
         }
-        .width('92%');
+        .width('92%')
 
         Column({ space: 2 }) {
           this.MineMenuItem('个人信息', $r('app.media.ic_public_edit'), () => {
@@ -1205,7 +1201,7 @@ struct MainPage {
       }
 
       Column() {
-        Tabs({ tabBarPosition: BarPosition.End, index: this.currentTabIndex }) {
+        Tabs({ barPosition: BarPosition.End, index: this.currentTabIndex }) {
           TabContent() {
             this.HomeContent();
           }.tabBar(this.TabBarItem('首页', $r('app.media.home'), 0));

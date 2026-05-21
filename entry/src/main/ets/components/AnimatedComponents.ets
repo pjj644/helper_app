@@ -1,3 +1,4 @@
+import { curves } from '@kit.ArkUI';
 import { AnimationSettings, AnimationSpeed, AnimationCurveType } from '../common/AnimationSettings';
 
 @Component
@@ -8,9 +9,9 @@ export struct AnimatedCard {
 
   @Prop animationEnabled: boolean = true;
 
-  @State private scale: number = 0.8;
+  @State private cardScale: number = 0.8;
 
-  @State private opacity: number = 0;
+  @State private cardOpacity: number = 0;
 
   @State private translateY: number = 30;
 
@@ -25,8 +26,8 @@ export struct AnimatedCard {
         this.playEnterAnimation();
       }, this.delay);
     } else {
-      this.scale = 1;
-      this.opacity = 1;
+      this.cardScale = 1;
+      this.cardOpacity = 1;
       this.translateY = 0;
     }
   }
@@ -37,8 +38,8 @@ export struct AnimatedCard {
       duration: params.duration,
       curve: params.curve
     }, () => {
-      this.scale = 1;
-      this.opacity = 1;
+      this.cardScale = 1;
+      this.cardOpacity = 1;
       this.translateY = 0;
     });
   }
@@ -47,8 +48,8 @@ export struct AnimatedCard {
     Column() {
       this.content();
     }
-    .scale({ x: this.scale, y: this.scale })
-    .opacity(this.opacity)
+    .scale({ x: this.cardScale, y: this.cardScale })
+    .opacity(this.cardOpacity)
     .translate({ y: this.translateY })
   }
 }
@@ -61,7 +62,7 @@ export struct AnimatedListItem {
 
   @Prop animationEnabled: boolean = true;
 
-  @State private opacity: number = 0;
+  @State private itemOpacity: number = 0;
 
   @State private translateX: number = -20;
 
@@ -76,7 +77,7 @@ export struct AnimatedListItem {
         this.playEnterAnimation();
       }, this.delay);
     } else {
-      this.opacity = 1;
+      this.itemOpacity = 1;
       this.translateX = 0;
     }
   }
@@ -87,7 +88,7 @@ export struct AnimatedListItem {
       duration: duration,
       curve: Curve.Smooth
     }, () => {
-      this.opacity = 1;
+      this.itemOpacity = 1;
       this.translateX = 0;
     });
   }
@@ -96,7 +97,7 @@ export struct AnimatedListItem {
     Column() {
       this.content();
     }
-    .opacity(this.opacity)
+    .opacity(this.itemOpacity)
     .translate({ x: this.translateX })
   }
 }
@@ -105,9 +106,9 @@ export struct AnimatedListItem {
 export struct PageTransitionWrapper {
   @BuilderParam content: () => void = () => {};
 
-  @State private scale: number = 0.95;
+  @State private pageScale: number = 0.95;
 
-  @State private opacity: number = 0;
+  @State private pageOpacity: number = 0;
 
   private hasAnimated: boolean = false;
 
@@ -118,8 +119,8 @@ export struct PageTransitionWrapper {
       this.hasAnimated = true;
       this.playEnterAnimation();
     } else {
-      this.scale = 1;
-      this.opacity = 1;
+      this.pageScale = 1;
+      this.pageOpacity = 1;
     }
   }
 
@@ -129,8 +130,8 @@ export struct PageTransitionWrapper {
       duration: params.duration,
       curve: params.curve
     }, () => {
-      this.scale = 1;
-      this.opacity = 1;
+      this.pageScale = 1;
+      this.pageOpacity = 1;
     });
   }
 
@@ -140,8 +141,8 @@ export struct PageTransitionWrapper {
     }
     .width('100%')
     .height('100%')
-    .scale({ x: this.scale, y: this.scale })
-    .opacity(this.opacity)
+    .scale({ x: this.pageScale, y: this.pageScale })
+    .opacity(this.pageOpacity)
   }
 }
 
@@ -151,7 +152,7 @@ export struct SpringButton {
 
   onButtonClick?: () => void;
 
-  @State private scale: number = 1;
+  @State private buttonScale: number = 1;
 
   private animationSettings: AnimationSettings = AnimationSettings.getInstance();
 
@@ -161,7 +162,7 @@ export struct SpringButton {
       duration: duration,
       curve: curves.responsiveSpringMotion(0.5, 0.8)
     }, () => {
-      this.scale = 0.95;
+      this.buttonScale = 0.95;
     });
   }
 
@@ -171,7 +172,7 @@ export struct SpringButton {
       duration: duration,
       curve: curves.responsiveSpringMotion(0.3, 0.6)
     }, () => {
-      this.scale = 1;
+      this.buttonScale = 1;
     });
   }
 
@@ -179,7 +180,7 @@ export struct SpringButton {
     Column() {
       this.content();
     }
-    .scale({ x: this.scale, y: this.scale })
+    .scale({ x: this.buttonScale, y: this.buttonScale })
     .onTouch((event: TouchEvent) => {
       if (event.type === TouchType.Down) {
         this.handlePress();
