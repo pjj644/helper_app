@@ -180,7 +180,7 @@ struct MainPage {
             }
           }
           console.info(`[ExamDebug] Home: total=${this.exams.length} futureCount=${futureCount} now=${now}`);
-        } catch (error: Error) {
+        } catch (error) {
           console.error('[ExamDebug] Home: parse exam error', JSON.stringify(error));
           this.exams = [];
         }
@@ -221,7 +221,7 @@ struct MainPage {
 
       const upcoming = this.getUpcomingExams(1);
       console.info(`[ExamDebug] Home: loadPageData done hasData=${this.hasData} showExamCountdown=${this.settings.showExamCountdown} upcomingCount=${upcoming.length} examTotal=${this.exams.length}`);
-    } catch (error: Error) {
+    } catch (error) {
       console.error('[ExamDebug] Home加载数据失败:', JSON.stringify(error));
       this.hasData = false;
     }
@@ -248,7 +248,7 @@ struct MainPage {
         }
       }
       this.todayEventCount = count;
-    } catch (error: Error) {
+    } catch (error) {
       console.error('loadQuickInfo error:', JSON.stringify(error));
     }
   }
@@ -695,10 +695,9 @@ struct MainPage {
             .padding({ top: 8, bottom: 8 })
             .onClick(() => this.openTable());
           }
-          .width('100%')
+          .width('92%')
           .padding(16);
         }
-        .width('92%')
       } else {
         ImmersiveLightWrapper({ radius: 20, lightIntensity: 2.0 }) {
           Column({ space: 12 }) {
@@ -720,11 +719,10 @@ struct MainPage {
               .borderRadius(20)
               .onClick(() => this.openImporter());
           }
-          .width('100%')
+          .width('92%')
           .padding(16)
           .alignItems(HorizontalAlign.Center);
         }
-        .width('92%')
       }
 
       Blank();

@@ -47,98 +47,79 @@ export class PreferencesUtil {
       this.preferences = preferences.getPreferencesSync(context, options);
       console.info('[PreferencesUtil] 初始化成功');
     } catch (error) {
-      console.error(`[PreferencesUtil] 初始化失败: ${JSON.stringify(error)}`);
+      this.handleError('初始化失败:', error);
+    }
+  }
+
+  private ensureInitialized(): boolean {
+    if (!this.preferences) {
+      console.error('[PreferencesUtil] preferences 未初始化');
+      return false;
+    }
+    return true;
+  }
+
+  private handleError(message: string, error: Object): void {
+    console.error(`[PreferencesUtil] ${message} ${JSON.stringify(error)}`);
+  }
+
+  private putValue(key: string, value: preferences.ValueType): void {
+    if (!this.ensureInitialized()) {
+      return;
+    }
+    try {
+      this.preferences!.putSync(key, value);
+      this.preferences!.flushSync();
+    } catch (error) {
+      this.handleError(`保存失败 [${key}]:`, error);
+    }
+  }
+
+  private getValue(key: string, defaultValue: preferences.ValueType): preferences.ValueType {
+    if (!this.ensureInitialized()) {
+      return defaultValue;
+    }
+    try {
+      return this.preferences!.getSync(key, defaultValue);
+    } catch (error) {
+      this.handleError(`获取失败 [${key}]:`, error);
+      return defaultValue;
     }
   }
 
   putString(key: string, value: string): void {
-    if (!this.preferences) {
-      console.error('[PreferencesUtil] preferences 未初始化');
-      return;
-    }
-    try {
-      this.preferences.putSync(key, value);
-      this.preferences.flushSync();
-    } catch (error) {
-      console.error(`[PreferencesUtil] 保存字符串失败: ${JSON.stringify(error)}`);
-    }
+    this.putValue(key, value);
   }
 
   getString(key: string, defaultValue: string = ''): string {
-    if (!this.preferences) {
-      console.error('[PreferencesUtil] preferences 未初始化');
-      return defaultValue;
-    }
-    try {
-      return this.preferences.getSync(key, defaultValue) as string;
-    } catch (error) {
-      console.error(`[PreferencesUtil] 获取字符串失败: ${JSON.stringify(error)}`);
-      return defaultValue;
-    }
+    return this.getValue(key, defaultValue) as string;
   }
 
   putBoolean(key: string, value: boolean): void {
-    if (!this.preferences) {
-      console.error('[PreferencesUtil] preferences 未初始化');
-      return;
-    }
-    try {
-      this.preferences.putSync(key, value);
-      this.preferences.flushSync();
-    } catch (error) {
-      console.error(`[PreferencesUtil] 保存布尔值失败: ${JSON.stringify(error)}`);
-    }
+    this.putValue(key, value);
   }
 
   getBoolean(key: string, defaultValue: boolean = false): boolean {
-    if (!this.preferences) {
-      console.error('[PreferencesUtil] preferences 未初始化');
-      return defaultValue;
-    }
-    try {
-      return this.preferences.getSync(key, defaultValue) as boolean;
-    } catch (error) {
-      console.error(`[PreferencesUtil] 获取布尔值失败: ${JSON.stringify(error)}`);
-      return defaultValue;
-    }
-  }
-
-  delete(key: string): void {
-    if (!this.preferences) {
-      console.error('[PreferencesUtil] preferences 未初始化');
-      return;
-    }
-    try {
-      this.preferences.deleteSync(key);
-      this.preferences.flushSync();
-    } catch (error) {
-      console.error(`[PreferencesUtil] 删除键失败: ${JSON.stringify(error)}`);
-    }
+    return this.getValue(key, defaultValue) as boolean;
   }
 
   putNumber(key: string, value: number): void {
-    if (!this.preferences) {
-      console.error('[PreferencesUtil] preferences 未初始化');
-      return;
-    }
-    try {
-      this.preferences.putSync(key, value);
-      this.preferences.flushSync();
-    } catch (error) {
-      console.error(`[PreferencesUtil] 保存数字失败: ${JSON.stringify(error)}`);
-    }
+    this.putValue(key, value);
   }
 
   getNumber(key: string, defaultValue: number = 0): number {
-    if (!this.preferences) {
-      console.error('[PreferencesUtil] preferences 未初始化');
-      return defaultValue;
+    return this.getValue(key, defaultValue) as number;
+  }
+
+  delete(key: string): void {
+    if (!this.ensureInitialized()) {
+      return;
     }
     try {
-      return this.preferences.getSync(key, defaultValue) as number;
+      this.preferences!.deleteSync(key);
+      this.preferences!.flushSync();
     } catch (error) {
-      console.error(`[PreferencesUtil] 获取数字失败: ${JSON.stringify(error)}`);
-      return defaultValue;
+      this.handleError(`删除失败 [${key}]:`, error);
     }
   }
 }
