@@ -76,6 +76,7 @@ export class ReminderService {
       }
 
       await ReminderService.clearAgentReminders();
+      await CalendarKitReminderService.clearAllEvents(context);
 
       const allEvents: ScheduleEvent[] = await ScheduleRepository.loadSchedules(context);
       console.info(`[ReminderDebug] loaded ${allEvents.length} events from repository`);
@@ -189,6 +190,7 @@ export class ReminderService {
             const calEventId = await CalendarKitReminderService.addEventReminder(context, event, remindMinutes);
             if (calEventId >= 0) {
               console.info(`[ReminderDebug]   SUCCESS: Calendar Kit reminder added, calEventId=${calEventId}`);
+              event.calendarEventId = calEventId;
               published = true;
             } else {
               console.error(`[ReminderDebug]   FAILED: Calendar Kit reminder returned -1`);
@@ -204,6 +206,9 @@ export class ReminderService {
       }
 
       console.info(`[ReminderDebug] total reminders published: ${createdCount}`);
+
+      await ScheduleRepository.saveSchedules(context, allEvents);
+      console.info(`[ReminderDebug] saved calendarEventId mappings to repository`);
     } catch (error) {
       console.error('[ReminderDebug] refreshScheduleReminders error:', JSON.stringify(error));
     }

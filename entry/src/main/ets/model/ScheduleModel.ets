@@ -13,6 +13,7 @@ export interface ScheduleEvent {
   createdAt: number;
   remindMinutes?: number;
   addToCalendar?: boolean;
+  calendarEventId?: number;
 }
 
 export type ScheduleEventType = 'course' | 'exam' | 'custom' | 'assignment';

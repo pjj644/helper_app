@@ -75,12 +75,16 @@ export class CalendarKitReminderService {
           const calendars: calendarManager.Calendar[] = await CalendarKitReminderService.calendarMgr.getAllCalendars();
           for (let i = 0; i < calendars.length; i++) {
             const cal = calendars[i];
-            const calConfig = await cal.getConfig();
-            if (calConfig) {
+            const account = cal.getAccount();
+            if (account && account.name === CALENDAR_ACCOUNT_NAME) {
               CalendarKitReminderService.calendar = cal;
-              console.info('[CalendarKit] found existing calendar account');
+              console.info('[CalendarKit] found existing calendar account by name match');
               break;
             }
+          }
+          if (!CalendarKitReminderService.calendar && calendars.length > 0) {
+            CalendarKitReminderService.calendar = calendars[0];
+            console.info('[CalendarKit] fallback to first available calendar');
           }
         } else {
           console.error('[CalendarKit] createCalendar error:', JSON.stringify(createErr));
@@ -92,6 +96,28 @@ export class CalendarKitReminderService {
       console.error('[CalendarKit] ensureCalendar error:', JSON.stringify(error));
       return null;
     }
+  }
+
+  private static calculateEndTime(event: ScheduleEvent, startDate: Date): Date {
+    if (event.endTime) {
+      const match = event.endTime.match(/^(\d{1,2}):(\d{2})$/);
+      if (match) {
+        return new Date(startDate.getFullYear(), startDate.getMonth(), startDate.getDate(),
+          parseInt(match[1]), parseInt(match[2]));
+      }
+    }
+    if (event.timeRange && event.timeRange.includes('-')) {
+      const parts = event.timeRange.split('-');
+      if (parts.length >= 2) {
+        const endPart = parts[parts.length - 1].trim();
+        const match = endPart.match(/^(\d{1,2}):(\d{2})$/);
+        if (match) {
+          return new Date(startDate.getFullYear(), startDate.getMonth(), startDate.getDate(),
+            parseInt(match[1]), parseInt(match[2]));
+        }
+      }
+    }
+    return new Date(startDate.getTime() + 60 * 60 * 1000);
   }
 
   static async addEventReminder(context: Context, event: ScheduleEvent, remindMinutes: number): Promise<number> {
@@ -107,7 +133,7 @@ export class CalendarKitReminderService {
       const startMinute = event.startTime ? parseInt(event.startTime.split(':')[1]) : 0;
 
       const startDate = new Date(dateParts[0], dateParts[1] - 1, dateParts[2], startHour, startMinute);
-      const endDate = new Date(startDate.getTime() + 60 * 60 * 1000);
+      const endDate = CalendarKitReminderService.calculateEndTime(event, startDate);
 
       const eventConfig: calendarManager.Event = {
         title: event.title,
@@ -130,6 +156,18 @@ export class CalendarKitReminderService {
       console.error(`[CalendarKit] addEventReminder error: code=${err.code}, message=${err.message}`);
       return -1;
     }
+  }
+
+  static async upsertEventReminder(context: Context, event: ScheduleEvent, remindMinutes: number): Promise<number> {
+    if (event.calendarEventId && event.calendarEventId > 0) {
+      try {
+        await CalendarKitReminderService.deleteEvent(context, event.calendarEventId);
+        console.info(`[CalendarKit] upsertEventReminder: deleted old eventId=${event.calendarEventId}`);
+      } catch (_err) {
+        console.warn(`[CalendarKit] upsertEventReminder: failed to delete old eventId=${event.calendarEventId}`);
+      }
+    }
+    return await CalendarKitReminderService.addEventReminder(context, event, remindMinutes);
   }
 
   static async deleteEvent(context: Context, eventId: number): Promise<boolean> {

@@ -4,6 +4,7 @@ import { CourseService } from './CourseService';
 import { ExamService } from './ExamService';
 import { Course, SECTION_TIMES } from '../model/classTableModel/CourseModel';
 import { ExamItem } from '../model/classTableModel/ExamModel';
+import { CalendarKitReminderService } from './CalendarKitReminderService';
 
 export class ScheduleService {
   static async loadCustomSchedules(context: Context): Promise<ScheduleEvent[]> {
@@ -40,6 +41,12 @@ export class ScheduleService {
 
   static async deleteSchedule(context: Context, eventId: string): Promise<void> {
     try {
+      const events: ScheduleEvent[] = await ScheduleRepository.loadSchedules(context);
+      const target: ScheduleEvent | undefined = events.find((e: ScheduleEvent) => e.id === eventId);
+      if (target && target.calendarEventId && target.calendarEventId > 0) {
+        await CalendarKitReminderService.deleteEvent(context, target.calendarEventId);
+        console.info(`[ScheduleService] deleted calendar event id=${target.calendarEventId} for schedule=${eventId}`);
+      }
       await ScheduleRepository.deleteSchedule(context, eventId);
     } catch (error) {
       console.error('ScheduleService deleteSchedule error:', JSON.stringify(error));
