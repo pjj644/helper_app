@@ -2,10 +2,12 @@ import { ImmersiveLightWrapper } from '../common/ImmersiveLightWrapper';
 import { AnimationSettings } from '../common/AnimationSettings';
 import { ServiceItem } from '../common/types/ModelTypes';
 import { AppConstants } from '../common/constants/AppConstants';
+import { router } from '@kit.ArkUI';
 
 @Component
 export struct ServiceCardComponent {
   @Prop item: ServiceItem | null = null;
+  onItemClick?: (item: ServiceItem) => void;
 
   build() {
     if (this.item) {
@@ -13,26 +15,30 @@ export struct ServiceCardComponent {
         radius: 18,
         lightIntensity: 2.0
       }) {
-        Column({ space: 8 }) {
+        Column({ space: 4 }) {
           Text(this.item!.icon)
-            .fontSize(AppConstants.LARGE_ICON_SIZE)
-            .margin({ top: 16 })
+            .fontSize(28)
 
           Text(this.item!.name)
-            .fontSize(AppConstants.FONT_BODY)
+            .fontSize(13)
             .fontWeight(FontWeight.Medium)
             .fontColor($r('app.color.text_primary'))
 
           Text(this.item!.desc)
-            .fontSize(AppConstants.FONT_TINY)
+            .fontSize(11)
             .fontColor($r('app.color.text_tertiary'))
-            .maxLines(AppConstants.SINGLE_LINE)
+            .maxLines(1)
             .textOverflow({ overflow: TextOverflow.Ellipsis })
         }
         .width('100%')
         .height('100%')
-        .justifyContent(FlexAlign.Start)
-        .padding({ bottom: AppConstants.LIST_ITEM_SPACE })
+        .justifyContent(FlexAlign.Center)
+        .padding(8)
+        .onClick(() => {
+          if (this.onItemClick && this.item) {
+            this.onItemClick(this.item);
+          }
+        })
       }
     }
   }
@@ -91,56 +97,55 @@ export struct ServiceGridComponent {
     }, 100);
   }
 
+  private handleItemClick(item: ServiceItem): void {
+    if (item.route) {
+      router.pushUrl({ url: item.route }).catch((error: Error) => {
+        console.error('跳转失败:', error);
+      });
+    }
+  }
+
   build() {
-    Scroll() {
-      Column({ space: 24 }) {
-        Row() {
-          Text(this.title)
-            .fontSize(AppConstants.FONT_TITLE)
-            .fontWeight(FontWeight.Bold)
-            .fontColor($r('app.color.text_primary'))
-          Blank()
-          Text('更多 >')
-            .fontSize(AppConstants.FONT_CAPTION)
-            .fontColor($r('app.color.text_tertiary'))
-            .onClick(() => {
-              if (this.onMore) {
-                this.onMore();
-              }
-            })
-        }
-        .width('92%')
-        .margin({ top: 20 })
-        .opacity(this.titleOpacity)
-        .translate({ y: this.titleTranslateY })
-
-        Grid() {
-          ForEach(this.serviceList, (item: ServiceItem) => {
-            GridItem() {
-              ServiceCardComponent({ item: item })
-            }
-          }, (item: ServiceItem) => item.id || item.name)
-        }
-        .columnsTemplate('1fr 1fr 1fr')
-        .rowsTemplate('1fr 1fr')
-        .columnsGap(AppConstants.GRID_GAP)
-        .rowsGap(AppConstants.GRID_GAP)
-        .width('92%')
-        .height(280)
-        .opacity(this.gridOpacity)
-        .scale({ x: this.gridScale, y: this.gridScale })
-
-        Text('更多功能即将上线')
-          .fontSize(AppConstants.FONT_CAPTION)
+    Column({ space: 8 }) {
+      Row() {
+        Text(this.title)
+          .fontSize(18)
+          .fontWeight(FontWeight.Bold)
+          .fontColor($r('app.color.text_primary'))
+        Blank()
+        Text('更多 >')
+          .fontSize(13)
           .fontColor($r('app.color.text_tertiary'))
-          .margin({ bottom: 20 })
-          .opacity(this.gridOpacity)
+          .onClick(() => {
+            if (this.onMore) {
+              this.onMore();
+            }
+          })
       }
       .width('100%')
-      .alignItems(HorizontalAlign.Center)
+      .padding({ left: 16, right: 16 })
+      .opacity(this.titleOpacity)
+      .translate({ y: this.titleTranslateY })
+
+      Grid() {
+        ForEach(this.serviceList, (item: ServiceItem) => {
+          GridItem() {
+            ServiceCardComponent({ item: item, onItemClick: (clickedItem: ServiceItem) => {
+              this.handleItemClick(clickedItem);
+            }})
+          }
+        }, (item: ServiceItem) => item.id || item.name)
+      }
+      .columnsTemplate('1fr 1fr 1fr')
+      .rowsTemplate('1fr 1fr')
+      .columnsGap(10)
+      .rowsGap(10)
+      .width('100%')
+      .height(220)
+      .padding({ left: 16, right: 16 })
+      .opacity(this.gridOpacity)
+      .scale({ x: this.gridScale, y: this.gridScale })
     }
     .width('100%')
-    .height('100%')
-    .scrollBar(BarState.Off)
   }
 }

@@ -26,7 +26,6 @@ struct LoginIndexPage {
 
 	private readonly PREF_NAME: string = AppConstants.LOGIN_PREF_NAME;
   private readonly SESSION_KEY: string = AppConstants.LOGIN_SESSION_KEY;
-	private readonly TARGET_URL: string = 'pages/home';
 	private countdownTimer: number = -1;
 	private isJumping: boolean = false;
 
@@ -76,7 +75,7 @@ struct LoginIndexPage {
 				return;
 			}
 
-			this.jumpToHome();
+			this.jumpBack();
 		} catch (error) {
 			console.error('读取登录状态失败:', error);
 		}
@@ -138,17 +137,12 @@ struct LoginIndexPage {
 		});
 	}
 
-	private jumpToHome(): void {
+	private jumpBack(): void {
 		if (this.isJumping) {
 			return;
 		}
 		this.isJumping = true;
-		router.replaceUrl({
-			url: this.TARGET_URL,
-		}).catch((error: Error) => {
-			this.isJumping = false;
-			console.error('跳转首页失败:', error);
-		});
+		router.back();
 	}
 
 	private async handleLogin(): Promise<void> {
@@ -176,7 +170,7 @@ struct LoginIndexPage {
 
 			await this.saveSession();
 			this.getUIContext().getPromptAction().showToast({ message: '登录成功' });
-			this.jumpToHome();
+			this.jumpBack();
 		} catch (error) {
 			const businessError = error as BusinessError;
 			console.error('登录失败:', JSON.stringify(businessError));

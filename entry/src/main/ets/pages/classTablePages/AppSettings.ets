@@ -74,6 +74,10 @@ struct AppSettings {
     this.loadOtherSettings();
   }
 
+  onPageShow(): void {
+    this.checkLoginStatus();
+  }
+
   private async loadSettings(): Promise<void> {
     try {
       const context = getContext(this);

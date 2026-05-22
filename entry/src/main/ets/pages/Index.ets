@@ -22,12 +22,12 @@ import { AppConstants, RouterConstants } from '../common/constants/AppConstants'
 import { ImmersiveLightWrapper } from '../common/ImmersiveLightWrapper';
 import { UISettings } from '../common/UISettings';
 import { QuickStatComponent } from '../components/QuickStatComponent';
-import { ServiceGridComponent } from '../components/ServiceGridComponent';
 import { AnimatedCard, AnimatedListItem } from '../components/AnimatedComponents';
 import { ToastComponent } from '../components/ToastComponents';
 import { ServiceItem } from '../common/types/ModelTypes';
 import { GradeService } from '../service/GradeService';
 import { ScheduleService } from '../service/ScheduleService';
+import { AuthService } from '../service/AuthService';
 
 interface ToolItem {
   title: string;
@@ -65,6 +65,8 @@ struct MainPage {
   @State todayEventCount: number = 0;
   @State toastMessage: string = '';
   @State toastVisible: boolean = false;
+  @State isLoggedIn: boolean = false;
+  @State loginEmail: string = '';
 
   private tickTimer: number = -1;
   private model: CourseTableModel = courseTableModel;
@@ -84,15 +86,6 @@ struct MainPage {
     { title: '一卡通余额', icon: '💰', color: '#F97316', url: AppConstants.CARD_BALANCE_URL, iconImage: $r('app.media.ic_card_balance') },
   ];
 
-  private serviceItems: ServiceItem[] = [
-    { id: 's1', name: '课表查看', icon: '📋', color: $r('app.color.primary_color'), desc: '查看本周课程', route: RouterConstants.PAGE_TABLE_UI },
-    { id: 's2', name: '考试信息', icon: '📝', color: $r('app.color.warning_color'), desc: '考试安排查询', route: RouterConstants.PAGE_EXAM },
-    { id: 's3', name: '成绩查询', icon: '📊', color: $r('app.color.success_color'), desc: '学期成绩查看', route: RouterConstants.PAGE_GRADE },
-    { id: 's4', name: '图书馆', icon: '📚', color: $r('app.color.info_color'), desc: '图书借阅服务' },
-    { id: 's5', name: '校园卡', icon: '💳', color: $r('app.color.purple_color'), desc: '一卡通服务' },
-    { id: 's6', name: 'AI助手', icon: '🤖', color: $r('app.color.pink_color'), desc: '智能问答助手', route: RouterConstants.PAGE_ASSISTANT },
-  ];
-
   private normalizeExamTypeIndex(index: number): number {
     if (index < 0 || index >= EXAM_TYPE_OPTIONS.length) {
       return 0;
@@ -106,6 +99,7 @@ struct MainPage {
     this.customBackgroundEnabled = this.appSettings.customBackgroundEnabled;
     this.loadPageData();
     this.loadQuickInfo();
+    this.checkLoginStatus();
     this.nowTick = Date.now();
     console.info(`[HomeDebug] aboutToAppear: nowTick=${this.nowTick} exams=${this.exams.length}`);
     this.tickTimer = setInterval(() => {
@@ -136,6 +130,7 @@ struct MainPage {
     console.info(`[HomeDebug] onPageShow: exams=${this.exams.length} nowTick=${this.nowTick}`);
     this.loadPageData();
     this.loadQuickInfo();
+    this.checkLoginStatus();
     ReminderService.refreshAllReminders(getContext(this));
   }
 
@@ -257,6 +252,17 @@ struct MainPage {
     const copied: Course[] = [...courses];
     copied.sort((a, b) => a.time.startSection - b.time.startSection);
     return copied;
+  }
+
+  private async checkLoginStatus(): Promise<void> {
+    try {
+      const userId: string | undefined = await AuthService.getLoginUserId(getContext(this));
+      this.isLoggedIn = !!userId;
+      this.loginEmail = userId || '';
+    } catch (error) {
+      this.isLoggedIn = false;
+      this.loginEmail = '';
+    }
   }
 
   private openImporter(): void {
@@ -735,7 +741,7 @@ struct MainPage {
   @Builder
   private DiscoverContent(): void {
     Scroll() {
-      Column({ space: 16 }) {
+      Column({ space: 10 }) {
         Column({ space: 4 }) {
           Text('发现')
             .fontSize(28)
@@ -750,7 +756,7 @@ struct MainPage {
         .alignItems(HorizontalAlign.Start)
         .padding({ left: 16, right: 16 });
 
-        Text('快捷功能')
+        Text('最近使用')
           .fontSize(13)
           .fontWeight(FontWeight.Medium)
           .fontColor($r('app.color.text_tertiary'))
@@ -830,21 +836,12 @@ struct MainPage {
         .width('100%')
         .padding({ left: 16, right: 16 });
 
-        ServiceGridComponent({
-          serviceList: this.serviceItems,
-          title: '校园服务',
-          columns: 3,
-          rows: 2,
-          onMore: () => {
-          }
-        });
-
-        Text('全部工具')
+        Text('所有功能')
           .fontSize(13)
           .fontWeight(FontWeight.Medium)
           .fontColor($r('app.color.text_tertiary'))
           .width('100%')
-          .padding({ left: 16, right: 16, top: 8 });
+          .padding({ left: 16, right: 16 });
 
         Grid() {
           ForEach(this.tools, (tool: ToolItem) => {
@@ -878,7 +875,7 @@ struct MainPage {
         .width('100%');
       }
       .width('100%')
-      .padding({ bottom: 24 });
+      .padding({ top: 8, bottom: 24 });
     }
     .layoutWeight(1)
     .width('100%')
@@ -889,49 +886,76 @@ struct MainPage {
   @Builder
   private MineContent(): void {
     Scroll() {
-      Column({ space: 16 }) {
+      Column({ space: 10 }) {
         ImmersiveLightWrapper({ radius: 24, lightIntensity: 2.5 }) {
-          Row({ space: 16 }) {
+          Row({ space: 14 }) {
             Stack() {
               Circle()
-                .width(70)
-                .height(70)
+                .width(60)
+                .height(60)
                 .fill($r('app.color.accent_bg_color'));
               Image($r('app.media.mine'))
-                .width(36)
-                .height(36)
+                .width(30)
+                .height(30)
                 .fillColor($r('app.color.primary_color'));
             }
 
-            Column({ space: 6 }) {
-              Text('校园用户')
-                .fontSize(18)
+            Column({ space: 4 }) {
+              Text(this.isLoggedIn ? this.loginEmail : '校园用户')
+                .fontSize(17)
                 .fontWeight(FontWeight.Bold)
-                .fontColor($r('app.color.text_primary'));
+                .fontColor($r('app.color.text_primary'))
+                .maxLines(1)
+                .textOverflow({ overflow: TextOverflow.Ellipsis });
 
-              Text('学号: 未登录')
-                .fontSize(13)
-                .fontColor($r('app.color.text_secondary'));
-
-              Row({ space: 6 }) {
-                Circle()
-                  .width(6)
-                  .height(6)
-                  .fill($r('app.color.warning_color'));
-                Text('未登录')
-                  .fontSize(12)
-                  .fontColor($r('app.color.text_tertiary'));
+              if (this.isLoggedIn) {
+                Row({ space: 4 }) {
+                  Circle()
+                    .width(6)
+                    .height(6)
+                    .fill($r('app.color.success_color'));
+                  Text('已登录')
+                    .fontSize(12)
+                    .fontColor($r('app.color.success_color'));
+                }
+              } else {
+                Row({ space: 4 }) {
+                  Circle()
+                    .width(6)
+                    .height(6)
+                    .fill($r('app.color.warning_color'));
+                  Text('未登录，点击登录')
+                    .fontSize(12)
+                    .fontColor($r('app.color.text_tertiary'));
+                }
               }
             }
             .layoutWeight(1)
             .alignItems(HorizontalAlign.Start);
-          }
-          .width('100%')
-          .padding(20);
-        }
-        .width('92%')
 
-        Column({ space: 2 }) {
+            if (!this.isLoggedIn) {
+              Image($r('app.media.arrow_right'))
+                .width(18)
+                .height(18)
+                .fillColor($r('app.color.text_tertiary'));
+            }
+          }
+          .width('92%')
+          .padding(16)
+          .onClick(() => {
+            if (!this.isLoggedIn) {
+              router.pushUrl({ url: RouterConstants.PAGE_LOGIN }).catch((error: Error) => {
+                console.error('跳转登录页面失败:', error);
+              });
+            } else {
+              router.pushUrl({ url: RouterConstants.PAGE_ACCOUNT_MANAGE }).catch((error: Error) => {
+                console.error('跳转账号管理失败:', error);
+              });
+            }
+          });
+        }
+
+        Column({ space: 0 }) {
           this.MineMenuItem('个人信息', $r('app.media.ic_public_edit'), () => {
             this.showToast('个人信息功能开发中');
           });
@@ -951,16 +975,16 @@ struct MainPage {
           });
         }
         .width('92%')
-        .borderRadius(16)
+        .borderRadius(14)
         .backgroundColor($r('app.color.card_background'));
 
         Text('v1.0.0')
           .fontSize(12)
           .fontColor($r('app.color.text_tertiary'))
-          .margin({ top: 16 });
+          .margin({ top: 8 });
       }
       .width('100%')
-      .padding({ top: 16, bottom: 24 })
+      .padding({ top: 12, bottom: 24 })
       .alignItems(HorizontalAlign.Center);
     }
     .layoutWeight(1)
@@ -990,7 +1014,7 @@ struct MainPage {
         .fontColor($r('app.color.text_tertiary'));
     }
     .width('100%')
-    .height(52)
+    .height(48)
     .padding({ left: 16, right: 16 })
     .onClick(action);
   }
@@ -1019,11 +1043,10 @@ struct MainPage {
           .borderRadius(20)
           .onClick(() => this.openImporter());
       }
-      .width('100%')
+      .width('92%')
       .padding(16)
       .alignItems(HorizontalAlign.Center);
     }
-    .width('92%')
   }
 
   @Builder
@@ -1099,76 +1122,76 @@ struct MainPage {
           });
         }
       }
-      .width('100%')
+      .width('92%')
       .padding(12);
     }
-    .width('92%')
   }
 
   @Builder
   private ExamCardBuilder(exam: ExamItem): void {
-    ImmersiveLightWrapper({ radius: 20, lightIntensity: 2.0 }) {
-      Column({ space: 6 }) {
-        Row({ space: 6 }) {
-          Text(this.logExamCardRender(exam))
-            .fontSize(15)
-            .fontWeight(FontWeight.Medium)
-            .fontColor($r('app.color.text_primary'))
-            .maxLines(1)
-            .textOverflow({ overflow: TextOverflow.Ellipsis })
-            .layoutWeight(1);
+    Column({ space: 6 }) {
+      Row({ space: 6 }) {
+        Text(this.logExamCardRender(exam))
+          .fontSize(15)
+          .fontWeight(FontWeight.Medium)
+          .fontColor($r('app.color.text_primary'))
+          .maxLines(1)
+          .textOverflow({ overflow: TextOverflow.Ellipsis })
+          .layoutWeight(1);
 
-          Text(exam.examType || '未知')
-            .fontSize(10)
-            .fontColor($r('app.color.primary_color'))
-            .padding({ left: 6, right: 6, top: 2, bottom: 2 })
-            .backgroundColor($r('app.color.accent_bg_color'))
-            .borderRadius(8);
-        }
-        .width('100%');
-
-        CountdownCard({
-          examName: '',
-          examDate: exam.examDate,
-          examTimeRange: exam.examTimeRange,
-          beginTime: exam.beginTime,
-          compact: false
-        });
+        Text(exam.examType || '未知')
+          .fontSize(10)
+          .fontColor($r('app.color.primary_color'))
+          .padding({ left: 6, right: 6, top: 2, bottom: 2 })
+          .backgroundColor($r('app.color.accent_bg_color'))
+          .borderRadius(8);
       }
-      .width('100%')
-      .padding(12)
-      .onClick(() => this.openExamDetail(exam));
+      .width('100%');
+
+      CountdownCard({
+        examName: '',
+        examDate: exam.examDate,
+        examTimeRange: exam.examTimeRange,
+        beginTime: exam.beginTime,
+        compact: false
+      });
     }
-    .width('92%')
+    .width('100%')
+    .padding(12)
+    .borderRadius(12)
+    .backgroundColor($r('app.color.page_background'))
+    .onClick(() => this.openExamDetail(exam));
   }
 
   @Builder
   private ExamCardsSection(): void {
-    Column({ space: 10 }) {
-      Row() {
-        Row({ space: 6 }) {
-          Text('⏳')
-            .fontSize(16);
-          Text(this.logExamSectionRender())
-            .fontSize(18)
-            .fontWeight(FontWeight.Bold)
-            .fontColor($r('app.color.text_primary'));
+    ImmersiveLightWrapper({ radius: 20, lightIntensity: 2.0 }) {
+      Column({ space: 10 }) {
+        Row() {
+          Row({ space: 6 }) {
+            Text('⏳')
+              .fontSize(16);
+            Text(this.logExamSectionRender())
+              .fontSize(18)
+              .fontWeight(FontWeight.Bold)
+              .fontColor($r('app.color.text_primary'));
+          }
+          Blank();
+          Button('全部')
+            .height(30)
+            .fontSize(12)
+            .fontColor($r('app.color.primary_color'))
+            .backgroundColor($r('app.color.accent_bg_color'))
+            .borderRadius(12)
+            .onClick(() => this.openExamPage());
         }
-        Blank();
-        Button('全部')
-          .height(30)
-          .fontSize(12)
-          .fontColor($r('app.color.primary_color'))
-          .backgroundColor($r('app.color.accent_bg_color'))
-          .borderRadius(12)
-          .onClick(() => this.openExamPage());
-      }
-      .width('100%');
+        .width('100%');
 
-      this.ExamCardBuilder(this.getNextExam()!);
+        this.ExamCardBuilder(this.getNextExam()!);
+      }
+      .width('92%')
+      .padding(12);
     }
-    .width('100%')
-    .padding({ left: 16, right: 16 });
   }
 
   @Builder

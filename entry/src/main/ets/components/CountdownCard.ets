@@ -106,7 +106,7 @@ export struct CountdownCard {
           .width('100%');
         }
 
-        Row({ space: 4 }) {
+        Row({ space: 0 }) {
           if (this.parts.days > 0) {
             Column({ space: 2 }) {
               Text(this.formatNumber(this.parts.days))

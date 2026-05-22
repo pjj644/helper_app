@@ -3,7 +3,7 @@ import { AnimationSettings, AnimationSpeed, AnimationCurveType } from '../common
 
 @Component
 export struct AnimatedCard {
-  @BuilderParam content: () => void = () => {};
+  @BuilderParam content: () => void;
 
   @Prop delay: number = 0;
 
@@ -56,7 +56,7 @@ export struct AnimatedCard {
 
 @Component
 export struct AnimatedListItem {
-  @BuilderParam content: () => void = () => {};
+  @BuilderParam content: () => void;
 
   @Prop delay: number = 0;
 
@@ -104,7 +104,7 @@ export struct AnimatedListItem {
 
 @Component
 export struct PageTransitionWrapper {
-  @BuilderParam content: () => void = () => {};
+  @BuilderParam content: () => void;
 
   @State private pageScale: number = 0.95;
 
@@ -148,7 +148,7 @@ export struct PageTransitionWrapper {
 
 @Component
 export struct SpringButton {
-  @BuilderParam content: () => void = () => {};
+  @BuilderParam content: () => void;
 
   onButtonClick?: () => void;
 
