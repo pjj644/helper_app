@@ -1,4 +1,4 @@
-import { hdsMaterial } from '@kit.UIDesignKit';
+import { MaterialLevel, MaterialType } from './HdsCompat';
 import { common, ConfigurationConstant } from '@kit.AbilityKit';
 import { FeatureDetector } from './FeatureDetector';
 import { DarkModeType } from './DarkModeType';
@@ -9,7 +9,7 @@ export class UISettings {
 
   private _immersiveEnabled: boolean = true;
 
-  private _materialLevel: hdsMaterial.MaterialLevel = hdsMaterial.MaterialLevel.ADAPTIVE;
+  private _materialLevel: MaterialLevel = MaterialLevel.ADAPTIVE;
 
   private _darkModeType: DarkModeType = DarkModeType.FOLLOW_SYSTEM;
 
@@ -59,11 +59,11 @@ export class UISettings {
     return this._isImmersiveSupported;
   }
 
-  get materialLevel(): hdsMaterial.MaterialLevel {
+  get materialLevel(): MaterialLevel {
     return this._materialLevel;
   }
 
-  set materialLevel(value: hdsMaterial.MaterialLevel) {
+  set materialLevel(value: MaterialLevel) {
     this._materialLevel = value;
   }
 
@@ -263,22 +263,22 @@ export class UISettings {
     }
   }
 
-  getMaterialType(): hdsMaterial.MaterialType {
+  getMaterialType(): MaterialType {
     if (!this._immersiveEnabled) {
-      return hdsMaterial.MaterialType.NONE;
+      return MaterialType.NONE;
     }
     if (!this._isImmersiveSupported) {
-      return hdsMaterial.MaterialType.NONE;
+      return MaterialType.NONE;
     }
-    return hdsMaterial.MaterialType.IMMERSIVE;
+    return MaterialType.IMMERSIVE;
   }
 
-  getMaterialLevel(): hdsMaterial.MaterialLevel {
+  getMaterialLevel(): MaterialLevel {
     if (!this._immersiveEnabled) {
-      return hdsMaterial.MaterialLevel.SMOOTH;
+      return MaterialLevel.SMOOTH;
     }
     if (!this._isImmersiveSupported) {
-      return hdsMaterial.MaterialLevel.SMOOTH;
+      return MaterialLevel.SMOOTH;
     }
     return this._materialLevel;
   }

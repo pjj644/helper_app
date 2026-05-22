@@ -65,6 +65,8 @@ export class AppConstants {
 
   static readonly AI_CHAT_SESSIONS_KEY: string = 'ai_chat_sessions';
   static readonly AI_CHAT_MAX_SESSIONS: number = 20;
+  static readonly AI_AGENT_MAX_TOOL_ROUNDS: number = 5;
+  static readonly AI_AGENT_TOOL_TIMEOUT_MS: number = 30000;
 
   static readonly CONTENT_MAX_LINE: number = 2;
   static readonly MAX_ID: number = 100;

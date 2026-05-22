@@ -1,4 +1,4 @@
-import { hdsEffect } from '@kit.UIDesignKit';
+import { HdsEffectBuilder, PointLightIlluminatedType, PointLightOptions, PointLightParams, PointLightIlluminatedParams } from './HdsCompat';
 import { curves, RectShape } from '@kit.ArkUI';
 import { common, ConfigurationConstant } from '@kit.AbilityKit';
 import { UISettings } from './UISettings';
@@ -58,20 +58,29 @@ export struct ImmersiveLightWrapper {
     console.log(`[ImmersiveLightWrapper] 材质参数已更新: blurRadius=${this.blurRadius}, shadowRadius=${this.shadowRadius}, borderWidth=${this.materialBorderWidth}, advancedBlur=${this.advancedBlurEnabled}`);
   }
 
+  private buildPointLightOptions(): PointLightParams {
+    const opts: PointLightOptions = {
+      color: this.lightColor,
+      intensity: this.currentIntensity,
+      height: this.lightHeight
+    }
+    const params: PointLightParams = { options: opts }
+    return params
+  }
+
+  private buildIlluminatedParams(): PointLightIlluminatedParams {
+    const params: PointLightIlluminatedParams = { illuminatedType: PointLightIlluminatedType.BORDER_CONTENT }
+    return params
+  }
+
   @Builder lightTracker() {
     Stack() {
       Flex()
         .size(this.currentIntensity ? { width: 1, height: 1 } : { width: 0, height: 0 })
         .backgroundColor(Color.Transparent)
         .visualEffect(
-          new hdsEffect.HdsEffectBuilder()
-            .pointLight({
-              options: {
-                color: this.lightColor,
-                intensity: this.currentIntensity,
-                height: this.lightHeight
-              }
-            })
+          new HdsEffectBuilder()
+            .pointLight(this.buildPointLightOptions())
             .buildEffect()
         )
         .position({ x: this.fingerX, y: this.fingerY })
@@ -90,9 +99,7 @@ export struct ImmersiveLightWrapper {
     .shadow({ radius: this.shadowRadius, color: $r('app.color.shadow_color') })
     .backgroundColor(this.noBackground ? Color.Transparent : $r('app.color.card_background'))
     .visualEffect(
-      new hdsEffect.HdsEffectBuilder().pointLight({
-        illuminatedType: hdsEffect.PointLightIlluminatedType.BORDER_CONTENT,
-      }).buildEffect()
+      new HdsEffectBuilder().pointLightIlluminated(this.buildIlluminatedParams()).buildEffect()
     )
     .backdropBlur(this.noBackground || !this.advancedBlurEnabled ? 0 : this.blurRadius)
     .borderRadius(this.radius)

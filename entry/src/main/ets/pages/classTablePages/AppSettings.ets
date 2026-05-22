@@ -1,5 +1,5 @@
 import { router } from '@kit.ArkUI';
-import { hdsMaterial } from '@kit.UIDesignKit';
+import { MaterialLevel } from '../../common/HdsCompat';
 import { photoAccessHelper } from '@kit.MediaLibraryKit';
 import { UISettings } from '../../common/UISettings';
 import { AnimationSettings, AnimationSpeed, AnimationCurveType } from '../../common/AnimationSettings';
@@ -135,16 +135,16 @@ struct AppSettings {
 
   private updateMaterialLevelText(): void {
     switch (this.appSettings.materialLevel) {
-      case hdsMaterial.MaterialLevel.EXQUISITE:
+      case MaterialLevel.EXQUISITE:
         this.materialLevelText = '精致';
         break;
-      case hdsMaterial.MaterialLevel.GENTLE:
+      case MaterialLevel.GENTLE:
         this.materialLevelText = '轻柔';
         break;
-      case hdsMaterial.MaterialLevel.SMOOTH:
+      case MaterialLevel.SMOOTH:
         this.materialLevelText = '流畅';
         break;
-      case hdsMaterial.MaterialLevel.ADAPTIVE:
+      case MaterialLevel.ADAPTIVE:
       default:
         this.materialLevelText = '自适应';
         break;
