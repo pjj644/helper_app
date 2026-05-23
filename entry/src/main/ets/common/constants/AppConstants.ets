@@ -68,6 +68,10 @@ export class AppConstants {
   static readonly AI_AGENT_MAX_TOOL_ROUNDS: number = 5;
   static readonly AI_AGENT_TOOL_TIMEOUT_MS: number = 30000;
 
+  // ECS proxy — change URL to your ECS server address
+  static readonly AI_PROXY_URL: string = 'http://121.36.101.82:3000/v1/chat/completions';
+  static readonly AI_PROXY_KEY: string = 'uestc-helper-proxy-key-change-me';
+
   static readonly CONTENT_MAX_LINE: number = 2;
   static readonly MAX_ID: number = 100;
   static readonly MAX_SELECT_NUMBER: number = 1;

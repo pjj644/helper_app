@@ -2,11 +2,23 @@ import { http } from '@kit.NetworkKit'
 import { util } from '@kit.ArkTS'
 import { ToolRegistry } from './ToolRegistry'
 import { ToolExecutor, ToolResult } from './ToolExecutor'
+import { AppConstants } from '../constants/AppConstants'
 
 export interface ToolCallInfo {
   id: string
   name: string
   arguments: string
+}
+
+interface ApiToolCallFunction {
+  name: string
+  arguments: string
+}
+
+interface ApiToolCall {
+  id: string
+  type: string
+  function: ApiToolCallFunction
 }
 
 export interface AgentCallbacks {
@@ -21,13 +33,12 @@ export interface AgentCallbacks {
 export interface AgentMessage {
   role: string
   content: string | null
+  reasoning_content?: string | null
   tool_calls?: Object[]
   tool_call_id?: string
 }
 
-const API_KEY: string = 'sk-742154cb0bd24094bf2c5c81d737c21b'
-const API_URL: string = 'https://api.deepseek.com/v1/chat/completions'
-const MODEL: string = 'deepseek-chat-v4-flash'
+const MODEL: string = 'deepseek-v4-flash'
 const MAX_TOOL_ROUNDS: number = 5
 
 export class AgentOrchestrator {
@@ -67,7 +78,8 @@ export class AgentOrchestrator {
         const assistantMsg: AgentMessage = {
           role: 'assistant',
           content: response.textContent || null,
-          tool_calls: response.toolCalls
+          reasoning_content: response.reasoningContent || null,
+          tool_calls: this.toApiToolCalls(response.toolCalls)
         }
         agentMessages.push(assistantMsg)
 
@@ -155,13 +167,10 @@ export class AgentOrchestrator {
         const assistantMsg: AgentMessage = {
           role: 'assistant',
           content: response.textContent || null,
-          tool_calls: response.toolCalls
+          reasoning_content: response.reasoningContent || null,
+          tool_calls: this.toApiToolCalls(response.toolCalls)
         }
         agentMessages.push(assistantMsg)
-
-        if (response.textContent && response.textContent.length > 0) {
-          this.callbacks.onTextChunk(response.textContent)
-        }
 
         for (let i = 0; i < response.toolCalls.length; i++) {
           if (this.isCancelled) {
@@ -222,11 +231,11 @@ export class AgentOrchestrator {
       const httpRequest: http.HttpRequest = http.createHttp()
       const toolsSchema: Object[] = ToolRegistry.getToolsSchema()
 
-      httpRequest.requestInStream(API_URL, {
+      httpRequest.requestInStream(AppConstants.AI_PROXY_URL, {
         method: http.RequestMethod.POST,
         header: {
           'Content-Type': 'application/json',
-          'Authorization': `Bearer ${API_KEY}`,
+          'X-Proxy-Key': AppConstants.AI_PROXY_KEY,
           'Accept': 'text/event-stream'
         },
         extraData: JSON.stringify({
@@ -271,10 +280,12 @@ export class AgentOrchestrator {
           const firstChoice: Record<string, Object> = choices[0] as Record<string, Object>
           const message: Record<string, Object> = firstChoice['message'] as Record<string, Object>
           const content: string = (message['content'] as string) || ''
+          const reasoning: string = (message['reasoning_content'] as string) || ''
           const toolCalls: Object[] | undefined = message['tool_calls'] as Object[] | undefined
 
           const result: AgentResponse = {
             textContent: content,
+            reasoningContent: reasoning,
             toolCalls: toolCalls ? this.parseToolCalls(toolCalls) : []
           }
           httpRequest.destroy()
@@ -294,6 +305,7 @@ export class AgentOrchestrator {
       const toolsSchema: Object[] = ToolRegistry.getToolsSchema()
 
       let fullContent: string = ''
+      let fullReasoning: string = ''
       let toolCallsMap: Record<number, ToolCallBuilder> = {}
       let toolCallsNextIndex: number = 0
       let buffer: string = ''
@@ -333,6 +345,10 @@ export class AgentOrchestrator {
               const textChunk: string = delta['content'] as string
               fullContent += textChunk
               this.callbacks.onTextChunk(textChunk)
+            }
+
+            if (delta['reasoning_content']) {
+              fullReasoning += delta['reasoning_content'] as string
             }
 
             const deltaToolCalls: Object[] | undefined = delta['tool_calls'] as Object[] | undefined
@@ -408,17 +424,18 @@ export class AgentOrchestrator {
 
         const result: AgentResponse = {
           textContent: fullContent,
+          reasoningContent: fullReasoning,
           toolCalls: toolCalls
         }
         httpRequest.destroy()
         resolve(result)
       })
 
-      httpRequest.requestInStream(API_URL, {
+      httpRequest.requestInStream(AppConstants.AI_PROXY_URL, {
         method: http.RequestMethod.POST,
         header: {
           'Content-Type': 'application/json',
-          'Authorization': `Bearer ${API_KEY}`,
+          'X-Proxy-Key': AppConstants.AI_PROXY_KEY,
           'Accept': 'text/event-stream'
         },
         extraData: JSON.stringify({
@@ -457,10 +474,27 @@ export class AgentOrchestrator {
     }
     return result
   }
+
+  private toApiToolCalls(toolCalls: ToolCallInfo[]): ApiToolCall[] {
+    const result: ApiToolCall[] = []
+    for (let i = 0; i < toolCalls.length; i++) {
+      const tc: ToolCallInfo = toolCalls[i]
+      result.push({
+        id: tc.id,
+        type: 'function',
+        function: {
+          name: tc.name,
+          arguments: tc.arguments
+        }
+      })
+    }
+    return result
+  }
 }
 
 interface AgentResponse {
   textContent: string
+  reasoningContent: string
   toolCalls: ToolCallInfo[]
 }
 

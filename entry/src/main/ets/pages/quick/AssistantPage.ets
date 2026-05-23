@@ -657,8 +657,10 @@ struct AssistantPage {
             isError: false
           };
           self.displayMessages = updated;
-          self.scrollToBottom();
+        } else {
+          self.displayMessages = [...self.displayMessages, { role: 'assistant', content: chunk, isError: false }];
         }
+        self.scrollToBottom();
       },
       onError: (error: string) => {
         self.isLoading = false;
@@ -887,8 +889,12 @@ struct AssistantPage {
         .borderRadius(20)
         .padding({ left: 14, right: 14, top: 8, bottom: 8 })
         .enabled(!this.isLoading)
+        .enterKeyType(EnterKeyType.Send)
         .onChange((value: string) => {
           this.inputText = value;
+        })
+        .onSubmit(() => {
+          this.sendMessage();
         })
 
       Button() {

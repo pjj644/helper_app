@@ -88,6 +88,7 @@ interface GpaResult {
 }
 
 interface ScheduleItemResult {
+  id: string
   title: string
   date: string
   timeRange: string
@@ -441,6 +442,7 @@ export class ToolExecutor {
     for (let i = 0; i < filteredEvents.length; i++) {
       const evt: ScheduleEvent = filteredEvents[i]
       const item: ScheduleItemResult = {
+        id: evt.id,
         title: evt.title,
         date: evt.date,
         timeRange: evt.timeRange || ScheduleUtils.formatTimeRange(evt.startTime || '', evt.endTime || ''),
