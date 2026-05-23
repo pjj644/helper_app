@@ -182,14 +182,9 @@ struct AssistantPage {
   @State showSidePanel: boolean = false;
   @State showDeleteDialog: boolean = false;
   @State pendingDeleteSessionId: string = '';
-  @State showConfirmDialog: boolean = false;
-  @State confirmToolName: string = '';
-  @State confirmToolArgs: string = '';
-  @State confirmRiskLevel: string = 'low';
   @StorageLink(ThemeManager.THEME_STORAGE_KEY) isDarkMode: boolean = false;
   private scroller: Scroller = new Scroller();
   private dotTimer: number = -1;
-  private confirmResolve: ((value: boolean) => void) | null = null;
   private currentOrchestrator: AgentOrchestrator | null = null;
 
   aboutToAppear(): void {
@@ -575,20 +570,34 @@ struct AssistantPage {
 
   private requestConfirmation(toolName: string, args: string): Promise<boolean> {
     return new Promise<boolean>((resolve: (value: boolean) => void) => {
-      this.confirmToolName = toolName;
-      this.confirmToolArgs = args;
-      this.confirmRiskLevel = ToolRegistry.getRiskLevel(toolName);
-      this.confirmResolve = resolve;
-      this.showConfirmDialog = true;
-    });
-  }
+      const displayName: string = this.getToolDisplayName(toolName);
+      const riskLevel: string = ToolRegistry.getRiskLevel(toolName);
+      let message: string = `AI助手请求执行：${displayName}`;
+      if (riskLevel === 'high') {
+        message += '\n\n⚠️ 此操作涉及数据变更，请谨慎确认';
+      }
+      if (args.length > 0) {
+        const argsPreview: string = args.length > 300 ? args.substring(0, 300) + '...' : args;
+        message += `\n\n参数：${argsPreview}`;
+      }
 
-  private onConfirmDialogResult(confirmed: boolean): void {
-    this.showConfirmDialog = false;
-    if (this.confirmResolve) {
-      this.confirmResolve(confirmed);
-      this.confirmResolve = null;
-    }
+      AlertDialog.show({
+        title: '操作确认',
+        message: message,
+        autoCancel: false,
+        alignment: DialogAlignment.Center,
+        primaryButton: {
+          value: '拒绝',
+          fontColor: this.isDarkMode ? '#CCCCCC' : '#666666',
+          action: () => { resolve(false); }
+        },
+        secondaryButton: {
+          value: '允许',
+          fontColor: riskLevel === 'high' ? '#FF9500' : '#007AFF',
+          action: () => { resolve(true); }
+        }
+      });
+    });
   }
 
   private sendMessage(): void {
@@ -1096,74 +1105,6 @@ struct AssistantPage {
     })
   }
 
-  @Builder
-  private ConfirmDialogBuilder(): void {
-    Column() {
-      Column() {
-        Text('操作确认')
-          .fontSize(18)
-          .fontWeight(FontWeight.Bold)
-          .fontColor(ThemeManager.getTextPrimaryColor())
-          .margin({ bottom: 12 })
-
-        Text(`AI助手请求执行操作：${this.getToolDisplayName(this.confirmToolName)}`)
-          .fontSize(15)
-          .fontColor(ThemeManager.getTextPrimaryColor())
-          .margin({ bottom: 8 })
-
-        if (this.confirmRiskLevel === 'high') {
-          Text('⚠️ 此操作涉及数据变更，请谨慎确认')
-            .fontSize(13)
-            .fontColor('#FF9500')
-            .margin({ bottom: 8 })
-        }
-
-        if (this.confirmToolArgs.length > 0) {
-          Text(this.confirmToolArgs.length > 300 ? this.confirmToolArgs.substring(0, 300) + '...' : this.confirmToolArgs)
-            .fontSize(13)
-            .fontColor(ThemeManager.getTextTertiaryColor())
-            .margin({ bottom: 16 })
-            .maxLines(5)
-            .textOverflow({ overflow: TextOverflow.Ellipsis })
-        }
-
-        Row({ space: 12 }) {
-          Button('拒绝')
-            .layoutWeight(1)
-            .height(44)
-            .fontSize(16)
-            .fontColor(ThemeManager.getTextPrimaryColor())
-            .backgroundColor(ThemeManager.getCardColor())
-            .borderRadius(12)
-            .onClick(() => {
-              this.onConfirmDialogResult(false);
-            })
-
-          Button('允许')
-            .layoutWeight(1)
-            .height(44)
-            .fontSize(16)
-            .fontColor('#FFFFFF')
-            .backgroundColor(this.confirmRiskLevel === 'high' ? '#FF9500' : '#007AFF')
-            .borderRadius(12)
-            .onClick(() => {
-              this.onConfirmDialogResult(true);
-            })
-        }
-        .width('100%')
-      }
-      .width('85%')
-      .padding(24)
-      .borderRadius(20)
-      .backgroundColor(ThemeManager.getBackgroundSecondaryColor())
-    }
-    .width('100%')
-    .height('100%')
-    .justifyContent(FlexAlign.Center)
-    .alignItems(HorizontalAlign.Center)
-    .backgroundColor('rgba(0, 0, 0, 0.4)')
-  }
-
   build() {
     Column() {
       this.TitleBarBuilder()
@@ -1225,16 +1166,6 @@ struct AssistantPage {
         console.info('[AI Debug] delete dialog onDisappear');
         this.showDeleteDialog = false;
         this.pendingDeleteSessionId = '';
-      }
-    })
-    .bindContentCover(this.showConfirmDialog, this.ConfirmDialogBuilder(), {
-      modalTransition: ModalTransition.NONE,
-      backgroundColor: Color.Transparent,
-      onDisappear: () => {
-        if (this.confirmResolve) {
-          this.confirmResolve(false);
-          this.confirmResolve = null;
-        }
       }
     })
   }
