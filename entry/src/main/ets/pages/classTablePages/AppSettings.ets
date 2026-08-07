@@ -17,6 +17,7 @@ import { AppConstants, RouterConstants } from '../../common/constants/AppConstan
 import { ReminderService } from '../../service/ReminderService';
 import { ScheduleService } from '../../service/ScheduleService';
 import { LoadingOverlay } from '../../components/LoadingOverlay';
+import { SettingsRepository } from '../../repository/SettingsRepository';
 
 @Entry
 @Component
@@ -59,6 +60,7 @@ struct AppSettings {
 
   @State notificationEnabled: boolean = true;
   @State autoUpdateEnabled: boolean = false;
+  @State agentBackendUrl: string = '';
 
   private appSettings: UISettings = UISettings.getInstance();
   private featureDetector: FeatureDetector = FeatureDetector.getInstance();
@@ -72,6 +74,7 @@ struct AppSettings {
     this.loadAnimationSettings();
     this.loadMaterialSettings();
     this.loadOtherSettings();
+    this.loadAgentBackendUrl();
   }
 
   onPageShow(): void {
@@ -131,6 +134,14 @@ struct AppSettings {
   private loadOtherSettings(): void {
     this.notificationEnabled = PreferencesUtil.getInstance().getBoolean('notification_enabled', true);
     this.autoUpdateEnabled = PreferencesUtil.getInstance().getBoolean('auto_update_enabled', false);
+  }
+
+  private async loadAgentBackendUrl(): Promise<void> {
+    try {
+      this.agentBackendUrl = await SettingsRepository.getAgentBackendUrl(getContext(this));
+    } catch (error) {
+      this.agentBackendUrl = AppConstants.AI_AGENT_URL;
+    }
   }
 
   private updateMaterialLevelText(): void {
@@ -276,6 +287,12 @@ struct AppSettings {
             AnimatedCard({ delay: 80 }) {
               ImmersiveLightWrapper({ radius: 16, lightIntensity: 2.5 }) {
                 this.SyncCard()
+              }
+            }
+
+            AnimatedCard({ delay: 120 }) {
+              ImmersiveLightWrapper({ radius: 16, lightIntensity: 2.5 }) {
+                this.AgentBackendCard()
               }
             }
 
@@ -461,6 +478,46 @@ struct AppSettings {
         .onClick(() => this.downloadFromCloud())
       }
       .width('100%')
+    }
+    .width('100%')
+    .padding(16)
+  }
+
+  @Builder AgentBackendCard() {
+    Column({ space: 0 }) {
+      Row() {
+        Text('助手后端')
+          .fontSize(18)
+          .fontWeight(FontWeight.Bold)
+          .fontColor($r('app.color.text_primary'))
+      }
+      .width('100%')
+      .padding({ bottom: 16 })
+
+      Column({ space: 4 }) {
+        Text('后端地址')
+          .fontSize(15)
+          .fontColor($r('app.color.text_primary'))
+        Text('本地 LangGraph 后端的局域网地址（电脑 IP:端口）。AI 助手依赖此地址，需与电脑在同一 WiFi。')
+          .fontSize(12)
+          .fontColor($r('app.color.text_tertiary'))
+      }
+      .width('100%')
+      .alignItems(HorizontalAlign.Start)
+      .padding({ bottom: 8 })
+
+      TextInput({ text: this.agentBackendUrl, placeholder: 'http://192.168.1.100:3000' })
+        .width('100%')
+        .height(48)
+        .fontSize(14)
+        .fontColor($r('app.color.text_primary'))
+        .placeholderColor($r('app.color.text_tertiary'))
+        .backgroundColor($r('app.color.button_background'))
+        .borderRadius(10)
+        .onChange((value: string) => {
+          this.agentBackendUrl = value;
+          SettingsRepository.saveAgentBackendUrl(getContext(this), value);
+        })
     }
     .width('100%')
     .padding(16)

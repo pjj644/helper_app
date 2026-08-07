@@ -57,4 +57,18 @@ export class SettingsRepository {
       return [];
     }
   }
+
+  static async getAgentBackendUrl(context: Object): Promise<string> {
+    const abilityContext = ContextUtils.getAbilityContext(context);
+    const pref = await preferences.getPreferences(abilityContext, AppConstants.COURSE_TABLE_PREF_NAME);
+    const url: string = (await pref.get(AppConstants.SETTING_AGENT_BACKEND_URL_KEY, AppConstants.AI_AGENT_URL)) as string;
+    return url && url.length > 0 ? url : AppConstants.AI_AGENT_URL;
+  }
+
+  static async saveAgentBackendUrl(context: Object, url: string): Promise<void> {
+    const abilityContext = ContextUtils.getAbilityContext(context);
+    const pref = await preferences.getPreferences(abilityContext, AppConstants.COURSE_TABLE_PREF_NAME);
+    await pref.put(AppConstants.SETTING_AGENT_BACKEND_URL_KEY, url);
+    await pref.flush();
+  }
 }

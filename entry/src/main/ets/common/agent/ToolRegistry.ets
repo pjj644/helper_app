@@ -233,35 +233,6 @@ export class ToolRegistry {
     return tools
   }
 
-  static getToolsSchema(): ToolSchemaItem[] {
-    const result: ToolSchemaItem[] = []
-    for (let i = 0; i < ToolRegistry.tools.length; i++) {
-      const tool: ToolDefinition = ToolRegistry.tools[i]
-      const properties: Record<string, ToolParamDef> = {}
-      const paramKeys: string[] = Object.keys(tool.parameters)
-      for (let j = 0; j < paramKeys.length; j++) {
-        const key: string = paramKeys[j]
-        properties[key] = tool.parameters[key]
-      }
-      const paramsDef: ToolParametersDef = {
-        type: 'object',
-        properties: properties,
-        required: tool.required
-      }
-      const funcDef: ToolFunctionDef = {
-        name: tool.name,
-        description: tool.description,
-        parameters: paramsDef
-      }
-      const schemaItem: ToolSchemaItem = {
-        type: 'function',
-        function: funcDef
-      }
-      result.push(schemaItem)
-    }
-    return result
-  }
-
   static getToolDefinition(name: string): ToolDefinition | undefined {
     for (let i = 0; i < ToolRegistry.tools.length; i++) {
       if (ToolRegistry.tools[i].name === name) {

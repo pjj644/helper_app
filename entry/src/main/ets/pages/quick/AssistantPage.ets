@@ -3,7 +3,7 @@ import { ThemeManager } from '../../common/utils/ThemeManager';
 import { AppConstants } from '../../common/constants/AppConstants';
 import { ToolRegistry } from '../../common/agent/ToolRegistry';
 import { ToolExecutor } from '../../common/agent/ToolExecutor';
-import { AgentOrchestrator, AgentCallbacks, AgentMessage } from '../../common/agent/AgentOrchestrator';
+import { BackendAgentClient, AgentCallbacks, AgentMessage } from '../../common/agent/BackendAgentClient';
 
 const MAX_HISTORY_ROUNDS: number = 10;
 const SYSTEM_PROMPT: string =
@@ -185,7 +185,7 @@ struct AssistantPage {
   @StorageLink(ThemeManager.THEME_STORAGE_KEY) isDarkMode: boolean = false;
   private scroller: Scroller = new Scroller();
   private dotTimer: number = -1;
-  private currentOrchestrator: AgentOrchestrator | null = null;
+  private currentClient: BackendAgentClient | null = null;
 
   aboutToAppear(): void {
     this.dotTimer = setInterval(() => {
@@ -621,11 +621,6 @@ struct AssistantPage {
 
     this.trimHistory();
 
-    let systemContent: string = SYSTEM_PROMPT;
-    if (this.needsDetailedContext(userInput)) {
-      systemContent = SYSTEM_PROMPT + '\n\n以下是本App详细功能文档，请据此回答：\n' + APP_KNOWLEDGE;
-    }
-
     const context: Context = getContext(this);
     const executor: ToolExecutor = new ToolExecutor(context);
     const self = this;
@@ -700,15 +695,15 @@ struct AssistantPage {
       }
     };
 
-    const orchestrator: AgentOrchestrator = new AgentOrchestrator(executor, callbacks);
-    this.currentOrchestrator = orchestrator;
+    const client: BackendAgentClient = new BackendAgentClient(context, executor, callbacks);
+    this.currentClient = client;
 
     const history: AgentMessage[] = [];
     for (let i = 0; i < this.messages.length; i++) {
       history.push({ role: this.messages[i].role, content: this.messages[i].content });
     }
 
-    orchestrator.runStream(systemContent, history);
+    client.run(this.currentSessionId, history);
   }
 
   private findLastAssistantMessage(): DisplayMessage | undefined {
