@@ -5,13 +5,15 @@ import { ScheduleService } from '../../service/ScheduleService'
 import { SyncService, SyncResult, SyncAllResult, DownloadAllResult } from '../../service/SyncService'
 import { AuthService } from '../../service/AuthService'
 import { ReminderService } from '../../service/ReminderService'
+import { CalendarKitReminderService, CalendarEventSummary } from '../../service/CalendarKitReminderService'
 import { ScheduleEvent, ScheduleUtils, ScheduleEventType } from '../../model/ScheduleModel'
-import { Course, SECTION_TIMES } from '../../model/classTableModel/CourseModel'
-import { getCurrentWeek } from '../../model/classTableModel/CourseModel'
+import { Course, SECTION_TIMES, getCurrentWeek, getWeekForDate } from '../../model/classTableModel/CourseModel'
 import { ExamItem } from '../../model/classTableModel/ExamModel'
 import { GradeItem } from '../../model/GradeModel'
+import { calculateSemesterId, getSemesterLabelById } from '../../model/classTableModel/ExamAccessRules'
 import { AppConstants, RouterConstants } from '../constants/AppConstants'
 import { router } from '@kit.ArkUI'
+import { common } from '@kit.AbilityKit'
 
 export interface ToolResult {
   success: boolean
@@ -183,6 +185,86 @@ interface NavigateResult {
   message: string
 }
 
+interface CurrentDatetimeResult {
+  date: string
+  time: string
+  dayOfWeek: number
+  dayOfWeekLabel: string
+  currentWeek: number
+  totalWeeks: number
+  semesterId: number
+  semesterLabel: string
+}
+
+interface CoursesByDateResult {
+  date: string
+  dayOfWeek: number
+  week: number
+  count: number
+  courses: CourseItem[]
+}
+
+interface CourseSessionItem {
+  dayOfWeek: number
+  dayLabel: string
+  time: string
+  room: string
+  teacher: string
+  weeks: number[]
+}
+
+interface CourseByNameResult {
+  courseName: string
+  matchCount: number
+  sessions: CourseSessionItem[]
+}
+
+interface CalendarEventItem {
+  id: number
+  title: string
+  startTime: number
+  endTime: number
+  location: string
+}
+
+interface CalendarEventsResult {
+  count: number
+  events: CalendarEventItem[]
+}
+
+interface AddToCalendarResult {
+  message: string
+  scheduleEventId: string
+  calendarEventId: number
+  calendarAdded: boolean
+}
+
+interface AddExamToCalendarResult {
+  message: string
+  courseName: string
+  examDate: string
+  examTimeRange: string
+  calendarEventId: number
+  calendarAdded: boolean
+}
+
+interface AddCourseToCalendarResult {
+  message: string
+  date: string
+  addedCount: number
+  calendarEventIds: number[]
+}
+
+interface RemoveCalendarEventResult {
+  message: string
+  calendarEventId: number
+}
+
+interface UpdateScheduleResult {
+  message: string
+  eventId: string
+}
+
 export class ToolExecutor {
   private context: Context
 
@@ -261,6 +343,26 @@ export class ToolExecutor {
           return await this.refreshReminders()
         case 'navigate_to_page':
           return this.navigateToPage(args)
+        case 'get_current_datetime':
+          return await this.getCurrentDatetime()
+        case 'query_courses_by_date':
+          return await this.queryCoursesByDate(args)
+        case 'query_tomorrow_courses':
+          return await this.queryTomorrowCourses()
+        case 'query_course_by_name':
+          return await this.queryCourseByName(args)
+        case 'list_calendar_events':
+          return await this.listCalendarEvents(args)
+        case 'add_to_calendar':
+          return await this.addToCalendar(args)
+        case 'add_exam_to_calendar':
+          return await this.addExamToCalendar(args)
+        case 'add_course_to_calendar':
+          return await this.addCourseToCalendar(args)
+        case 'remove_calendar_event':
+          return await this.removeCalendarEvent(args)
+        case 'update_schedule':
+          return await this.updateSchedule(args)
         default:
           return { success: false, data: `未知工具: ${toolName}` }
       }
@@ -635,11 +737,498 @@ export class ToolExecutor {
       case 'settings':
         route = RouterConstants.PAGE_SETTINGS
         break
+      case 'course_import':
+        route = RouterConstants.PAGE_COURSE_IMPORT
+        break
+      case 'exam_import':
+        route = RouterConstants.PAGE_EXAM_IMPORT
+        break
+      case 'grade_import':
+        route = 'pages/gradePages/GradeImport'
+        break
+      case 'assistant':
+        route = RouterConstants.PAGE_ASSISTANT
+        break
+      case 'home':
+        route = RouterConstants.PAGE_INDEX
+        break
       default:
         return { success: false, data: `未知页面: ${page}` }
     }
     router.pushUrl({ url: route })
     const result: NavigateResult = { message: `正在导航到${page}页面` }
+    return { success: true, data: JSON.stringify(result) }
+  }
+
+  private dayLabel(dayOfWeek: number): string {
+    const labels: string[] = ['', '周一', '周二', '周三', '周四', '周五', '周六', '周日']
+    return labels[dayOfWeek] || '未知'
+  }
+
+  private parseDate(dateStr: string): Date | null {
+    const parts: string[] = dateStr.split('-')
+    if (parts.length !== 3) {
+      return null
+    }
+    return new Date(
+      Number.parseInt(parts[0], 10),
+      Number.parseInt(parts[1], 10) - 1,
+      Number.parseInt(parts[2], 10)
+    )
+  }
+
+  private async ensureCalendarPermission(): Promise<boolean> {
+    const uiContext: common.UIAbilityContext = this.context as common.UIAbilityContext
+    const granted: boolean = await CalendarKitReminderService.checkCalendarPermission(uiContext)
+    if (granted) {
+      return true
+    }
+    return await CalendarKitReminderService.requestCalendarPermission(uiContext)
+  }
+
+  private async getCurrentDatetime(): Promise<ToolResult> {
+    const now: Date = new Date()
+    const date: string = ScheduleUtils.formatDate(now.getFullYear(), now.getMonth() + 1, now.getDate())
+    const time: string = `${ScheduleUtils.twoDigit(now.getHours())}:${ScheduleUtils.twoDigit(now.getMinutes())}`
+    const dayOfWeek: number = now.getDay() || 7
+    const currentWeek: number = getCurrentWeek()
+    await CourseService.loadCourses(this.context)
+    const totalWeeks: number = CourseService.getMaxWeekNumber()
+    const semesterId: number = calculateSemesterId()
+    const semesterLabel: string = getSemesterLabelById(semesterId)
+    const result: CurrentDatetimeResult = {
+      date: date,
+      time: time,
+      dayOfWeek: dayOfWeek,
+      dayOfWeekLabel: this.dayLabel(dayOfWeek),
+      currentWeek: currentWeek,
+      totalWeeks: totalWeeks,
+      semesterId: semesterId,
+      semesterLabel: semesterLabel,
+    }
+    return { success: true, data: JSON.stringify(result) }
+  }
+
+  private async queryCoursesByDate(args: Record<string, Object>): Promise<ToolResult> {
+    const dateStr: string = this.getStringArg(args, 'date')
+    if (dateStr.length === 0) {
+      return { success: false, data: '缺少date参数，格式YYYY-MM-DD' }
+    }
+    const target: Date | null = this.parseDate(dateStr)
+    if (!target) {
+      return { success: false, data: `日期格式错误: ${dateStr}，应为YYYY-MM-DD` }
+    }
+    const dayOfWeek: number = target.getDay() || 7
+    const weekNumber: number = getWeekForDate(target)
+    await CourseService.loadCourses(this.context)
+    const courses: Course[] = CourseService.getCoursesForDayAndWeek(dayOfWeek, weekNumber)
+    if (courses.length === 0) {
+      return { success: true, data: `${dateStr}（第${weekNumber}周 ${this.dayLabel(dayOfWeek)}）没有课程安排` }
+    }
+    const items: CourseItem[] = []
+    for (let i = 0; i < courses.length; i++) {
+      const c: Course = courses[i]
+      items.push({
+        name: c.name,
+        time: this.formatSectionTime(c.time.startSection, c.time.duration),
+        room: c.roomName,
+        teacher: c.teacherName,
+      })
+    }
+    const result: CoursesByDateResult = {
+      date: dateStr,
+      dayOfWeek: dayOfWeek,
+      week: weekNumber,
+      count: courses.length,
+      courses: items,
+    }
+    return { success: true, data: JSON.stringify(result) }
+  }
+
+  private async queryTomorrowCourses(): Promise<ToolResult> {
+    const tomorrow: Date = new Date()
+    tomorrow.setDate(tomorrow.getDate() + 1)
+    const dayOfWeek: number = tomorrow.getDay() || 7
+    const weekNumber: number = getWeekForDate(tomorrow)
+    const dateStr: string = ScheduleUtils.formatDate(tomorrow.getFullYear(), tomorrow.getMonth() + 1, tomorrow.getDate())
+    await CourseService.loadCourses(this.context)
+    const courses: Course[] = CourseService.getCoursesForDayAndWeek(dayOfWeek, weekNumber)
+    if (courses.length === 0) {
+      return { success: true, data: `明天(${dateStr} 第${weekNumber}周 ${this.dayLabel(dayOfWeek)})没有课程安排` }
+    }
+    const items: CourseItem[] = []
+    for (let i = 0; i < courses.length; i++) {
+      const c: Course = courses[i]
+      items.push({
+        name: c.name,
+        time: this.formatSectionTime(c.time.startSection, c.time.duration),
+        room: c.roomName,
+        teacher: c.teacherName,
+      })
+    }
+    const result: CoursesByDateResult = {
+      date: dateStr,
+      dayOfWeek: dayOfWeek,
+      week: weekNumber,
+      count: courses.length,
+      courses: items,
+    }
+    return { success: true, data: JSON.stringify(result) }
+  }
+
+  private async queryCourseByName(args: Record<string, Object>): Promise<ToolResult> {
+    const courseName: string = this.getStringArg(args, 'courseName')
+    if (courseName.length === 0) {
+      return { success: false, data: '缺少courseName参数' }
+    }
+    const allCourses: Course[] = await CourseService.loadCourses(this.context)
+    const keyword: string = courseName.toLowerCase()
+    const matched: Course[] = []
+    for (let i = 0; i < allCourses.length; i++) {
+      if (allCourses[i].name.toLowerCase().includes(keyword)) {
+        matched.push(allCourses[i])
+      }
+    }
+    if (matched.length === 0) {
+      return { success: true, data: `未找到包含"${courseName}"的课程` }
+    }
+    const sessions: CourseSessionItem[] = []
+    for (let i = 0; i < matched.length; i++) {
+      const c: Course = matched[i]
+      const weeks: number[] = []
+      const vw: string = c.validWeeks || ''
+      for (let w = 1; w < vw.length; w++) {
+        if (vw.charAt(w) === '1') {
+          weeks.push(w)
+        }
+      }
+      sessions.push({
+        dayOfWeek: c.time.dayOfWeek,
+        dayLabel: this.dayLabel(c.time.dayOfWeek),
+        time: this.formatSectionTime(c.time.startSection, c.time.duration),
+        room: c.roomName,
+        teacher: c.teacherName,
+        weeks: weeks,
+      })
+    }
+    const result: CourseByNameResult = {
+      courseName: courseName,
+      matchCount: matched.length,
+      sessions: sessions,
+    }
+    return { success: true, data: JSON.stringify(result) }
+  }
+
+  private async listCalendarEvents(args: Record<string, Object>): Promise<ToolResult> {
+    const now: Date = new Date()
+    const todayStart: number = new Date(now.getFullYear(), now.getMonth(), now.getDate()).getTime()
+    const startStr: string = this.getStringArg(args, 'startDate')
+    const endStr: string = this.getStringArg(args, 'endDate')
+    let startMs: number = todayStart
+    let endMs: number = todayStart + 30 * 24 * 60 * 60 * 1000
+    if (startStr.length > 0) {
+      const d: Date | null = this.parseDate(startStr)
+      if (d) {
+        startMs = d.getTime()
+      }
+    }
+    if (endStr.length > 0) {
+      const d: Date | null = this.parseDate(endStr)
+      if (d) {
+        endMs = d.getTime()
+      }
+    }
+    const hasPerm: boolean = await this.ensureCalendarPermission()
+    if (!hasPerm) {
+      return { success: false, data: '未授予日历权限，无法读取系统日历' }
+    }
+    const events: CalendarEventSummary[] = await CalendarKitReminderService.listEvents(this.context, startMs, endMs)
+    const items: CalendarEventItem[] = []
+    for (let i = 0; i < events.length; i++) {
+      items.push({
+        id: events[i].id,
+        title: events[i].title,
+        startTime: events[i].startTime,
+        endTime: events[i].endTime,
+        location: events[i].location,
+      })
+    }
+    const result: CalendarEventsResult = { count: items.length, events: items }
+    return { success: true, data: JSON.stringify(result) }
+  }
+
+  private async addToCalendar(args: Record<string, Object>): Promise<ToolResult> {
+    const title: string = this.getStringArg(args, 'title')
+    const date: string = this.getStringArg(args, 'date')
+    const startTime: string = this.getStringArg(args, 'startTime')
+    const endTime: string = this.getStringArg(args, 'endTime')
+    if (title.length === 0 || date.length === 0 || startTime.length === 0 || endTime.length === 0) {
+      return { success: false, data: '缺少必要参数：title/date/startTime/endTime' }
+    }
+    const remindMinutes: number = this.getNumberArg(args, 'remindMinutesBefore', 30)
+    const location: string = this.getStringArg(args, 'location')
+    const description: string = this.getStringArg(args, 'description')
+    const typeStr: string = this.getStringArg(args, 'type', 'custom')
+    const eventType: ScheduleEventType = typeStr === 'assignment' ? 'assignment' : 'custom'
+    const event: ScheduleEvent = {
+      id: '',
+      title: title,
+      date: date,
+      timeRange: `${startTime}-${endTime}`,
+      startTime: startTime,
+      endTime: endTime,
+      location: location,
+      type: eventType,
+      color: ScheduleUtils.getTypeColor(eventType),
+      sourceId: '',
+      description: description,
+      createdAt: Date.now(),
+      remindMinutes: remindMinutes,
+      addToCalendar: true,
+    }
+    await ScheduleService.saveSchedule(this.context, event)
+    const hasPerm: boolean = await this.ensureCalendarPermission()
+    let calendarAdded: boolean = false
+    let calendarEventId: number = -1
+    if (hasPerm) {
+      calendarEventId = await CalendarKitReminderService.addEventReminder(this.context, event, remindMinutes)
+      if (calendarEventId >= 0) {
+        calendarAdded = true
+        event.calendarEventId = calendarEventId
+        await ScheduleService.updateSchedule(this.context, event)
+      }
+    }
+    const result: AddToCalendarResult = {
+      message: calendarAdded
+        ? '日程已创建并写入系统日历'
+        : (hasPerm ? '日程已创建，但写入系统日历失败' : '日程已创建，但未授予日历权限，未写入系统日历'),
+      scheduleEventId: event.id,
+      calendarEventId: calendarEventId,
+      calendarAdded: calendarAdded,
+    }
+    return { success: calendarAdded, data: JSON.stringify(result) }
+  }
+
+  private async addExamToCalendar(args: Record<string, Object>): Promise<ToolResult> {
+    const courseName: string = this.getStringArg(args, 'courseName')
+    const remindMinutes: number = this.getNumberArg(args, 'remindMinutesBefore', 30)
+    const exams: ExamItem[] = await ExamService.loadExams(this.context)
+    if (exams.length === 0) {
+      return { success: false, data: '暂无考试数据' }
+    }
+    let target: ExamItem | undefined
+    if (courseName.length === 0) {
+      target = ExamService.getNextExam(exams)
+    } else {
+      const keyword: string = courseName.toLowerCase()
+      const upcoming: ExamItem[] = ExamService.getUpcomingExams(exams)
+      for (let i = 0; i < upcoming.length; i++) {
+        if (upcoming[i].courseName.toLowerCase().includes(keyword)) {
+          target = upcoming[i]
+          break
+        }
+      }
+      if (!target) {
+        for (let i = 0; i < exams.length; i++) {
+          if (exams[i].courseName.toLowerCase().includes(keyword)) {
+            target = exams[i]
+            break
+          }
+        }
+      }
+    }
+    if (!target) {
+      return { success: false, data: courseName.length > 0 ? `未找到包含"${courseName}"的考试` : '暂无即将到来的考试' }
+    }
+    const hasPerm: boolean = await this.ensureCalendarPermission()
+    if (!hasPerm) {
+      return { success: false, data: '未授予日历权限，无法写入系统日历' }
+    }
+    const startPart: string = target.examTimeRange && target.examTimeRange.length > 0
+      ? target.examTimeRange.split('-')[0].trim()
+      : '9:00'
+    const event: ScheduleEvent = {
+      id: '',
+      title: `${target.courseName} 考试`,
+      date: target.examDate,
+      timeRange: target.examTimeRange,
+      startTime: startPart,
+      endTime: '',
+      location: target.examLocation,
+      type: 'exam' as ScheduleEventType,
+      color: ScheduleUtils.getTypeColor('exam'),
+      sourceId: target.courseNo,
+      description: target.seatNo || '',
+      createdAt: Date.now(),
+      remindMinutes: remindMinutes,
+      addToCalendar: true,
+    }
+    const calendarEventId: number = await CalendarKitReminderService.addEventReminder(this.context, event, remindMinutes)
+    const calendarAdded: boolean = calendarEventId >= 0
+    const result: AddExamToCalendarResult = {
+      message: calendarAdded ? '考试已写入系统日历' : '写入系统日历失败',
+      courseName: target.courseName,
+      examDate: target.examDate,
+      examTimeRange: target.examTimeRange,
+      calendarEventId: calendarEventId,
+      calendarAdded: calendarAdded,
+    }
+    return { success: calendarAdded, data: JSON.stringify(result) }
+  }
+
+  private async addCourseToCalendar(args: Record<string, Object>): Promise<ToolResult> {
+    const courseName: string = this.getStringArg(args, 'courseName')
+    const dateStr: string = this.getStringArg(args, 'date')
+    const remindMinutes: number = this.getNumberArg(args, 'remindMinutesBefore', 15)
+    const now: Date = new Date()
+    let target: Date
+    if (dateStr.length > 0) {
+      const parsed: Date | null = this.parseDate(dateStr)
+      if (!parsed) {
+        return { success: false, data: `日期格式错误: ${dateStr}，应为YYYY-MM-DD` }
+      }
+      target = parsed
+    } else {
+      target = new Date(now.getFullYear(), now.getMonth(), now.getDate())
+    }
+    const dayOfWeek: number = target.getDay() || 7
+    const weekNumber: number = getWeekForDate(target)
+    const usedDateStr: string = ScheduleUtils.formatDate(target.getFullYear(), target.getMonth() + 1, target.getDate())
+    await CourseService.loadCourses(this.context)
+    let courses: Course[] = CourseService.getCoursesForDayAndWeek(dayOfWeek, weekNumber)
+    if (courseName.length > 0) {
+      const keyword: string = courseName.toLowerCase()
+      const filtered: Course[] = []
+      for (let i = 0; i < courses.length; i++) {
+        if (courses[i].name.toLowerCase().includes(keyword)) {
+          filtered.push(courses[i])
+        }
+      }
+      courses = filtered
+    }
+    if (courses.length === 0) {
+      return { success: true, data: `${usedDateStr} 没有匹配的课程` }
+    }
+    const hasPerm: boolean = await this.ensureCalendarPermission()
+    if (!hasPerm) {
+      return { success: false, data: '未授予日历权限，无法写入系统日历' }
+    }
+    const calendarEventIds: number[] = []
+    for (let i = 0; i < courses.length; i++) {
+      const c: Course = courses[i]
+      const endSection: number = c.time.startSection + c.time.duration - 1
+      const startTime: string = SECTION_TIMES[c.time.startSection - 1]?.startTime || '8:30'
+      const endTime: string = SECTION_TIMES[endSection - 1]?.endTime || '9:15'
+      const event: ScheduleEvent = {
+        id: '',
+        title: c.name,
+        date: usedDateStr,
+        timeRange: `${startTime}-${endTime}`,
+        startTime: startTime,
+        endTime: endTime,
+        location: c.roomName,
+        type: 'course' as ScheduleEventType,
+        color: ScheduleUtils.getTypeColor('course'),
+        sourceId: c.id,
+        description: c.teacherName || '',
+        createdAt: Date.now(),
+        remindMinutes: remindMinutes,
+        addToCalendar: true,
+      }
+      const calId: number = await CalendarKitReminderService.addEventReminder(this.context, event, remindMinutes)
+      if (calId >= 0) {
+        calendarEventIds.push(calId)
+      }
+    }
+    const result: AddCourseToCalendarResult = {
+      message: `已将${calendarEventIds.length}门课程写入系统日历`,
+      date: usedDateStr,
+      addedCount: calendarEventIds.length,
+      calendarEventIds: calendarEventIds,
+    }
+    return { success: calendarEventIds.length > 0, data: JSON.stringify(result) }
+  }
+
+  private async removeCalendarEvent(args: Record<string, Object>): Promise<ToolResult> {
+    const calendarEventId: number = this.getNumberArg(args, 'calendarEventId', -1)
+    if (calendarEventId < 0) {
+      return { success: false, data: '缺少calendarEventId参数' }
+    }
+    const ok: boolean = await CalendarKitReminderService.deleteEvent(this.context, calendarEventId)
+    // 同步清理应用内日程里指向该日历事件的引用
+    try {
+      const allEvents: ScheduleEvent[] = await ScheduleService.loadCustomSchedules(this.context)
+      for (let i = 0; i < allEvents.length; i++) {
+        if (allEvents[i].calendarEventId === calendarEventId) {
+          allEvents[i].calendarEventId = 0
+          await ScheduleService.updateSchedule(this.context, allEvents[i])
+        }
+      }
+    } catch (e) {
+      // ignore cleanup errors
+    }
+    const result: RemoveCalendarEventResult = {
+      message: ok ? '已从系统日历移除' : '移除失败（事件可能已不存在）',
+      calendarEventId: calendarEventId,
+    }
+    return { success: ok, data: JSON.stringify(result) }
+  }
+
+  private async updateSchedule(args: Record<string, Object>): Promise<ToolResult> {
+    const eventId: string = this.getStringArg(args, 'eventId')
+    if (eventId.length === 0) {
+      return { success: false, data: '缺少eventId参数' }
+    }
+    const allEvents: ScheduleEvent[] = await ScheduleService.loadCustomSchedules(this.context)
+    let target: ScheduleEvent | undefined
+    for (let i = 0; i < allEvents.length; i++) {
+      if (allEvents[i].id === eventId) {
+        target = allEvents[i]
+        break
+      }
+    }
+    if (!target) {
+      return { success: false, data: `未找到ID为${eventId}的日程` }
+    }
+    const evt: ScheduleEvent = target
+    const title: string = this.getStringArg(args, 'title')
+    if (title.length > 0) evt.title = title
+    const date: string = this.getStringArg(args, 'date')
+    if (date.length > 0) evt.date = date
+    const startTime: string = this.getStringArg(args, 'startTime')
+    if (startTime.length > 0) evt.startTime = startTime
+    const endTime: string = this.getStringArg(args, 'endTime')
+    if (endTime.length > 0) evt.endTime = endTime
+    if (startTime.length > 0 || endTime.length > 0) {
+      const s: string = evt.startTime || ''
+      const e: string = evt.endTime || ''
+      if (s.length > 0 && e.length > 0) {
+        evt.timeRange = `${s}-${e}`
+      }
+    }
+    const location: string = this.getStringArg(args, 'location')
+    if (location.length > 0) evt.location = location
+    const description: string = this.getStringArg(args, 'description')
+    if (description.length > 0) evt.description = description
+    const typeStr: string = this.getStringArg(args, 'type')
+    if (typeStr === 'custom' || typeStr === 'assignment') {
+      evt.type = typeStr as ScheduleEventType
+      evt.color = ScheduleUtils.getTypeColor(typeStr as ScheduleEventType)
+    }
+    await ScheduleService.updateSchedule(this.context, evt)
+    // 若已关联系统日历事件，同步更新日历
+    if (evt.calendarEventId && evt.calendarEventId > 0) {
+      const hasPerm: boolean = await this.ensureCalendarPermission()
+      if (hasPerm) {
+        const remindMinutes: number = await ReminderService.getEffectiveRemindMinutes(this.context, evt)
+        const newId: number = await CalendarKitReminderService.upsertEventReminder(this.context, evt, remindMinutes)
+        if (newId >= 0) {
+          evt.calendarEventId = newId
+          await ScheduleService.updateSchedule(this.context, evt)
+        }
+      }
+    }
+    const result: UpdateScheduleResult = { message: '日程已更新', eventId: eventId }
     return { success: true, data: JSON.stringify(result) }
   }
 }

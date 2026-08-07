@@ -300,23 +300,28 @@ export class CourseTableModel {
 // 单例实例
 export const courseTableModel = new CourseTableModel();
 
-// 获取当前是第几周
-export function getCurrentWeek(): number {
-  // 2026-2027学年第一学期行课首日为 2026-09-01（周二）。
-  // 周次按周一~周日对齐 validWeeks，故锚定到含 2026-09-01 的那周的周一 2026-08-31。
+// 计算指定日期是第几教学周
+// 2026-2027学年第一学期行课首日为 2026-09-01（周二）。
+// 周次按周一~周日对齐 validWeeks，故锚定到含 2026-09-01 的那周的周一 2026-08-31。
+export function getWeekForDate(date: Date): number {
   const termStart: Date = new Date(2026, 7, 31); // month从0开始，7表示8月
   termStart.setHours(0, 0, 0, 0);
 
-  const now: Date = new Date();
-  now.setHours(0, 0, 0, 0);
+  const d: Date = new Date(date);
+  d.setHours(0, 0, 0, 0);
 
-  const diffMs: number = now.getTime() - termStart.getTime();
+  const diffMs: number = d.getTime() - termStart.getTime();
   if (diffMs < 0) {
     return 1;
   }
 
   const week: number = Math.floor(diffMs / (7 * 24 * 60 * 60 * 1000)) + 1;
   return Math.max(1, week);
+}
+
+// 获取当前是第几周
+export function getCurrentWeek(): number {
+  return getWeekForDate(new Date());
 }
 
 // 日期信息接口

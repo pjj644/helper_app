@@ -224,10 +224,118 @@ export class ToolRegistry {
       {
         name: 'navigate_to_page',
         description: '导航到应用内指定页面',
-        parameters: { 'page': { type: 'string', description: '页面标识：course_table(课表)、exam(考试)、grade(成绩)、schedule(日程)、settings(设置)' } },
+        parameters: { 'page': { type: 'string', description: '页面标识：course_table(课表)、exam(考试)、grade(成绩)、schedule(日程)、settings(设置)、course_import(导入课表)、exam_import(导入考试)、grade_import(导入成绩)、assistant(AI助手)、home(首页)' } },
         required: ['page'],
         requiresConfirmation: false,
         riskLevel: 'low'
+      },
+      {
+        name: 'get_current_datetime',
+        description: '获取当前日期、时间、星期几、第几教学周、当前学期等基础时间信息。涉及"今天/明天/本周/这学期"等相对时间时务必先调用此工具。',
+        parameters: emptyParams,
+        required: [],
+        requiresConfirmation: false,
+        riskLevel: 'low'
+      },
+      {
+        name: 'query_courses_by_date',
+        description: '查询指定日期的课程安排（自动换算教学周与星期）',
+        parameters: { 'date': { type: 'string', description: '日期，格式YYYY-MM-DD' } },
+        required: ['date'],
+        requiresConfirmation: false,
+        riskLevel: 'low'
+      },
+      {
+        name: 'query_tomorrow_courses',
+        description: '查询明天的课程安排',
+        parameters: emptyParams,
+        required: [],
+        requiresConfirmation: false,
+        riskLevel: 'low'
+      },
+      {
+        name: 'query_course_by_name',
+        description: '按课程名查询上课时间、教室、教师及生效周次（支持模糊匹配）',
+        parameters: { 'courseName': { type: 'string', description: '课程名称或关键词' } },
+        required: ['courseName'],
+        requiresConfirmation: false,
+        riskLevel: 'low'
+      },
+      {
+        name: 'list_calendar_events',
+        description: '列出已写入系统日历的本应用事件，默认查询未来30天',
+        parameters: {
+          'startDate': { type: 'string', description: '起始日期YYYY-MM-DD，默认今天' },
+          'endDate': { type: 'string', description: '结束日期YYYY-MM-DD，默认今天+30天' }
+        },
+        required: [],
+        requiresConfirmation: false,
+        riskLevel: 'low'
+      },
+      {
+        name: 'add_to_calendar',
+        description: '创建一条日程并写入系统日历，可设置提前若干分钟提醒',
+        parameters: {
+          'title': { type: 'string', description: '日程标题' },
+          'date': { type: 'string', description: '日期，格式YYYY-MM-DD' },
+          'startTime': { type: 'string', description: '开始时间，格式HH:mm' },
+          'endTime': { type: 'string', description: '结束时间，格式HH:mm' },
+          'remindMinutesBefore': { type: 'number', description: '提前提醒的分钟数，默认30' },
+          'location': { type: 'string', description: '地点，可选' },
+          'description': { type: 'string', description: '描述，可选' },
+          'type': { type: 'string', description: '类型：custom(自定义)或assignment(作业)，默认custom' }
+        },
+        required: ['title', 'date', 'startTime', 'endTime'],
+        requiresConfirmation: true,
+        riskLevel: 'medium'
+      },
+      {
+        name: 'add_exam_to_calendar',
+        description: '把一场考试写入系统日历并设置提前提醒。不传courseName则取最近一场即将到来的考试。',
+        parameters: {
+          'courseName': { type: 'string', description: '课程名称或关键词，不传则取最近一场考试' },
+          'remindMinutesBefore': { type: 'number', description: '提前提醒的分钟数，默认30' }
+        },
+        required: [],
+        requiresConfirmation: true,
+        riskLevel: 'medium'
+      },
+      {
+        name: 'add_course_to_calendar',
+        description: '把课程写入系统日历并设置提前提醒。不传courseName则添加当天全部课程。',
+        parameters: {
+          'courseName': { type: 'string', description: '课程名称或关键词，不传则添加当天全部课程' },
+          'date': { type: 'string', description: '日期YYYY-MM-DD，默认今天' },
+          'remindMinutesBefore': { type: 'number', description: '提前提醒的分钟数，默认15' }
+        },
+        required: [],
+        requiresConfirmation: true,
+        riskLevel: 'medium'
+      },
+      {
+        name: 'remove_calendar_event',
+        description: '从系统日历移除指定事件（按系统日历事件ID）',
+        parameters: { 'calendarEventId': { type: 'number', description: '系统日历事件ID，可通过list_calendar_events获取' } },
+        required: ['calendarEventId'],
+        requiresConfirmation: true,
+        riskLevel: 'medium'
+      },
+      {
+        name: 'update_schedule',
+        description: '编辑已有的应用内日程，修改其字段。若已关联系统日历事件，会同步更新日历。',
+        parameters: {
+          'eventId': { type: 'string', description: '要编辑的日程ID' },
+          'title': { type: 'string', description: '新标题' },
+          'date': { type: 'string', description: '新日期YYYY-MM-DD' },
+          'startTime': { type: 'string', description: '新开始时间HH:mm' },
+          'endTime': { type: 'string', description: '新结束时间HH:mm' },
+          'location': { type: 'string', description: '新地点' },
+          'description': { type: 'string', description: '新描述' },
+          'type': { type: 'string', description: '新类型：custom或assignment' }
+        },
+        required: ['eventId'],
+        requiresConfirmation: true,
+        riskLevel: 'medium'
       }
     ]
     return tools

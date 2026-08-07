@@ -7,6 +7,14 @@ import { ScheduleEvent } from '../model/ScheduleModel';
 const CALENDAR_ACCOUNT_NAME: string = 'HelperAppSchedule';
 const CALENDAR_DISPLAY_NAME: string = '日程提醒';
 
+export interface CalendarEventSummary {
+  id: number;
+  title: string;
+  startTime: number;
+  endTime: number;
+  location: string;
+}
+
 export class CalendarKitReminderService {
   private static calendarMgr: calendarManager.CalendarManager | null = null;
   private static calendar: calendarManager.Calendar | null = null;
@@ -206,6 +214,37 @@ export class CalendarKitReminderService {
     } catch (error) {
       console.error('[CalendarKit] clearAllEvents error:', JSON.stringify(error));
     }
+  }
+
+  static async listEvents(context: Context, startMs: number, endMs: number): Promise<CalendarEventSummary[]> {
+    const result: CalendarEventSummary[] = [];
+    try {
+      const cal = await CalendarKitReminderService.ensureCalendar(context);
+      if (!cal) {
+        return result;
+      }
+      const filter = calendarManager.EventFilter.filterByTime(startMs, endMs);
+      const events = await cal.getEvents(filter);
+      for (let i = 0; i < events.length; i++) {
+        const e = events[i];
+        const loc = e.location;
+        let locationStr: string = '';
+        if (loc) {
+          locationStr = loc.location || '';
+        }
+        result.push({
+          id: e.id || 0,
+          title: e.title || '',
+          startTime: e.startTime || 0,
+          endTime: e.endTime || 0,
+          location: locationStr,
+        });
+      }
+      console.info(`[CalendarKit] listEvents: returned ${result.length} events`);
+    } catch (error) {
+      console.error('[CalendarKit] listEvents error:', JSON.stringify(error));
+    }
+    return result;
   }
 
   static resetInstance(): void {
