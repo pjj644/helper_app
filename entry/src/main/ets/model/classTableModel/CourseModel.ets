@@ -300,10 +300,11 @@ export class CourseTableModel {
 // 单例实例
 export const courseTableModel = new CourseTableModel();
 
-// 获取当前是第几周（示例实现，可根据实际需求修改）
+// 获取当前是第几周
 export function getCurrentWeek(): number {
-  // 需求已固定：2025-2026学年第二学期正式行课日为 2026-03-02（周一）
-  const termStart: Date = new Date(2026, 2, 2); // month从0开始，2表示3月
+  // 2026-2027学年第一学期行课首日为 2026-09-01（周二）。
+  // 周次按周一~周日对齐 validWeeks，故锚定到含 2026-09-01 的那周的周一 2026-08-31。
+  const termStart: Date = new Date(2026, 7, 31); // month从0开始，7表示8月
   termStart.setHours(0, 0, 0, 0);
 
   const now: Date = new Date();

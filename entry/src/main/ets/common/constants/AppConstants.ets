@@ -30,8 +30,9 @@ export class AppConstants {
   static readonly SETTING_SCHEDULE_REMIND_MINUTES_COURSE_KEY: string = 'setting_schedule_remind_minutes_course';
   static readonly SETTING_SCHEDULE_REMIND_MINUTES_CUSTOM_KEY: string = 'setting_schedule_remind_minutes_custom';
   static readonly SETTING_SCHEDULE_REMIND_MINUTES_ASSIGNMENT_KEY: string = 'setting_schedule_remind_minutes_assignment';
-  static readonly SCHOOL_SEMESTER_START: string = '2026-02-23';
-  static readonly SCHOOL_SEMESTER_END: string = '2026-07-05';
+  // 2026-2027学年第一学期（行课首日 2026-09-01 周二；END 为估测放假日，逻辑未使用，可按校历修正）
+  static readonly SCHOOL_SEMESTER_START: string = '2026-09-01';
+  static readonly SCHOOL_SEMESTER_END: string = '2027-01-18';
 
   static readonly EAMS_HOME_URL: string = 'https://eams.uestc.edu.cn/eams/home!index.action';
   static readonly EAMS_GRADE_URL_BASE: string = 'https://eams.uestc.edu.cn/eams/teach/grade/course/person!search.action';

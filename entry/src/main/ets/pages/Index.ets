@@ -71,6 +71,8 @@ struct MainPage {
   private tickTimer: number = -1;
   private model: CourseTableModel = courseTableModel;
   private appSettings: UISettings = UISettings.getInstance();
+  // 记录“无未来考试”日志的上次 breakdown，避免 tick 每 5s 重复打印同一条
+  private lastNoFutureExamKey: string = '';
 
   private tools: ToolItem[] = [
     { title: 'AI 助手', icon: '🤖', color: '#6366F1', route: 'pages/quick/AssistantPage', iconImage: $r('app.media.ic_ai_assistant') },
@@ -363,7 +365,12 @@ struct MainPage {
     if (result.length === 0 && this.exams.length > 0) {
       const zeroTimeCount = this.exams.filter(e => e.beginTime <= 0).length;
       const pastCount = this.exams.filter(e => e.beginTime > 0 && e.beginTime <= now).length;
-      console.info(`Home: 无未来考试 total=${this.exams.length} beginTime=0:${zeroTimeCount} past:${pastCount}`);
+      const key = `${this.exams.length}:${zeroTimeCount}:${pastCount}`;
+      // 仅在 breakdown 变化时打印一次，避免 1s tick 导致日志刷屏
+      if (key !== this.lastNoFutureExamKey) {
+        this.lastNoFutureExamKey = key;
+        console.info(`Home: 无未来考试 total=${this.exams.length} beginTime=0:${zeroTimeCount} past:${pastCount}`);
+      }
     }
     return result;
   }
