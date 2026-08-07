@@ -278,6 +278,7 @@ struct CalendarPage {
           createdAt: evt.createdAt,
           remindMinutes: evt.remindMinutes,
           addToCalendar: evt.addToCalendar,
+          calendarEventId: evt.calendarEventId,
         });
       }
     }
@@ -386,6 +387,7 @@ struct CalendarPage {
       createdAt: event.createdAt,
       remindMinutes: event.remindMinutes || 0,
       addToCalendar: event.addToCalendar,
+      calendarEventId: event.calendarEventId || 0,
     };
 
     this.dialogController = new CustomDialogController({

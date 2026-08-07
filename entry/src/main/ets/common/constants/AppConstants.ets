@@ -75,6 +75,7 @@ export class AppConstants {
   static readonly AI_CHAT_PATH: string = 'api/chat';
   static readonly AI_TOOL_RESULT_PATH: string = 'api/tool-result';
   static readonly SETTING_AGENT_BACKEND_URL_KEY: string = 'setting_agent_backend_url';
+  static readonly SETTING_AI_SHOW_TOOL_CALLS_KEY: string = 'setting_ai_show_tool_calls';
 
   static readonly CONTENT_MAX_LINE: number = 2;
   static readonly MAX_ID: number = 100;

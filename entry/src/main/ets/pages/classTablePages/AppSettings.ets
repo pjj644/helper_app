@@ -61,6 +61,7 @@ struct AppSettings {
   @State notificationEnabled: boolean = true;
   @State autoUpdateEnabled: boolean = false;
   @State agentBackendUrl: string = '';
+  @State showAgentToolCalls: boolean = false;
 
   private appSettings: UISettings = UISettings.getInstance();
   private featureDetector: FeatureDetector = FeatureDetector.getInstance();
@@ -75,6 +76,7 @@ struct AppSettings {
     this.loadMaterialSettings();
     this.loadOtherSettings();
     this.loadAgentBackendUrl();
+    this.loadAgentDisplaySettings();
   }
 
   onPageShow(): void {
@@ -142,6 +144,10 @@ struct AppSettings {
     } catch (error) {
       this.agentBackendUrl = AppConstants.AI_AGENT_URL;
     }
+  }
+
+  private loadAgentDisplaySettings(): void {
+    this.showAgentToolCalls = PreferencesUtil.getInstance().getBoolean(AppConstants.SETTING_AI_SHOW_TOOL_CALLS_KEY, false);
   }
 
   private updateMaterialLevelText(): void {
@@ -518,6 +524,30 @@ struct AppSettings {
           this.agentBackendUrl = value;
           SettingsRepository.saveAgentBackendUrl(getContext(this), value);
         })
+
+      Divider().color($r('app.color.divider_color'))
+
+      Row() {
+        Column({ space: 4 }) {
+          Text('显示AI工具调用')
+            .fontSize(15)
+            .fontColor($r('app.color.text_primary'))
+          Text('开启后，AI助手回复中展示所用工具的过程信息（默认关闭）')
+            .fontSize(12)
+            .fontColor($r('app.color.text_tertiary'))
+        }
+        .alignItems(HorizontalAlign.Start)
+        .layoutWeight(1)
+
+        Toggle({ type: ToggleType.Switch, isOn: this.showAgentToolCalls })
+          .selectedColor($r('app.color.primary_color'))
+          .onChange((isOn: boolean) => {
+            this.showAgentToolCalls = isOn;
+            PreferencesUtil.getInstance().putBoolean(AppConstants.SETTING_AI_SHOW_TOOL_CALLS_KEY, isOn);
+          })
+      }
+      .width('100%')
+      .padding({ top: 12, bottom: 12 })
     }
     .width('100%')
     .padding(16)

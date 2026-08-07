@@ -128,6 +128,26 @@ export class CalendarKitReminderService {
     return new Date(startDate.getTime() + 60 * 60 * 1000);
   }
 
+  private static async findExistingEventId(cal: calendarManager.Calendar, event: ScheduleEvent, startDate: Date, endDate: Date): Promise<number> {
+    if (event.calendarEventId && event.calendarEventId > 0) {
+      return event.calendarEventId;
+    }
+    try {
+      const toleranceMs: number = 10 * 60 * 1000;
+      const filter = calendarManager.EventFilter.filterByTime(startDate.getTime() - toleranceMs, endDate.getTime() + toleranceMs);
+      const events = await cal.getEvents(filter);
+      for (let i = 0; i < events.length; i++) {
+        const e = events[i];
+        if ((e.title || '') === event.title && Math.abs((e.startTime || 0) - startDate.getTime()) <= toleranceMs) {
+          return e.id || 0;
+        }
+      }
+    } catch (error) {
+      console.error('[CalendarKit] findExistingEventId error:', JSON.stringify(error));
+    }
+    return 0;
+  }
+
   static async addEventReminder(context: Context, event: ScheduleEvent, remindMinutes: number): Promise<number> {
     try {
       const cal = await CalendarKitReminderService.ensureCalendar(context);
@@ -142,6 +162,17 @@ export class CalendarKitReminderService {
 
       const startDate = new Date(dateParts[0], dateParts[1] - 1, dateParts[2], startHour, startMinute);
       const endDate = CalendarKitReminderService.calculateEndTime(event, startDate);
+
+      const existingId: number = await CalendarKitReminderService.findExistingEventId(cal, event, startDate, endDate);
+      if (existingId > 0) {
+        try {
+          await cal.deleteEvent(existingId);
+          console.info(`[CalendarKit] addEventReminder: removed existing duplicate event id=${existingId}, title=${event.title}`);
+        } catch (err) {
+          const be = err as BusinessError;
+          console.warn(`[CalendarKit] addEventReminder: failed to delete existing event id=${existingId}, code=${be.code}`);
+        }
+      }
 
       const eventConfig: calendarManager.Event = {
         title: event.title,

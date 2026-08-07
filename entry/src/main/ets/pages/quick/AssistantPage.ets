@@ -44,6 +44,7 @@ struct AssistantPage {
   @State showSidePanel: boolean = false;
   @State showDeleteDialog: boolean = false;
   @State pendingDeleteSessionId: string = '';
+  @State showToolCalls: boolean = false;
   @StorageLink(ThemeManager.THEME_STORAGE_KEY) isDarkMode: boolean = false;
   private scroller: Scroller = new Scroller();
   private dotTimer: number = -1;
@@ -54,6 +55,10 @@ struct AssistantPage {
       this.streamingDot = !this.streamingDot;
     }, 500);
     this.loadSessions();
+    this.loadToolCallDisplaySetting();
+    setTimeout(() => {
+      this.scroller.scrollEdge(Edge.Bottom);
+    }, 400);
   }
 
   aboutToDisappear(): void {
@@ -62,6 +67,23 @@ struct AssistantPage {
     if (this.dotTimer !== -1) {
       clearInterval(this.dotTimer);
       this.dotTimer = -1;
+    }
+  }
+
+  onPageShow(): void {
+    this.loadToolCallDisplaySetting();
+    setTimeout(() => {
+      this.scroller.scrollEdge(Edge.Bottom);
+    }, 300);
+  }
+
+  private loadToolCallDisplaySetting(): void {
+    try {
+      const context = getContext(this);
+      const pref = preferences.getPreferencesSync(context, { name: AppConstants.COURSE_TABLE_PREF_NAME });
+      this.showToolCalls = pref.getSync(AppConstants.SETTING_AI_SHOW_TOOL_CALLS_KEY, false) as boolean;
+    } catch (error) {
+      this.showToolCalls = false;
     }
   }
 
@@ -959,7 +981,9 @@ struct AssistantPage {
       List({ space: 0, scroller: this.scroller }) {
         ForEach(this.displayMessages, (msg: DisplayMessage, index: number) => {
           ListItem() {
-            this.MessageBubbleBuilder(msg, index as number)
+            if (this.showToolCalls || (msg.role !== 'tool_call' && msg.role !== 'tool_result')) {
+              this.MessageBubbleBuilder(msg, index as number)
+            }
           }
         }, (msg: DisplayMessage, index: number) => `${index}_${msg.role}_${msg.content.length}`)
 

@@ -970,8 +970,17 @@ export class ToolExecutor {
     const description: string = this.getStringArg(args, 'description')
     const typeStr: string = this.getStringArg(args, 'type', 'custom')
     const eventType: ScheduleEventType = typeStr === 'assignment' ? 'assignment' : 'custom'
+    const existingEvents: ScheduleEvent[] = await ScheduleService.loadCustomSchedules(this.context)
+    let existing: ScheduleEvent | undefined
+    for (let i = 0; i < existingEvents.length; i++) {
+      const ex: ScheduleEvent = existingEvents[i]
+      if (ex.title === title && ex.date === date && ex.startTime === startTime && ex.endTime === endTime) {
+        existing = ex
+        break
+      }
+    }
     const event: ScheduleEvent = {
-      id: '',
+      id: existing ? existing.id : '',
       title: title,
       date: date,
       timeRange: `${startTime}-${endTime}`,
@@ -980,11 +989,12 @@ export class ToolExecutor {
       location: location,
       type: eventType,
       color: ScheduleUtils.getTypeColor(eventType),
-      sourceId: '',
+      sourceId: existing ? existing.sourceId : '',
       description: description,
-      createdAt: Date.now(),
+      createdAt: existing ? existing.createdAt : Date.now(),
       remindMinutes: remindMinutes,
       addToCalendar: true,
+      calendarEventId: existing ? existing.calendarEventId || 0 : 0,
     }
     await ScheduleService.saveSchedule(this.context, event)
     const hasPerm: boolean = await this.ensureCalendarPermission()

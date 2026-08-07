@@ -362,6 +362,7 @@ export struct ScheduleEditor {
               createdAt: this.existingEvent?.createdAt || Date.now(),
               remindMinutes: this.remindMinutesValues[this.remindSelectedIndex],
               addToCalendar: this.addToCalendar,
+              calendarEventId: this.existingEvent?.calendarEventId || 0,
             };
             if (this.onSave) {
               this.onSave(event);
