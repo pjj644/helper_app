@@ -1,0 +1,20 @@
+{
+  "appSelected": {
+    "appId": "YOUR_APP_ID",
+    "appName": "helper_app",
+    "deviceTypes": [
+      {
+        "appAdapters": "5",
+        "deviceType": 4
+      }
+    ],
+    "enableSites": "CN",
+    "installationFree": 0,
+    "packageType": 7,
+    "projectId": "YOUR_PROJECT_ID",
+    "projectName": "uestc_helper",
+    "siteId": "CN"
+  },
+  "teamId": "YOUR_CP_ID",
+  "uid": "YOUR_CP_ID"
+}

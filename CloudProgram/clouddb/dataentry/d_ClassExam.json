@@ -1,0 +1,24 @@
+{
+  "cloudDBZoneName": "classData",
+  "objectTypeName": "ClassExam",
+  "objects": [
+    {
+      "id": 1,
+      "userId": "seed_user",
+      "semesterId": 503,
+      "semesterLabel": "2025-2026学年第二学期",
+      "courseNo": "EX0001",
+      "courseName": "示例考试课程",
+      "examDate": "2026-06-20",
+      "examTimeRange": "09:00-11:00",
+      "examLocation": "A101",
+      "seatNo": "12",
+      "examStatus": "未考",
+      "examType": "期末考试",
+      "remark": "示例数据",
+      "beginTime": 1781917200000,
+      "endTime": 1781924400000,
+      "updatedAt": 1713312000000
+    }
+  ]
+}

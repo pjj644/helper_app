@@ -1,0 +1,98 @@
+{
+  "objectTypeName": "Post",
+  "fields": [
+    {
+      "fieldName": "id",
+      "fieldType": "Integer",
+      "isNeedEncrypt": false,
+      "notNull": true,
+      "isSensitive":false,
+      "belongPrimaryKey": true
+    },
+    {
+      "fieldName": "userId",
+      "fieldType": "String",
+      "isNeedEncrypt": false,
+      "notNull": true,
+      "isSensitive":false,
+      "defaultValue": "",
+      "belongPrimaryKey": false
+    },
+    {
+      "fieldName": "content",
+      "fieldType": "String",
+      "isNeedEncrypt": false,
+      "notNull": true,
+      "isSensitive":false,
+      "defaultValue": "",
+      "belongPrimaryKey": false
+    },
+    {
+      "fieldName": "name",
+      "fieldType": "String",
+      "isNeedEncrypt": false,
+      "notNull": false,
+      "isSensitive":false,
+      "belongPrimaryKey": false
+    },
+    {
+      "fieldName": "profilePicture",
+      "fieldType": "String",
+      "isNeedEncrypt": false,
+      "notNull": false,
+      "isSensitive":false,
+      "belongPrimaryKey": false
+    },
+    {
+      "fieldName": "insertDate",
+      "fieldType": "Date",
+      "isNeedEncrypt": false,
+      "notNull": false,
+      "isSensitive":false,
+      "belongPrimaryKey": false
+    },
+    {
+      "fieldName": "likes",
+      "fieldType": "String",
+      "isNeedEncrypt": false,
+      "notNull": true,
+      "isSensitive":false,
+      "defaultValue": "[]",
+      "belongPrimaryKey": false
+    },
+    {
+      "fieldName": "likeCount",
+      "fieldType": "Integer",
+      "isNeedEncrypt": false,
+      "notNull": true,
+      "isSensitive":false,
+      "defaultValue": "0",
+      "belongPrimaryKey": false
+    }
+  ],
+  "indexes": [
+    {
+      "indexName": "insertDate", "indexList": [{ "fieldName": "insertDate", "sortType": "DESC" }]
+    },
+    {
+      "indexName": "likeCount", "indexList": [{ "fieldName": "likeCount", "sortType": "DESC" }]
+    },
+    {
+      "indexName": "userId", "indexList": [{ "fieldName": "userId", "sortType": "ASC" }]
+    }
+  ],
+  "permissions": [
+    {
+      "role": "World", "rights": ["Read", "Upsert", "Delete"]
+    },
+    {
+      "role": "Authenticated", "rights": ["Read", "Upsert", "Delete"]
+    },
+    {
+      "role": "Creator", "rights": ["Read", "Upsert", "Delete"]
+    },
+    {
+      "role": "Administrator", "rights": ["Read", "Upsert", "Delete"]
+    }
+  ]
+}

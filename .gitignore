@@ -1,0 +1,20 @@
+# AI 工具链 / IDE 本地配置（不入库）
+.agents/
+.claude/
+.trae/
+.opencode/
+skills-lock.json
+*.code-workspace
+
+# Node 依赖
+node_modules/
+oh_modules/
+
+# 构建产物
+**/build/
+.hvigor/
+.local.properties
+.cxx
+
+# 抓取存档（EAMS HTML 参照，体积大且经常变）
+/information/

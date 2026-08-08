@@ -1,0 +1,203 @@
+{
+  "objectTypeName": "ClassExam",
+  "fields": [
+    {
+      "fieldName": "id",
+      "fieldType": "Integer",
+      "isNeedEncrypt": false,
+      "notNull": true,
+      "isSensitive": false,
+      "belongPrimaryKey": true
+    },
+    {
+      "fieldName": "userId",
+      "fieldType": "String",
+      "isNeedEncrypt": false,
+      "notNull": true,
+      "isSensitive": false,
+      "defaultValue": "",
+      "belongPrimaryKey": false
+    },
+    {
+      "fieldName": "semesterId",
+      "fieldType": "Integer",
+      "isNeedEncrypt": false,
+      "notNull": true,
+      "isSensitive": false,
+      "defaultValue": "0",
+      "belongPrimaryKey": false
+    },
+    {
+      "fieldName": "semesterLabel",
+      "fieldType": "String",
+      "isNeedEncrypt": false,
+      "notNull": false,
+      "isSensitive": false,
+      "belongPrimaryKey": false
+    },
+    {
+      "fieldName": "courseNo",
+      "fieldType": "String",
+      "isNeedEncrypt": false,
+      "notNull": false,
+      "isSensitive": false,
+      "belongPrimaryKey": false
+    },
+    {
+      "fieldName": "courseName",
+      "fieldType": "String",
+      "isNeedEncrypt": false,
+      "notNull": true,
+      "isSensitive": false,
+      "defaultValue": "",
+      "belongPrimaryKey": false
+    },
+    {
+      "fieldName": "examDate",
+      "fieldType": "String",
+      "isNeedEncrypt": false,
+      "notNull": false,
+      "isSensitive": false,
+      "belongPrimaryKey": false
+    },
+    {
+      "fieldName": "examTimeRange",
+      "fieldType": "String",
+      "isNeedEncrypt": false,
+      "notNull": false,
+      "isSensitive": false,
+      "belongPrimaryKey": false
+    },
+    {
+      "fieldName": "examLocation",
+      "fieldType": "String",
+      "isNeedEncrypt": false,
+      "notNull": false,
+      "isSensitive": false,
+      "belongPrimaryKey": false
+    },
+    {
+      "fieldName": "seatNo",
+      "fieldType": "String",
+      "isNeedEncrypt": false,
+      "notNull": false,
+      "isSensitive": false,
+      "belongPrimaryKey": false
+    },
+    {
+      "fieldName": "examStatus",
+      "fieldType": "String",
+      "isNeedEncrypt": false,
+      "notNull": false,
+      "isSensitive": false,
+      "belongPrimaryKey": false
+    },
+    {
+      "fieldName": "examType",
+      "fieldType": "String",
+      "isNeedEncrypt": false,
+      "notNull": false,
+      "isSensitive": false,
+      "belongPrimaryKey": false
+    },
+    {
+      "fieldName": "remark",
+      "fieldType": "String",
+      "isNeedEncrypt": false,
+      "notNull": false,
+      "isSensitive": false,
+      "belongPrimaryKey": false
+    },
+    {
+      "fieldName": "beginTime",
+      "fieldType": "Date",
+      "isNeedEncrypt": false,
+      "notNull": false,
+      "isSensitive": false,
+      "belongPrimaryKey": false
+    },
+    {
+      "fieldName": "endTime",
+      "fieldType": "Date",
+      "isNeedEncrypt": false,
+      "notNull": false,
+      "isSensitive": false,
+      "belongPrimaryKey": false
+    },
+    {
+      "fieldName": "updatedAt",
+      "fieldType": "Date",
+      "isNeedEncrypt": false,
+      "notNull": false,
+      "isSensitive": false,
+      "belongPrimaryKey": false
+    }
+  ],
+  "indexes": [
+    {
+      "indexName": "userId",
+      "indexList": [
+        {
+          "fieldName": "userId",
+          "sortType": "ASC"
+        }
+      ]
+    },
+    {
+      "indexName": "userSemester",
+      "indexList": [
+        {
+          "fieldName": "userId",
+          "sortType": "ASC"
+        },
+        {
+          "fieldName": "semesterId",
+          "sortType": "DESC"
+        }
+      ]
+    },
+    {
+      "indexName": "beginTime",
+      "indexList": [
+        {
+          "fieldName": "beginTime",
+          "sortType": "ASC"
+        }
+      ]
+    }
+  ],
+  "permissions": [
+    {
+      "role": "World",
+      "rights": [
+        "Read",
+        "Upsert",
+        "Delete"
+      ]
+    },
+    {
+      "role": "Authenticated",
+      "rights": [
+        "Read",
+        "Upsert",
+        "Delete"
+      ]
+    },
+    {
+      "role": "Creator",
+      "rights": [
+        "Read",
+        "Upsert",
+        "Delete"
+      ]
+    },
+    {
+      "role": "Administrator",
+      "rights": [
+        "Read",
+        "Upsert",
+        "Delete"
+      ]
+    }
+  ]
+}

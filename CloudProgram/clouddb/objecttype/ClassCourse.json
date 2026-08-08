@@ -1,0 +1,192 @@
+{
+  "objectTypeName": "ClassCourse",
+  "fields": [
+    {
+      "fieldName": "id",
+      "fieldType": "Integer",
+      "isNeedEncrypt": false,
+      "notNull": true,
+      "isSensitive": false,
+      "belongPrimaryKey": true
+    },
+    {
+      "fieldName": "userId",
+      "fieldType": "String",
+      "isNeedEncrypt": false,
+      "notNull": true,
+      "isSensitive": false,
+      "defaultValue": "",
+      "belongPrimaryKey": false
+    },
+    {
+      "fieldName": "semesterId",
+      "fieldType": "Integer",
+      "isNeedEncrypt": false,
+      "notNull": true,
+      "isSensitive": false,
+      "defaultValue": "0",
+      "belongPrimaryKey": false
+    },
+    {
+      "fieldName": "semesterLabel",
+      "fieldType": "String",
+      "isNeedEncrypt": false,
+      "notNull": false,
+      "isSensitive": false,
+      "belongPrimaryKey": false
+    },
+    {
+      "fieldName": "courseId",
+      "fieldType": "String",
+      "isNeedEncrypt": false,
+      "notNull": true,
+      "isSensitive": false,
+      "defaultValue": "",
+      "belongPrimaryKey": false
+    },
+    {
+      "fieldName": "courseName",
+      "fieldType": "String",
+      "isNeedEncrypt": false,
+      "notNull": true,
+      "isSensitive": false,
+      "defaultValue": "",
+      "belongPrimaryKey": false
+    },
+    {
+      "fieldName": "teacherName",
+      "fieldType": "String",
+      "isNeedEncrypt": false,
+      "notNull": false,
+      "isSensitive": false,
+      "belongPrimaryKey": false
+    },
+    {
+      "fieldName": "roomName",
+      "fieldType": "String",
+      "isNeedEncrypt": false,
+      "notNull": false,
+      "isSensitive": false,
+      "belongPrimaryKey": false
+    },
+    {
+      "fieldName": "dayOfWeek",
+      "fieldType": "Integer",
+      "isNeedEncrypt": false,
+      "notNull": true,
+      "isSensitive": false,
+      "defaultValue": "1",
+      "belongPrimaryKey": false
+    },
+    {
+      "fieldName": "startSection",
+      "fieldType": "Integer",
+      "isNeedEncrypt": false,
+      "notNull": true,
+      "isSensitive": false,
+      "defaultValue": "1",
+      "belongPrimaryKey": false
+    },
+    {
+      "fieldName": "duration",
+      "fieldType": "Integer",
+      "isNeedEncrypt": false,
+      "notNull": true,
+      "isSensitive": false,
+      "defaultValue": "1",
+      "belongPrimaryKey": false
+    },
+    {
+      "fieldName": "validWeeks",
+      "fieldType": "String",
+      "isNeedEncrypt": false,
+      "notNull": false,
+      "isSensitive": false,
+      "belongPrimaryKey": false
+    },
+    {
+      "fieldName": "colorIndex",
+      "fieldType": "Integer",
+      "isNeedEncrypt": false,
+      "notNull": true,
+      "isSensitive": false,
+      "defaultValue": "0",
+      "belongPrimaryKey": false
+    },
+    {
+      "fieldName": "updatedAt",
+      "fieldType": "Date",
+      "isNeedEncrypt": false,
+      "notNull": false,
+      "isSensitive": false,
+      "belongPrimaryKey": false
+    }
+  ],
+  "indexes": [
+    {
+      "indexName": "userId",
+      "indexList": [
+        {
+          "fieldName": "userId",
+          "sortType": "ASC"
+        }
+      ]
+    },
+    {
+      "indexName": "userSemester",
+      "indexList": [
+        {
+          "fieldName": "userId",
+          "sortType": "ASC"
+        },
+        {
+          "fieldName": "semesterId",
+          "sortType": "DESC"
+        }
+      ]
+    },
+    {
+      "indexName": "updatedAt",
+      "indexList": [
+        {
+          "fieldName": "updatedAt",
+          "sortType": "DESC"
+        }
+      ]
+    }
+  ],
+  "permissions": [
+    {
+      "role": "World",
+      "rights": [
+        "Read",
+        "Upsert",
+        "Delete"
+      ]
+    },
+    {
+      "role": "Authenticated",
+      "rights": [
+        "Read",
+        "Upsert",
+        "Delete"
+      ]
+    },
+    {
+      "role": "Creator",
+      "rights": [
+        "Read",
+        "Upsert",
+        "Delete"
+      ]
+    },
+    {
+      "role": "Administrator",
+      "rights": [
+        "Read",
+        "Upsert",
+        "Delete"
+      ]
+    }
+  ]
+}

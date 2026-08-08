@@ -1,0 +1,22 @@
+{
+  "cloudDBZoneName": "classData",
+  "objectTypeName": "ClassCourse",
+  "objects": [
+    {
+      "id": 1,
+      "userId": "seed_user",
+      "semesterId": 503,
+      "semesterLabel": "2025-2026学年第二学期",
+      "courseId": "C0001",
+      "courseName": "示例课程",
+      "teacherName": "示例教师",
+      "roomName": "示例教室",
+      "dayOfWeek": 1,
+      "startSection": 1,
+      "duration": 2,
+      "validWeeks": "011111111111111111111",
+      "colorIndex": 0,
+      "updatedAt": 1713312000000
+    }
+  ]
+}
