@@ -2,7 +2,7 @@
 
 > AI 助手后端化改造的逐阶段变更记录。方案见 `plan.md`。
 > - **后端**仓库：`C:\Users\28399\Desktop\华为云\后端服务\ai-proxy`（独立 git 仓库）
-> - **前端**仓库：`D:\harmony\helper_app\Application\`（原有 git 仓库）
+> - **前端**仓库：`D:\harmony\helper_app`（项目根，2026-08 由 `Application/` 内迁移而来，历史保留）
 
 ---
 
@@ -240,3 +240,27 @@
 - CLI/MCP 配置（`Application/.opencode/`、全局 npm 包）均不入 git；涉及工具链的说明已同步 `AGENTS.md` / `doc/BUILD_AND_TEST.md`。
 
 ---
+
+## 阶段 11：文档/脚本同步 DevEco CLI + MCP（2026-08）
+
+**位置**：根目录（`AGENTS.md` / `CLAUDE.md` / `doc/*` / `_*.bat`）
+**Commit**：`chore: 工具链文档与脚本同步 devecocli`（随根仓库迁移一并提交）
+
+### 做了什么
+- `AGENTS.md` / `CLAUDE.md` / `doc/BUILD_AND_TEST.md` 补充 DevEco CLI 与 MCP 章节（命令速查、bat 限制、MCP check 预热说明）。
+
+---
+
+## 阶段 12：git 仓库根迁移到项目根 + 文档同步 ✅
+
+**位置**：`D:\harmony\helper_app`（原 `Application/` 内的仓库整体迁出）
+**Commit**：`324993b chore: 仓库根迁移到项目根目录（Application/ 前缀）`、`ebb7294 chore: 收纳根目录资源（doc/CloudProgram/脚本/图标）入根仓库 & 根 .gitignore`、`40c8bac feat: 首页五 Tab 重构…`（Tab 重构随本次一并提交）
+
+### 做了什么
+- 将 `Application/` 内的 git 仓库**整体迁移到项目根目录**：所有历史提交保留，代码路径统一加 `Application/` 前缀（git mv 191 个文件后重新提交）。
+- `CloudProgram/`（云端代码）、`doc/`、`CLAUDE.md`、`AGENTS.md`、`_*.bat`、`icon/`、`playwright/` 均纳入根仓库；新增根 `.gitignore`（`information/` 抓取存档、AI 工具配置 `.agents` / `.claude` / `.opencode`、`node_modules`、构建产物不入库）。
+- MCP 配置从 `Application/.opencode/` 移到根 `.opencode/opencode.json`（opencode 从项目根读取配置才生效）。
+- 恢复 `core.autocrlf` 等配置，构建验证：`BUILD SUCCESSFUL`。
+
+### 回溯
+- 迁移前已备份原 `.git`（`C:\Users\28399\AppData\Local\Temp\opencode\backup\application_git`），克隆副本 `repo-migrate` 亦完整。需要时删根 `D:\harmony\helper_app\.git` 并把备份放回 `Application/.git` 即复原。

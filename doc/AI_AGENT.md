@@ -43,7 +43,7 @@
   - `src/registry.ts` - `PendingToolRegistry`（挂起工具的超时与清理）
   - `.env`（gitignored）- `DEEPSEEK_API_KEY` / `DEEPSEEK_BASE_URL` / `DEEPSEEK_MODEL=deepseek-v4-flash` / `PROXY_AUTH_KEY` / `PORT=3000` / `CHECKPOINT_DB_PATH`
   - 运行：`npm run dev`（tsx watch）
-- **前端**（`Application/` 仓库）：`entry/src/main/ets/common/agent/`
+- **前端**（根仓库 `D:\harmony\helper_app`，代码在 `Application/`）：`entry/src/main/ets/common/agent/`
   - `BackendAgentClient.ets` - SSE 流 + tool-result 回传 + 断开/取消/重入保护
   - `ToolExecutor.ets` - 30 个工具的实际执行（switch 分发到各 service）
   - `ToolRegistry.ets` - 工具定义镜像 + `getRiskLevel`（确认弹窗显示风险等级用）

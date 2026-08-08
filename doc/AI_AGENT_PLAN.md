@@ -412,7 +412,7 @@ CHECKPOINT_DB_PATH=./checkpoints.sqlite
 
 ## 9. 分阶段实施计划
 
-> 每阶段独立可验收。建议每完成一阶段就 `git commit`（仓库在 `Application/` 内）。
+> 每阶段独立可验收。建议每完成一阶段就 `git commit`（仓库在项目根 `D:\harmony\helper_app`，2026-08 起）。
 > 编译验证：改完 ArkTS 跑 `build.bat`（增量 ~5s）；每阶段收尾跑 `D:\harmony\helper_app\_clean_build.bat`（全量 ~26s）确认 0 error。
 
 ### 阶段 0：基线与脚手架

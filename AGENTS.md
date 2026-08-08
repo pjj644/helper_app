@@ -4,15 +4,15 @@
 
 ## 仓库结构（最反直觉的一点）
 
-- **根目录 `D:\harmony\helper_app` 不是 git 仓库**。真正的 git 仓库在 `Application/` 内；`CloudProgram/`（云端 Node.js）是独立仓库；AI 助手后端 `C:\Users\28399\Desktop\华为云\后端服务\ai-proxy` 又是独立仓库（在项目目录之外）。
-- 顶层 `doc/`、`CLAUDE.md`、`_*.bat` 是工作笔记，不在任何 git 仓库内。
-- `information/` 是 EAMS 抓取页面的 HTML 存档，是抓取解析逻辑的参照物。
-- 提交只能在 `Application/`（或对应仓库）内 `git add` + `git commit`，消息格式 `type: what & why`（feat/fix/refactor/docs/chore），以 `Co-Authored-By: Claude <noreply@anthropic.com>` 结尾；勿提交 `.env` 或密钥。
+- **git 仓库在项目根目录 `D:\harmony\helper_app`**（2026-08 由 `Application/` 内迁移而来，历史保留，路径加了 `Application/` 前缀）。所有项目文件都在这个仓库里。
+- 唯一的例外：AI 助手后端 `C:\Users\28399\Desktop\华为云\后端服务\ai-proxy`（在项目目录之外）是独立仓库。
+- `information/`（EAMS 抓取页面 HTML 存档）体积大且频繁更新，**已 .gitignore 不入库**；`playwright/`、`doc/`、`CLAUDE.md`、`AGENTS.md`、`_*.bat`、`icon/` 均已入库。
+- 提交在根目录：`git add` + `git commit`，消息格式 `type: what & why`（feat/fix/refactor/docs/chore），以 `Co-Authored-By: Claude <noreply@anthropic.com>` 结尾；勿提交 `.env` 或密钥。可用 `devecocli` 无关，git 直接在根目录操作。
 
 ## 工具链（DevEco CLI + MCP）
 
 - **DevEco CLI（官方，`@deveco/deveco-cli` v1.2.2）已全局安装**，命令 `devecocli`。自动探测 DevEco Studio（本机 `D:\deveco\DevEco Studio`，也可用环境变量 `DEVECO_CLI_STUDIO_PATH` 显式指定）。
-- **MCP 已配置**：`Application/.opencode/opencode.json` 中 `deveco-mcp`（`devecocli serve mcp`，stdio 本地服务，需 opencode 重启生效）。工具：`check`（ArkTS / C++ LSP 静态诊断，**首次调用会先做项目 sync，返回 "Project is syncing，请 10s 后重试" 属正常**）、`restart`（卡死后原地重启 LSP）；可选工具组 `emulator_manager` / `ui_integration_test`（需 `ADDITIONAL_TOOL_GROUPS` 环境变量开启，未启用）。
+- **MCP 已配置**：根目录 `.opencode/opencode.json` 中 `deveco-mcp`（`devecocli serve mcp`，stdio 本地服务，`PROJECT_PATH` 环境变量指向 `Application/`；改动后需重启 opencode 生效）。工具：`check`（ArkTS / C++ LSP 静态诊断，**首次调用会先做项目 sync，返回 "Project is syncing，请 10s 后重试" 属正常**）、`restart`（卡死后原地重启 LSP）；可选工具组 `emulator_manager` / `ui_integration_test`（需 `ADDITIONAL_TOOL_GROUPS` 环境变量开启，未启用）。
 - `devecocli` 常用：
   - `devecocli build [--modules entry@default] [--build-mode debug]` — 构建；`devecocli build clean` — 清产物
   - `devecocli check lint` — 运行 code-linter.json5 的 lint（**可在 CLI 跑，不再只限于 DevEco**）；`devecocli check compat` — 跨 SDK API 兼容扫描；MCP `check` 工具则是单文件语法诊断

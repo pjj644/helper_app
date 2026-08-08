@@ -8,10 +8,12 @@ UESTC Helper（成电校园助手）- HarmonyOS（ArkTS，stage model，API 6.0.
 
 ## 目录布局
 
-- **`Application/`** - HarmonyOS app（ArkTS）。**git 仓库在此目录内**，源码 `entry/src/main/ets/`，分层 `pages/ components/ service/ repository/ model/ common/`。入口 `EntryAbility.ets` -> `pages/Index.ets`。
-- **`CloudProgram/`** - 云端 Node.js（Cloud DB schema、云函数）。
-- **`doc/`** - 详细文档（架构 / AI 助手 / 构建测试 / 变更日志 / 迁移方案）。
-- 顶层工作区（本文件、`doc/`、`_*.bat`、`AGENTS.md`）**不在 git 内**。
+- **git 仓库在根目录**（`D:\harmony\helper_app`，2026-08 由 `Application/` 内迁移，历史保留），提交直接在根目录做。
+- **`Application/`** - HarmonyOS app（ArkTS），源码 `entry/src/main/ets/`，分层 `pages/ components/ service/ repository/ model/ common/`。入口 `EntryAbility.ets` -> `pages/Index.ets`。
+- **`CloudProgram/`** - 云端 Node.js（Cloud DB schema、云函数）。同在根仓库内。
+- **`doc/`** - 详细文档（架构 / AI 助手 / 构建测试 / 变更日志 / 迁移方案）。同在根仓库内。
+- **`information/`** - EAMS 抓取 HTML 存档（参照物，.gitignore 不入库）。
+- AI 助手后端 `C:\Users\28399\Desktop\华为云\后端服务\ai-proxy` 是唯一独立仓库（在项目目录外）。
 
 ## 构建
 

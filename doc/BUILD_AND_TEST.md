@@ -26,7 +26,7 @@
 
 ### DevEco MCP（AI 助手用）
 
-- 已配置于 `Application/.opencode/opencode.json`（`deveco-mcp`，stdio：`devecocli serve mcp`），**改配置后需重启 opencode 生效**。
+- 已配置于根目录 `.opencode/opencode.json`（`deveco-mcp`，stdio：`devecocli serve mcp`，`PROJECT_PATH` 指向 `Application/`），**改配置后需重启 opencode 生效**。
 - 工具 `check`：对 `.ets` / `.c` / `.cpp` 文件做 LSP 静态诊断；**首次调用先做项目 sync，返回 "Project is syncing，请 10s 后重试" 属正常**。
 - 工具 `restart`：LSP 卡死后原地重启。
 - 可选工具组（需 `ADDITIONAL_TOOL_GROUPS=ui_integration_test,emulator_manager`）：UI 自动化测试 / 模拟器镜像管理。
@@ -82,8 +82,7 @@ DevEco 装在 `D:\deveco\DevEco Studio\`（路径含空格），直接在 bash �
 
 ## 提交规范
 
-- **`Application/` 是 git 仓库**，`CloudProgram/`、后端 `ai-proxy`（`C:\Users\28399\Desktop\华为云\后端服务\ai-proxy`）是各自独立仓库。
-- 改完在对应仓库 `git add` + `git commit -m "type: what & why"`。类型：`feat` / `fix` / `refactor` / `docs` / `chore`。
+- **git 仓库在项目根目录 `D:\harmony\helper_app`**（2026-08 由 `Application/` 内迁移而来，历史保留；`Application/`、`CloudProgram/`、`doc/`、脚本、素材统一在此仓库）。**唯一独立仓库**是后端 `ai-proxy`（`C:\Users\28399\Desktop\华为云\后端服务\ai-proxy`）。
+- 改完在根目录 `git add` + `git commit -m "type: what & why"`。类型：`feat` / `fix` / `refactor` / `docs` / `chore`。
 - commit 消息以 `Co-Authored-By: Claude <noreply@anthropic.com>` 结尾。
-- **不要提交密钥**：后端 `.env`（含 `DEEPSEEK_API_KEY`）已 gitignore；`checkpoints.sqlite*` 也已忽略。
-- 顶层工作区（`CLAUDE.md` / `doc/` / `_build.bat` 等）**不在 git 内**，是工作笔记。
+- **不要提交密钥**：后端 `.env`（含 `DEEPSEEK_API_KEY`）已 gitignore；`checkpoints.sqlite*` 也已忽略；`information/`（抓取存档）不入库。
