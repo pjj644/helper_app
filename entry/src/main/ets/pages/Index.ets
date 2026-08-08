@@ -1,4 +1,7 @@
-import { router, curves } from '@kit.ArkUI';
+import { router, curves, promptAction } from '@kit.ArkUI';
+import { pasteboard } from '@kit.BasicServicesKit';
+import { AssistantPage } from '../pages/quick/AssistantPage';
+import { CalendarPage } from '../pages/schedulePages/CalendarPage';
 import {
   Course,
   CourseTableModel,
@@ -41,7 +44,7 @@ interface ToolItem {
 @Entry
 @Component
 struct MainPage {
-  @State currentTabIndex: number = 0;
+  @State currentTabIndex: number = 2;
   @State currentWeek: number = getCurrentWeek();
   @State hasData: boolean = false;
   @State todayCourses: Course[] = [];
@@ -67,6 +70,7 @@ struct MainPage {
   @State toastVisible: boolean = false;
   @State isLoggedIn: boolean = false;
   @State loginEmail: string = '';
+  @State showExamInfoCard: boolean = false;
 
   private tickTimer: number = -1;
   private model: CourseTableModel = courseTableModel;
@@ -463,6 +467,50 @@ struct MainPage {
     }, 2000);
   }
 
+  private showFeedbackDialog(): void {
+    this.getUIContext().getPromptAction().showDialog({
+      title: '意见反馈',
+      message: '感谢您使用成电校园助手！如遇问题或有建议，欢迎通过邮件联系我们：\npjj644@users.noreply.github.com',
+      buttons: [
+        { text: '复制邮箱', color: '#007AFF', primary: true },
+        { text: '取消', color: '#888888' }
+      ]
+    }).then((value: promptAction.ShowDialogSuccessResponse) => {
+      if (value.index === 0) {
+        this.copyToClipboard('pjj644@users.noreply.github.com');
+      }
+    }).catch((error: Error) => {
+      console.error('意见反馈弹窗失败', error);
+    });
+  }
+
+  private showAboutDialog(): void {
+    this.getUIContext().getPromptAction().showDialog({
+      title: '关于应用',
+      message: '成电校园助手 v1.0.0\n\n一站式校园学习生活工具，集成课表、考试、日程、成绩查询与 AI 智能助手，助力每一天的校园生活。\n\n如有问题建议请通过「意见反馈」联系开发团队。',
+      buttons: [
+        { text: '知道了', color: '#007AFF', primary: true }
+      ]
+    }).catch((error: Error) => {
+      console.error('关于应用弹窗失败', error);
+    });
+  }
+
+  private copyToClipboard(text: string): void {
+    try {
+      const data = pasteboard.createData(pasteboard.MIMETYPE_TEXT_PLAIN, text);
+      pasteboard.getSystemPasteboard().setData(data).then(() => {
+        this.showToast('邮箱已复制到剪贴板');
+      }).catch((error: Error) => {
+        console.error('写入剪贴板失败', error);
+        this.showToast('复制失败');
+      });
+    } catch (error) {
+      console.error('复制邮箱异常', JSON.stringify(error));
+      this.showToast('复制失败');
+    }
+  }
+
   private openExamDetail(_exam: ExamItem): void {
     this.openExamPage();
   }
@@ -552,25 +600,23 @@ struct MainPage {
         })
         .shadow({ radius: 20, color: 'rgba(102, 126, 234, 0.3)', offsetY: 8 });
 
-        if (this.settings.showExamCountdown && this.getUpcomingExams(1).length > 0) {
-          AnimatedCard({ delay: 100 }) {
-            this.ExamCardsSection();
-          }
-        }
-
         if (!this.hasData) {
           AnimatedCard({ delay: 200 }) {
             this.EmptyStateBuilder();
           }
+        } else if (this.showExamInfoCard) {
+          AnimatedCard({ delay: 200 }) {
+            this.ExamCardsSection();
+          }
         } else {
           if (this.settings.showToday) {
             AnimatedCard({ delay: 200 }) {
-              this.CourseListBuilder('今日课程', this.todayCourses);
+              this.CourseListBuilder('今日课程', this.todayCourses, true);
             }
           }
           if (this.settings.showTomorrow) {
             AnimatedCard({ delay: 300 }) {
-              this.CourseListBuilder('明日课程', this.tomorrowCourses);
+              this.CourseListBuilder('明日课程', this.tomorrowCourses, false);
             }
           }
         }
@@ -617,132 +663,6 @@ struct MainPage {
     .width('100%')
     .scrollBar(BarState.Off)
     .edgeEffect(EdgeEffect.Spring);
-  }
-
-  @Builder
-  private CourseTableContent(): void {
-    Column({ space: 16 }) {
-      Row() {
-        Column({ space: 4 }) {
-          Text('课表')
-            .fontSize(28)
-            .fontWeight(FontWeight.Bold)
-            .fontColor($r('app.color.text_primary'))
-
-          Text(`第${this.currentWeek}周`)
-            .fontSize(13)
-            .fontColor($r('app.color.text_tertiary'));
-        }
-        .alignItems(HorizontalAlign.Start);
-
-        Blank();
-
-        Button('导入')
-          .height(32)
-          .fontSize(13)
-          .fontColor($r('app.color.primary_color'))
-          .backgroundColor($r('app.color.accent_bg_color'))
-          .borderRadius(16)
-          .onClick(() => this.openImporter());
-      }
-      .width('100%')
-      .padding({ left: 16, right: 16 });
-
-      if (this.hasData) {
-        ImmersiveLightWrapper({ radius: 20, lightIntensity: 2.0 }) {
-          Column({ space: 16 }) {
-            Text('今日课程概览')
-              .fontSize(18)
-              .fontWeight(FontWeight.Bold)
-              .fontColor($r('app.color.text_primary'))
-              .width('100%');
-
-            if (this.todayCourses.length === 0) {
-              Text('今天没有课程，好好休息吧 🎉')
-                .fontSize(14)
-                .fontColor($r('app.color.text_secondary'))
-                .width('100%')
-                .textAlign(TextAlign.Center)
-                .padding(20);
-            } else {
-              ForEach(this.todayCourses, (course: Course, index: number) => {
-                AnimatedListItem({ delay: index * 50 }) {
-                  Row({ space: 10 }) {
-                    Column()
-                      .width(4)
-                      .height(40)
-                      .borderRadius(3)
-                      .backgroundColor($r('app.color.primary_color'));
-
-                    Column({ space: 3 }) {
-                      Text(course.name)
-                        .fontSize(15)
-                        .fontWeight(FontWeight.Medium)
-                        .fontColor($r('app.color.text_primary'))
-                        .maxLines(1)
-                        .textOverflow({ overflow: TextOverflow.Ellipsis });
-
-                      Text(this.formatCourseTime(course))
-                        .fontSize(12)
-                        .fontColor($r('app.color.text_secondary'));
-                    }
-                    .layoutWeight(1)
-                    .alignItems(HorizontalAlign.Start);
-                  }
-                  .width('100%')
-                  .padding(12)
-                  .borderRadius(12)
-                  .backgroundColor($r('app.color.page_background'));
-                }
-              });
-            }
-
-            Row() {
-              Text('点击查看完整课表')
-                .fontSize(14)
-                .fontColor($r('app.color.primary_color'))
-                .fontWeight(FontWeight.Medium);
-            }
-            .width('100%')
-            .justifyContent(FlexAlign.Center)
-            .padding({ top: 8, bottom: 8 })
-            .onClick(() => this.openTable());
-          }
-          .width('92%')
-          .padding(16);
-        }
-      } else {
-        ImmersiveLightWrapper({ radius: 20, lightIntensity: 2.0 }) {
-          Column({ space: 12 }) {
-            Text('还没有课表数据')
-              .fontSize(18)
-              .fontWeight(FontWeight.Medium)
-              .fontColor($r('app.color.text_primary'));
-
-            Text('导入课表后可以在这里查看课程安排')
-              .fontSize(13)
-              .fontColor($r('app.color.text_secondary'))
-              .textAlign(TextAlign.Center);
-
-            Button('前往导入')
-              .height(40)
-              .fontSize(14)
-              .fontColor('#FFFFFF')
-              .backgroundColor($r('app.color.primary_color'))
-              .borderRadius(20)
-              .onClick(() => this.openImporter());
-          }
-          .width('92%')
-          .padding(16)
-          .alignItems(HorizontalAlign.Center);
-        }
-      }
-
-      Blank();
-    }
-    .width('100%')
-    .height('100%')
-    .padding({ top: 16 })
   }
 
   @Builder
@@ -974,11 +894,11 @@ struct MainPage {
           this.MineMenuItem('应用设置', $r('app.media.set'), () => {
             this.openSettings();
           });
-          this.MineMenuItem('意见反馈', $r('app.media.ic_public_edit_outline'), () => {
-            this.showToast('意见反馈功能开发中');
+          this.MineMenuItem('意见反馈', $r('app.media.feedback'), () => {
+            this.showFeedbackDialog();
           });
-          this.MineMenuItem('关于应用', $r('app.media.ic_public_thumb_sup'), () => {
-            this.showToast('关于应用功能开发中');
+          this.MineMenuItem('关于应用', $r('app.media.about'), () => {
+            this.showAboutDialog();
           });
         }
         .width('92%')
@@ -1057,23 +977,46 @@ struct MainPage {
   }
 
   @Builder
-  private CourseListBuilder(title: string, courses: Course[]): void {
+  private CourseListBuilder(title: string, courses: Course[], showSwitch: boolean): void {
     ImmersiveLightWrapper({ radius: 20, lightIntensity: 2.0 }) {
       Column() {
         Row() {
-          Text(title)
-            .fontSize(18)
-            .fontWeight(FontWeight.Bold)
-            .fontColor($r('app.color.text_primary'));
+          if (showSwitch) {
+            Row({ space: 8 }) {
+              Text(title)
+                .fontSize(18)
+                .fontWeight(FontWeight.Bold)
+                .fontColor($r('app.color.text_primary'));
 
-          Blank();
+              Text(`${courses.length}门课程`)
+                .fontSize(12)
+                .fontColor($r('app.color.primary_color'));
+            }
 
-          Text(`${courses.length}门`)
-            .fontSize(12)
-            .fontColor($r('app.color.primary_color'))
-            .padding({ left: 8, right: 8, top: 4, bottom: 4 })
-            .backgroundColor($r('app.color.accent_bg_color'))
-            .borderRadius(12);
+            Blank();
+
+            Image($r('app.media.switch'))
+              .width(18)
+              .height(18)
+              .fillColor($r('app.color.primary_color'))
+              .onClick(() => {
+                this.showExamInfoCard = true;
+              });
+          } else {
+            Text(title)
+              .fontSize(18)
+              .fontWeight(FontWeight.Bold)
+              .fontColor($r('app.color.text_primary'));
+
+            Blank();
+
+            Text(`${courses.length}门`)
+              .fontSize(12)
+              .fontColor($r('app.color.primary_color'))
+              .padding({ left: 8, right: 8, top: 4, bottom: 4 })
+              .backgroundColor($r('app.color.accent_bg_color'))
+              .borderRadius(12);
+          }
         }
         .width('100%')
         .margin({ bottom: 8 });
@@ -1191,10 +1134,28 @@ struct MainPage {
             .backgroundColor($r('app.color.accent_bg_color'))
             .borderRadius(12)
             .onClick(() => this.openExamPage());
+
+          Image($r('app.media.switch'))
+            .width(18)
+            .height(18)
+            .fillColor($r('app.color.warning_color'))
+            .margin({ left: 10 })
+            .onClick(() => {
+              this.showExamInfoCard = false;
+            });
         }
         .width('100%');
 
-        this.ExamCardBuilder(this.getNextExam()!);
+        if (this.getUpcomingExams(1).length > 0) {
+          this.ExamCardBuilder(this.getNextExam()!);
+        } else {
+          Text('暂无考试安排，好好放松一下吧 🎉')
+            .fontSize(14)
+            .fontColor($r('app.color.text_secondary'))
+            .width('100%')
+            .textAlign(TextAlign.Center)
+            .padding({ top: 16, bottom: 16 });
+        }
       }
       .width('92%')
       .padding(12);
@@ -1231,20 +1192,24 @@ struct MainPage {
       Column() {
         Tabs({ barPosition: BarPosition.End, index: this.currentTabIndex }) {
           TabContent() {
-            this.HomeContent();
-          }.tabBar(this.TabBarItem('首页', $r('app.media.home'), 0));
-
-          TabContent() {
-            this.CourseTableContent();
-          }.tabBar(this.TabBarItem('课表', $r('app.media.service'), 1));
-
-          TabContent() {
             this.DiscoverContent();
-          }.tabBar(this.TabBarItem('发现', $r('app.media.ic_campus_map'), 2));
+          }.tabBar(this.TabBarItem('发现', $r('app.media.ic_campus_map'), 0));
+
+          TabContent() {
+            AssistantPage();
+          }.tabBar(this.TabBarItem('AI助手', $r('app.media.ic_ai_assistant'), 1));
+
+          TabContent() {
+            this.HomeContent();
+          }.tabBar(this.TabBarItem('课程', $r('app.media.home'), 2));
+
+          TabContent() {
+            CalendarPage({ showBack: false });
+          }.tabBar(this.TabBarItem('日历', $r('app.media.ic_calendar'), 3));
 
           TabContent() {
             this.MineContent();
-          }.tabBar(this.TabBarItem('我的', $r('app.media.mine'), 3));
+          }.tabBar(this.TabBarItem('我的', $r('app.media.mine'), 4));
         }
         .scrollable(true)
         .barMode(BarMode.Fixed)

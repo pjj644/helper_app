@@ -33,7 +33,7 @@ interface ChatSession {
 
 @Entry
 @Component
-struct AssistantPage {
+export struct AssistantPage {
   @State sessions: ChatSession[] = [];
   @State currentSessionId: string = '';
   @State messages: Message[] = [];

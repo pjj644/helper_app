@@ -15,7 +15,8 @@ const TOTAL_GRID_CELLS: number = 42;
 
 @Entry
 @Component
-struct CalendarPage {
+export struct CalendarPage {
+  @Prop showBack: boolean = true;
   @State currentYear: number = new Date().getFullYear();
   @State currentMonth: number = new Date().getMonth() + 1;
   @State dayGrid: DayInfo[] = [];
@@ -615,12 +616,14 @@ struct CalendarPage {
   @Builder
   private titleBarBuilder(): void {
     Row() {
-      Button('返回')
-        .fontSize(14)
-        .fontColor(ThemeManager.getAccentColor())
-        .backgroundColor('#00000000')
-        .padding({ left: 12, right: 12, top: 6, bottom: 6 })
-        .onClick(() => router.back());
+      if (this.showBack) {
+        Button('返回')
+          .fontSize(14)
+          .fontColor(ThemeManager.getAccentColor())
+          .backgroundColor('#00000000')
+          .padding({ left: 12, right: 12, top: 6, bottom: 6 })
+          .onClick(() => router.back());
+      }
 
       Image($r('app.media.arrow_left'))
         .width(14)
