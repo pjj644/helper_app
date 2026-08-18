@@ -4,6 +4,11 @@ import { AppConstants } from '../../common/constants/AppConstants';
 import { ToolRegistry } from '../../common/agent/ToolRegistry';
 import { ToolExecutor } from '../../common/agent/ToolExecutor';
 import { BackendAgentClient, AgentCallbacks, AgentMessage } from '../../common/agent/BackendAgentClient';
+import { SpeechRecognizerHelper } from '../../common/speech/SpeechRecognizerHelper';
+import { VisionScheduleHelper, VisionScheduleResult } from '../../common/agent/VisionScheduleHelper';
+import { SettingsRepository } from '../../repository/SettingsRepository';
+import { common } from '@kit.AbilityKit';
+import { promptAction } from '@kit.ArkUI';
 
 const MAX_HISTORY_ROUNDS: number = 10;
 
@@ -45,10 +50,12 @@ export struct AssistantPage {
   @State showDeleteDialog: boolean = false;
   @State pendingDeleteSessionId: string = '';
   @State showToolCalls: boolean = false;
+  @State isRecording: boolean = false;
   @StorageLink(ThemeManager.THEME_STORAGE_KEY) isDarkMode: boolean = false;
   private scroller: Scroller = new Scroller();
   private dotTimer: number = -1;
   private currentClient: BackendAgentClient | null = null;
+  private speechHelper: SpeechRecognizerHelper = new SpeechRecognizerHelper();
 
   aboutToAppear(): void {
     this.dotTimer = setInterval(() => {
@@ -68,6 +75,7 @@ export struct AssistantPage {
       clearInterval(this.dotTimer);
       this.dotTimer = -1;
     }
+    this.speechHelper.release();
   }
 
   onPageShow(): void {
@@ -755,50 +763,191 @@ export struct AssistantPage {
     .justifyContent(msg.role === 'user' ? FlexAlign.End : FlexAlign.Start)
   }
 
+  private async toggleVoiceRecording(): Promise<void> {
+    if (this.isRecording) {
+      await this.speechHelper.stopListening();
+      this.isRecording = false;
+      return;
+    }
+
+    this.isRecording = true;
+    const ok: boolean = await this.speechHelper.startListening(
+      getContext(this) as common.UIAbilityContext,
+      (text: string, isLast: boolean) => {
+        if (text && text.length > 0) {
+          this.inputText = text;
+        }
+        if (isLast) {
+          this.isRecording = false;
+        }
+      },
+      (errorMsg: string) => {
+        this.isRecording = false;
+        promptAction.showToast({ message: errorMsg, duration: 2000 });
+      }
+    );
+    if (!ok) {
+      this.isRecording = false;
+    }
+  }
+
+  private async pickAndParseImageSchedule(): Promise<void> {
+    if (this.isLoading) return;
+    const photoUri: string | null = await VisionScheduleHelper.pickImage();
+    if (!photoUri) return;
+
+    this.isLoading = true;
+    const userMsg: Message = { role: 'user', content: '[发送了海报/通知图片]' };
+    this.messages = [...this.messages, userMsg];
+    this.displayMessages = [...this.displayMessages, {
+      role: 'user',
+      content: '📷 [海报/通知图片]',
+      isError: false
+    }, {
+      role: 'assistant',
+      content: '🔍 正在使用智谱多模态大模型解析海报中的日程信息，请稍候...',
+      isError: false
+    }];
+    this.scrollToBottom();
+
+    try {
+      const base64: string | null = await VisionScheduleHelper.convertUriToBase64(photoUri);
+      if (!base64) {
+        throw new Error('读取图片失败');
+      }
+
+      let backendUrl: string = AppConstants.AI_AGENT_URL;
+      try {
+        backendUrl = await SettingsRepository.getAgentBackendUrl(getContext(this));
+      } catch (e) {}
+
+      const result: VisionScheduleResult | null = await VisionScheduleHelper.parseScheduleFromImage(backendUrl, base64);
+      if (!result) {
+        throw new Error('未能从海报中提取到有效日程');
+      }
+
+      const formattedResult: string = `🎉 已为您智能识别日程：\n\n` +
+        `📌 **标题**：${result.title}\n` +
+        `📅 **日期**：${result.date}\n` +
+        `⏰ **时间**：${result.startTime} - ${result.endTime}\n` +
+        (result.location ? `📍 **地点**：${result.location}\n` : '') +
+        (result.description ? `📝 **说明**：${result.description}\n` : '') +
+        `\n您可以通过对话回复："帮我把这个日程加到日历" 或 "创建日程"，我将立即为您添加到系统日历！`;
+
+      const lastIdx: number = this.displayMessages.length - 1;
+      const updated: DisplayMessage[] = [...this.displayMessages];
+      updated[lastIdx] = {
+        role: 'assistant',
+        content: formattedResult,
+        isError: false
+      };
+      this.displayMessages = updated;
+      this.messages = [...this.messages, { role: 'assistant', content: formattedResult }];
+      this.updateCurrentSessionTimestamp();
+      this.syncCurrentSession();
+      this.saveSessions();
+    } catch (err) {
+      const lastIdx: number = this.displayMessages.length - 1;
+      const updated: DisplayMessage[] = [...this.displayMessages];
+      updated[lastIdx] = {
+        role: 'assistant',
+        content: `❌ 解析海报失败：${String((err as Error)?.message || err)}`,
+        isError: true
+      };
+      this.displayMessages = updated;
+    } finally {
+      this.isLoading = false;
+      this.scrollToBottom();
+    }
+  }
+
   @Builder
   private InputBarBuilder(): void {
-    Row({ space: 10 }) {
-      TextArea({ text: $$this.inputText, placeholder: '输入消息...' })
-        .layoutWeight(1)
-        .maxLines(4)
-        .fontSize(15)
-        .fontColor(ThemeManager.getTextPrimaryColor())
-        .placeholderColor(ThemeManager.getTextTertiaryColor())
+    Column({ space: 6 }) {
+      if (this.isRecording) {
+        Row({ space: 8 }) {
+          Circle()
+            .width(10)
+            .height(10)
+            .fill('#FF3B30')
+          Text('正在倾听您的语音，请说话...（点击麦克风停止）')
+            .fontSize(12)
+            .fontColor('#FF3B30')
+        }
+        .width('100%')
+        .padding({ left: 20, right: 20 })
+      }
+
+      Row({ space: 8 }) {
+        Row() {
+          Text('📷')
+            .fontSize(20)
+        }
+        .width(38)
+        .height(38)
+        .borderRadius(19)
         .backgroundColor(ThemeManager.getCardColor())
-        .borderRadius(20)
-        .padding({ left: 14, right: 14, top: 8, bottom: 8 })
-        .enabled(!this.isLoading)
-        .enterKeyType(EnterKeyType.Send)
-        .onChange((value: string) => {
-          this.inputText = value;
-        })
-        .onSubmit(() => {
-          this.sendMessage();
+        .justifyContent(FlexAlign.Center)
+        .onClick(() => {
+          this.pickAndParseImageSchedule();
         })
 
-      Button() {
-        if (this.isLoading) {
-          Text('●●●')
-            .fontSize(14)
-            .fontColor('#FFFFFF')
-        } else {
-          Text('发送')
-            .fontSize(14)
-            .fontColor('#FFFFFF')
+        Row() {
+          Text(this.isRecording ? '🔴' : '🎙️')
+            .fontSize(18)
         }
+        .width(38)
+        .height(38)
+        .borderRadius(19)
+        .backgroundColor(this.isRecording ? 'rgba(255, 59, 48, 0.15)' : ThemeManager.getCardColor())
+        .justifyContent(FlexAlign.Center)
+        .onClick(() => {
+          this.toggleVoiceRecording();
+        })
+
+        TextArea({ text: $$this.inputText, placeholder: this.isRecording ? '正在转写语音...' : '输入消息或语音说话...' })
+          .layoutWeight(1)
+          .maxLines(4)
+          .fontSize(15)
+          .fontColor(ThemeManager.getTextPrimaryColor())
+          .placeholderColor(ThemeManager.getTextTertiaryColor())
+          .backgroundColor(ThemeManager.getCardColor())
+          .borderRadius(20)
+          .padding({ left: 14, right: 14, top: 8, bottom: 8 })
+          .enabled(!this.isLoading)
+          .enterKeyType(EnterKeyType.Send)
+          .onChange((value: string) => {
+            this.inputText = value;
+          })
+          .onSubmit(() => {
+            this.sendMessage();
+          })
+
+        Button() {
+          if (this.isLoading) {
+            Text('●●●')
+              .fontSize(14)
+              .fontColor('#FFFFFF')
+          } else {
+            Text('发送')
+              .fontSize(14)
+              .fontColor('#FFFFFF')
+          }
+        }
+        .width(60)
+        .height(38)
+        .borderRadius(19)
+        .backgroundColor((this.isLoading || this.inputText.trim().length === 0) ? '#B0C4DE' : '#007AFF')
+        .enabled(!this.isLoading && this.inputText.trim().length > 0)
+        .onClick(() => {
+          this.sendMessage();
+        })
       }
-      .width(64)
-      .height(40)
-      .borderRadius(20)
-      .backgroundColor((this.isLoading || this.inputText.trim().length === 0) ? '#B0C4DE' : '#007AFF')
-      .enabled(!this.isLoading && this.inputText.trim().length > 0)
-      .onClick(() => {
-        this.sendMessage();
-      })
+      .width('100%')
+      .padding({ left: 12, right: 12, top: 6, bottom: 10 })
+      .alignItems(VerticalAlign.Center)
     }
     .width('100%')
-    .padding({ left: 16, right: 16, top: 10, bottom: 10 })
-    .alignItems(VerticalAlign.Center)
   }
 
   @Builder

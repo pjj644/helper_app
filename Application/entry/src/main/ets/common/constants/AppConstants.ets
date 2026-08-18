@@ -3,6 +3,7 @@ export class AppConstants {
   static readonly LOGIN_SESSION_KEY: string = 'login_session_json';
 
   static readonly COURSE_TABLE_PREF_NAME: string = 'course_table_local_db';
+  static readonly PREF_COURSE_DB_NAME: string = 'course_table_local_db';
   static readonly COURSE_TABLE_DATA_KEY: string = 'course_table_data_json';
   static readonly COURSE_TABLE_DATA_KEY_PREFIX: string = 'course_table_data_json_';
   static readonly EXAM_DATA_KEY: string = 'exam_data_json';

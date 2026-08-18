@@ -263,6 +263,18 @@
     {
       "name": "read_media_permission_reason",
       "value": "为了选择自定义背景图片，需要读取媒体文件权限"
+    },
+    {
+      "name": "EntryFormAbility_label",
+      "value": "成电课表卡片"
+    },
+    {
+      "name": "EntryFormAbility_desc",
+      "value": "桌面展示下一节课信息与教室"
+    },
+    {
+      "name": "microphone_permission_reason",
+      "value": "为了在 AI 助手中使用语音输入和智能问答，需要使用麦克风权限"
     }
   ]
 }

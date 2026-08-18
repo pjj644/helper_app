@@ -18,27 +18,34 @@ HarmonyOS（ArkTS，stage model，API 6.0.2/22）端云一体应用。通过 Web
 
 ```
 pages/          -> UI 页面（@Entry / @Component）
-components/     -> 可复用 UI 组件
+components/     -> 可复用 UI 组件（home/ 下包含解耦的主页四大子组件）
+entryformability/ -> 鸿蒙桌面万能卡片生命周期服务 (EntryFormAbility.ets)
+widget/pages/   -> 鸿蒙桌面卡片 UI 组件 (CourseWidgetCard2x2.ets)
 service/        -> 业务逻辑（auth / scrape / sync / reminder / 各数据服务）
 repository/     -> 数据持久化（preferences 键值存储、Cloud DB）
 model/          -> 数据模型 + 纯数据变换（解析/过滤/排序，无 HarmonyOS 导入）
-common/         -> 共享工具（Logger / ThemeManager / DateUtils / ContextUtils）+ AppConstants
-                   common/agent/   -> AI 助手前端（BackendAgentClient / ToolExecutor / ToolRegistry）
+common/         -> 共享工具（Logger / ThemeManager / DateUtils / BreakpointUtils）+ AppConstants
+                   common/agent/   -> AI 助手前端（BackendAgentClient / ToolExecutor / ToolRegistry / VisionScheduleHelper）
+                   common/speech/  -> 鸿蒙原生 CoreSpeechKit 语音转写 (SpeechRecognizerHelper)
                    common/constants/AppConstants.ets -> 所有偏好键 / URL / 魔法数字的唯一来源
 ```
 
 **数据流**：Pages → Service → Repository → Preferences / Cloud DB
 **Models 是纯 TS**（无 `@kit.*` 导入），只做解析 / 过滤 / 排序。
 
-## 入口
+## 入口与桌面卡片
 
-`EntryAbility.ets` 加载 `pages/Index` 为主页，从 `agconnect-services.json` 初始化 AGC Auth，设置颜色模式。
+- **主应用入口**：`EntryAbility.ets` 加载 `pages/Index` 为主页，从 `agconnect-services.json` 初始化 AGC Auth，设置颜色模式。
+- **万能服务卡片入口**：`EntryFormAbility.ets` 管理 2x2/2x4 桌面课表卡片生命周期，通过 `CourseService.updateNextCourseCache` 维护 Preferences 缓存并即时刷新卡片，点击直达应用内。
+- **一多响应式适配**：`BreakpointUtils.ets` 监听窗口断点（sm <600vp 手机竖屏 / md 600-840vp 折叠屏展开 / lg >=840vp 平板与2in1），主页与发现页支持自动从单栏切换为双栏/多列栅格联动布局。
 
 ## 各功能与关键文件
 
 | 功能 | 关键文件 |
 |---|---|
 | **课表** — 抓取/解析/周网格展示 | `service/WebScrapeService.ets`（JS 注入脚本）、`model/classTableModel/CourseModel.ets`、`pages/classTablePages/tableUI.ets`、`pages/Index.ets` |
+| **桌面卡片 (Widget)** — 实时下节课倒计时与教室 | `entryformability/EntryFormAbility.ets`、`widget/pages/CourseWidgetCard2x2.ets`、`form_config.json` |
+| **主页模块化组件** | `components/home/HomeHeaderComponent.ets`、`NextCourseCardComponent.ets`、`ExamCountdownCard.ets`、`QuickLinksGrid.ets` |
 | **考试** — 抓取/解析/倒计时 | `model/classTableModel/ExamModel.ets`、`pages/classTablePages/ExamPage.ets`、`pages/classTablePages/ExamImport.ets` |
 | **成绩** — 抓取/GPA/学期筛选 | `model/GradeModel.ets`、`pages/gradePages/GradePage.ets`、`pages/gradePages/GradeImport.ets` |
 | **日程/日历** — 统一事件日历 + 自定义事件 | `model/ScheduleModel.ets`、`pages/schedulePages/CalendarPage.ets`、`service/ScheduleService.ets` |
@@ -47,7 +54,7 @@ common/         -> 共享工具（Logger / ThemeManager / DateUtils / ContextUti
 | **鉴权** — 登录态存 preferences | `service/AuthService.ets`、`pages/login/loginIndex.ets` |
 | **快捷链接** — WebView 校园服务门户 | `pages/quick/quickIndex.ets` |
 | **设置** — 主题/提醒偏好/助手后端地址 | `pages/classTablePages/AppSettings.ets`、`repository/SettingsRepository.ets` |
-| **AI 助手** | `pages/quick/AssistantPage.ets`、`common/agent/*`，详见 [AI_AGENT.md](./AI_AGENT.md) |
+| **AI 助手（语音+视觉+RAG）** | `pages/quick/AssistantPage.ets`、`common/agent/*`、`common/speech/*`，详见 [AI_AGENT.md](./AI_AGENT.md) |
 
 ## 导航
 

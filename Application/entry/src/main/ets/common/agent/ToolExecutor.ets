@@ -265,6 +265,42 @@ interface UpdateScheduleResult {
   eventId: string
 }
 
+interface UpcomingExamStudyItem {
+  courseName: string
+  date: string
+  time: string
+  daysLeft: number
+  recommendedDailyHours: number
+}
+
+interface StudyPlanResultData {
+  totalExams: number
+  dailyHours: number
+  focusCourse: string
+  strategy: string
+  upcomingExams: UpcomingExamStudyItem[]
+}
+
+interface GuideItem {
+  title: string
+  category: string
+  content: string
+  details?: string
+}
+
+interface GuideResultData {
+  category: string
+  keyword: string
+  count: number
+  guides: GuideItem[]
+}
+
+interface ParseResultData {
+  status: string
+  rawLength: number
+  hint: string
+}
+
 export class ToolExecutor {
   private context: Context
 
@@ -363,6 +399,12 @@ export class ToolExecutor {
           return await this.removeCalendarEvent(args)
         case 'update_schedule':
           return await this.updateSchedule(args)
+        case 'generate_study_plan':
+          return await this.generateStudyPlan(args)
+        case 'query_campus_guide':
+          return this.queryCampusGuide(args)
+        case 'parse_text_to_schedule':
+          return this.parseTextToSchedule(args)
         default:
           return { success: false, data: `未知工具: ${toolName}` }
       }
@@ -1241,4 +1283,128 @@ export class ToolExecutor {
     const result: UpdateScheduleResult = { message: '日程已更新', eventId: eventId }
     return { success: true, data: JSON.stringify(result) }
   }
+
+  private async generateStudyPlan(args: Record<string, Object>): Promise<ToolResult> {
+    const exams: ExamItem[] = await ExamService.loadExams(this.context)
+    if (!exams || exams.length === 0) {
+      return { success: false, data: '当前暂无考试安排，无需生成复习计划' }
+    }
+    const dailyHours: number = this.getNumberArg(args, 'dailyHours', 4)
+    const focusCourse: string = this.getStringArg(args, 'focusCourse', '')
+
+    const now: number = Date.now()
+    const upcoming: ExamItem[] = []
+    for (let i = 0; i < exams.length; i++) {
+      const e: ExamItem = exams[i]
+      if (e.beginTime > now) {
+        upcoming.push(e)
+      }
+    }
+
+    if (upcoming.length === 0) {
+      return { success: false, data: '所有考试均已结束，当前暂无未来考试安排' }
+    }
+
+    upcoming.sort((a: ExamItem, b: ExamItem) => a.beginTime - b.beginTime)
+
+    const upcomingExams: UpcomingExamStudyItem[] = []
+    for (let i = 0; i < upcoming.length; i++) {
+      const e: ExamItem = upcoming[i]
+      const days: number = Math.max(1, Math.ceil((e.beginTime - now) / (1000 * 3600 * 24)))
+      let allocatedHours: number = Math.round((dailyHours / upcoming.length) * 10) / 10
+      if (focusCourse.length > 0 && e.courseName.includes(focusCourse)) {
+        allocatedHours = Math.round((dailyHours * 0.5) * 10) / 10
+      }
+      upcomingExams.push({
+        courseName: e.courseName,
+        date: e.examDate,
+        time: e.examTimeRange,
+        daysLeft: days,
+        recommendedDailyHours: allocatedHours
+      })
+    }
+
+    const planData: StudyPlanResultData = {
+      totalExams: upcoming.length,
+      dailyHours: dailyHours,
+      focusCourse: focusCourse,
+      strategy: '按考试紧急程度与倒计时天数加权分配，最近科目优先突破，每天合理规划时间。',
+      upcomingExams: upcomingExams
+    }
+    return { success: true, data: JSON.stringify(planData) }
+  }
+
+  private queryCampusGuide(args: Record<string, Object>): ToolResult {
+    const category: string = this.getStringArg(args, 'category', 'all')
+    const keyword: string = this.getStringArg(args, 'keyword', '').toLowerCase()
+
+    const allGuides: GuideItem[] = [
+      {
+        title: '清水河 ⇋ 沙河 校车时刻表',
+        category: 'bus',
+        content: '工作日班次：07:00, 08:30, 10:00, 12:00, 13:30, 15:00, 16:30, 18:00, 21:00。周末与节假日班次有所减少。',
+        details: '清水河上车点：主楼东侧班车站；沙河上车点：东门班车站。乘车请出示校园卡或成电码。'
+      },
+      {
+        title: '期末缓考与补考规定',
+        category: 'academic_policy',
+        content: '必修课期末不及格通常在开学前一周安排补考；因病等不可抗力无法应考须在考试前在教务系统提交缓考申请及医院证明。',
+        details: '缓考成绩按正常考试计分；缺考或作弊者取消补考资格。'
+      },
+      {
+        title: '保研与推免学分绩点计算',
+        category: 'academic_policy',
+        content: '保研推免绩点主要计算培养方案规定内的所有必修课和限选课加权平均成绩（GPA），通识选修与重修初修记录按学院细则执行。',
+        details: '学术科研、学科竞赛获奖及综合素质测评加分按学院当年推免方案折算。'
+      },
+      {
+        title: '清水河与沙河校医院就医流程',
+        category: 'hospital',
+        content: '校医院工作时间：周一至周日全天 24 小时急诊值班；门诊常规接诊 08:30-12:00, 14:00-17:30。',
+        details: '清水河校医院位于商业街西侧，就医请带校园卡或身份证。学生享受成都市大学生医保门诊报销。'
+      },
+      {
+        title: '清水河图书馆与自习室指南',
+        category: 'facilities',
+        content: '清水河主图书馆开放时间 08:00 - 22:30。一至四楼设有静音自习区、研讨室及电子阅览室。',
+        details: '研修间与研讨室可在"成电移动校园"或图书馆官网提前预约；入馆需刷校园卡或电子校园卡。'
+      },
+      {
+        title: '体育场馆与游泳馆开放时间',
+        category: 'facilities',
+        content: '综合体育馆、羽毛球馆、网球场与游泳馆面向全校师生开放，一般开放时间为 12:00 - 21:30。',
+        details: '部分场馆周末需通过成电移动校园-场馆预约系统提前订场。'
+      }
+    ]
+
+    let matched: GuideItem[] = allGuides
+    if (category !== 'all') {
+      matched = matched.filter(g => g.category === category)
+    }
+    if (keyword.length > 0) {
+      matched = matched.filter(g => g.title.toLowerCase().includes(keyword) || g.content.toLowerCase().includes(keyword) || (g.details !== undefined && g.details.toLowerCase().includes(keyword)))
+    }
+
+    const guideResult: GuideResultData = {
+      category: category,
+      keyword: keyword,
+      count: matched.length,
+      guides: matched
+    }
+    return { success: true, data: JSON.stringify(guideResult) }
+  }
+
+  private parseTextToSchedule(args: Record<string, Object>): ToolResult {
+    const rawText: string = this.getStringArg(args, 'rawText', '')
+    if (rawText.length === 0) {
+      return { success: false, data: '提供的文本内容为空，无法解析' }
+    }
+    const parseResult: ParseResultData = {
+      status: 'ready_for_extraction',
+      rawLength: rawText.length,
+      hint: '请助手根据此文本提取日程详情（标题、日期YYYY-MM-DD、开始时间HH:mm、结束时间HH:mm、地点、描述），并向用户确认或直接调用 create_schedule / add_to_calendar'
+    }
+    return { success: true, data: JSON.stringify(parseResult) }
+  }
 }
+

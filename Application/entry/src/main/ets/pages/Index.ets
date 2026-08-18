@@ -5,13 +5,11 @@ import { CalendarPage } from '../pages/schedulePages/CalendarPage';
 import {
   Course,
   CourseTableModel,
-  SECTION_TIMES,
   courseTableModel,
   getCurrentWeek,
 } from '../model/classTableModel/CourseModel';
 import { DisplaySettings, CourseTableStorage } from '../model/classTableModel/CourseTableStorage';
 import { ExamItem, normalizeExam, sortExams } from '../model/classTableModel/ExamModel';
-import { CountdownCard } from '../components/CountdownCard';
 import {
   calculateSemesterId,
   EXAM_TYPE_OPTIONS,
@@ -24,22 +22,16 @@ import { ReminderService } from '../service/ReminderService';
 import { AppConstants, RouterConstants } from '../common/constants/AppConstants';
 import { ImmersiveLightWrapper } from '../common/ImmersiveLightWrapper';
 import { UISettings } from '../common/UISettings';
-import { QuickStatComponent } from '../components/QuickStatComponent';
-import { AnimatedCard, AnimatedListItem } from '../components/AnimatedComponents';
+import { AnimatedCard } from '../components/AnimatedComponents';
 import { ToastComponent } from '../components/ToastComponents';
-import { ServiceItem } from '../common/types/ModelTypes';
 import { GradeService } from '../service/GradeService';
 import { ScheduleService } from '../service/ScheduleService';
 import { AuthService } from '../service/AuthService';
-
-interface ToolItem {
-  title: string;
-  icon: string;
-  color: string;
-  route?: string;
-  url?: string;
-  iconImage?: Resource;
-}
+import { BreakpointUtils } from '../common/utils/BreakpointUtils';
+import { HomeHeaderComponent } from '../components/home/HomeHeaderComponent';
+import { NextCourseCardComponent } from '../components/home/NextCourseCardComponent';
+import { ExamCountdownCard } from '../components/home/ExamCountdownCard';
+import { QuickLinksGrid, HomeToolItem } from '../components/home/QuickLinksGrid';
 
 @Entry
 @Component
@@ -71,14 +63,14 @@ struct MainPage {
   @State isLoggedIn: boolean = false;
   @State loginEmail: string = '';
   @State showExamInfoCard: boolean = false;
+  @State currentBreakpoint: string = 'sm';
 
   private tickTimer: number = -1;
   private model: CourseTableModel = courseTableModel;
   private appSettings: UISettings = UISettings.getInstance();
-  // 记录“无未来考试”日志的上次 breakdown，避免 tick 每 5s 重复打印同一条
   private lastNoFutureExamKey: string = '';
 
-  private tools: ToolItem[] = [
+  private tools: HomeToolItem[] = [
     { title: 'AI 助手', icon: '🤖', color: '#6366F1', route: 'pages/quick/AssistantPage', iconImage: $r('app.media.ic_ai_assistant') },
     { title: '校园地图', icon: '🗺️', color: '#3B82FF', url: AppConstants.GIS_MAP_URL, iconImage: $r('app.media.ic_campus_map') },
     { title: '图书馆', icon: '📚', color: '#10B981', url: AppConstants.LIB_FULL_URL },
@@ -107,16 +99,16 @@ struct MainPage {
     this.loadQuickInfo();
     this.checkLoginStatus();
     this.nowTick = Date.now();
+
+    BreakpointUtils.registerBreakpoint(getContext(this), (bp: string) => {
+      this.currentBreakpoint = bp;
+    });
+
     console.info(`[HomeDebug] aboutToAppear: nowTick=${this.nowTick} exams=${this.exams.length}`);
     this.tickTimer = setInterval(() => {
-      const prev = this.nowTick;
       this.nowTick = Date.now();
-      if (Math.floor(this.nowTick / 1000) % 5 === 0) {
-        const nextExam = this.getNextExam();
-        console.info(`[HomeDebug] tick: nowTick=${this.nowTick} delta=${this.nowTick - prev}ms nextExam=${nextExam?.courseName ?? 'none'} beginTime=${nextExam?.beginTime ?? 0} remaining=${nextExam ? Math.floor((nextExam.beginTime - this.nowTick) / 1000) : -1}s examsTotal=${this.exams.length}`);
-      }
     }, 1000);
-    console.info(`[HomeDebug] tickTimer started: id=${this.tickTimer}`);
+
     setTimeout(() => {
       animateTo({ curve: curves.springMotion(0.6, 0.8) }, () => {
         this.pageReady = true;
@@ -125,7 +117,6 @@ struct MainPage {
   }
 
   aboutToDisappear(): void {
-    console.info(`[HomeDebug] aboutToDisappear: tickTimer=${this.tickTimer}`);
     if (this.tickTimer >= 0) {
       clearInterval(this.tickTimer);
       this.tickTimer = -1;
@@ -133,7 +124,6 @@ struct MainPage {
   }
 
   onPageShow(): void {
-    console.info(`[HomeDebug] onPageShow: exams=${this.exams.length} nowTick=${this.nowTick}`);
     this.loadPageData();
     this.loadQuickInfo();
     this.checkLoginStatus();
@@ -154,7 +144,6 @@ struct MainPage {
       if (examData) {
         try {
           const parsedExam: ExamItem[] = JSON.parse(examData) as ExamItem[];
-          console.info(`[ExamDebug] Home: examData length=${examData.length} parsed=${parsedExam.length}`);
           this.exams = sortExams(parsedExam.map((item: ExamItem): ExamItem => normalizeExam({
             courseNo: item.courseNo,
             courseName: item.courseName,
@@ -170,23 +159,11 @@ struct MainPage {
             beginTime: item.beginTime,
             endTime: item.endTime,
           })));
-          const now = Date.now();
-          let futureCount = 0;
-          for (let i = 0; i < this.exams.length; i++) {
-            if (this.exams[i].beginTime > now) {
-              futureCount++;
-            }
-            if (i < 3) {
-              console.info(`[ExamDebug] Home: exam[${i}] name=${this.exams[i].courseName} date=${this.exams[i].examDate} timeRange=${this.exams[i].examTimeRange} beginTime=${this.exams[i].beginTime} endTime=${this.exams[i].endTime}`);
-            }
-          }
-          console.info(`[ExamDebug] Home: total=${this.exams.length} futureCount=${futureCount} now=${now}`);
         } catch (error) {
           console.error('[ExamDebug] Home: parse exam error', JSON.stringify(error));
           this.exams = [];
         }
       } else {
-        console.info('[ExamDebug] Home: examData is empty/null, no exams stored');
         this.exams = [];
       }
 
@@ -219,9 +196,6 @@ struct MainPage {
       if (this.hasData) {
         ReminderService.refreshAllReminders(context);
       }
-
-      const upcoming = this.getUpcomingExams(1);
-      console.info(`[ExamDebug] Home: loadPageData done hasData=${this.hasData} showExamCountdown=${this.settings.showExamCountdown} upcomingCount=${upcoming.length} examTotal=${this.exams.length}`);
     } catch (error) {
       console.error('[ExamDebug] Home加载数据失败:', JSON.stringify(error));
       this.hasData = false;
@@ -289,20 +263,6 @@ struct MainPage {
     });
   }
 
-  private openExamImport(): void {
-    const semesterId: number = this.selectedSemesterId > 0 ? this.selectedSemesterId : calculateSemesterId();
-    router.pushUrl({
-      url: RouterConstants.PAGE_EXAM_IMPORT,
-      params: {
-        returnHome: '1',
-        examTypeId: String(this.getSelectedExamTypeId()),
-        semesterId: String(semesterId)
-      }
-    }).catch((error: Error) => {
-      console.error('跳转考试导入失败:', error);
-    });
-  }
-
   private openExamPage(): void {
     router.pushUrl({
       url: RouterConstants.PAGE_EXAM,
@@ -327,53 +287,18 @@ struct MainPage {
     });
   }
 
-  private saveExamSelectionPreference(): void {
-    const examTypeId: number = this.getSelectedExamTypeId();
-    const semesterId: number = this.selectedSemesterId;
-    CourseTableStorage.saveExamSelectionPreference(getContext(this), {
-      examTypeId: examTypeId,
-      semesterId: semesterId,
-    }).catch((error: Error) => {
-      console.error('保存考试筛选偏好失败', error);
-    });
-  }
-
-  private formatCourseTime(course: Course): string {
-    const startSection: number = course.time.startSection;
-    const endSection: number = startSection + course.time.duration - 1;
-    const startTime: string = SECTION_TIMES[startSection - 1].startTime;
-    const endTime: string = SECTION_TIMES[endSection - 1].endTime;
-    return `${startSection}-${endSection}节 ${startTime}-${endTime}`;
-  }
-
   private getNextExam(): ExamItem | undefined {
     const upcoming = this.getUpcomingExams(1);
-    const result = upcoming.length > 0 ? upcoming[0] : undefined;
-    if (Math.floor(this.nowTick / 1000) % 10 === 0) {
-      console.info(`[HomeDebug] getNextExam: result=${result?.courseName ?? 'none'} beginTime=${result?.beginTime ?? 0}`);
-    }
-    return result;
+    return upcoming.length > 0 ? upcoming[0] : undefined;
   }
 
   private getUpcomingExams(n: number): ExamItem[] {
     const now: number = this.nowTick;
+    const exams = this.exams;
     const result: ExamItem[] = [];
-    for (let i = 0; i < this.exams.length && result.length < n; i++) {
-      if (this.exams[i].beginTime > now) {
-        result.push(this.exams[i]);
-      }
-    }
-    if (Math.floor(now / 1000) % 10 === 0) {
-      console.info(`[HomeDebug] getUpcomingExams(${n}): nowTick=${now} total=${this.exams.length} found=${result.length}`);
-    }
-    if (result.length === 0 && this.exams.length > 0) {
-      const zeroTimeCount = this.exams.filter(e => e.beginTime <= 0).length;
-      const pastCount = this.exams.filter(e => e.beginTime > 0 && e.beginTime <= now).length;
-      const key = `${this.exams.length}:${zeroTimeCount}:${pastCount}`;
-      // 仅在 breakdown 变化时打印一次，避免 1s tick 导致日志刷屏
-      if (key !== this.lastNoFutureExamKey) {
-        this.lastNoFutureExamKey = key;
-        console.info(`Home: 无未来考试 total=${this.exams.length} beginTime=0:${zeroTimeCount} past:${pastCount}`);
+    for (let i = 0; i < exams.length && result.length < n; i++) {
+      if (exams[i].beginTime > now) {
+        result.push(exams[i]);
       }
     }
     return result;
@@ -381,10 +306,6 @@ struct MainPage {
 
   private getSelectedExamTypeId(): number {
     return getExamTypeIdByIndex(this.selectedExamTypeIndex);
-  }
-
-  private getSelectedExamTypeLabel(): string {
-    return getExamTypeLabelById(this.getSelectedExamTypeId());
   }
 
   private getHeroHint(): string {
@@ -403,24 +324,26 @@ struct MainPage {
       return 0;
     }
     let total = 0;
+    const week = this.currentWeek;
     for (let day = 1; day <= 7; day++) {
-      total += this.model.getCoursesForDayAndWeek(day, this.currentWeek).length;
+      total += this.model.getCoursesForDayAndWeek(day, week).length;
     }
     return total;
   }
 
   private getFutureExamCount(): number {
     const now = this.nowTick;
+    const exams = this.exams;
     let count = 0;
-    for (let i = 0; i < this.exams.length; i++) {
-      if (this.exams[i].beginTime > now) {
+    for (let i = 0; i < exams.length; i++) {
+      if (exams[i].beginTime > now) {
         count++;
       }
     }
     return count;
   }
 
-  private onToolClick(tool: ToolItem): void {
+  private onToolClick(tool: HomeToolItem): void {
     if (tool.route) {
       router.pushUrl({ url: tool.route }, router.RouterMode.Standard)
         .catch((error: Error) => console.error(`跳转 ${tool.title} 页面失败:`, error));
@@ -432,30 +355,6 @@ struct MainPage {
         .catch((error: Error) => console.error(`打开 ${tool.title} 网页失败:`, error));
     } else {
       this.showToast(`${tool.title} 功能开发中`);
-    }
-  }
-
-  private onServiceClick(item: ServiceItem): void {
-    if (item.route) {
-      router.pushUrl({ url: item.route }).catch((error: Error) => {
-        console.error(`跳转 ${item.name} 页面失败:`, error);
-      });
-    } else if (item.name === '图书馆') {
-      router.pushUrl({
-        url: RouterConstants.PAGE_WEB,
-        params: { title: '图书馆', url: AppConstants.LIB_FULL_URL }
-      }).catch((error: Error) => {
-        console.error('打开图书馆网页失败:', error);
-      });
-    } else if (item.name === '校园卡') {
-      router.pushUrl({
-        url: RouterConstants.PAGE_WEB,
-        params: { title: '校园卡', url: AppConstants.CARD_BALANCE_URL }
-      }).catch((error: Error) => {
-        console.error('打开校园卡网页失败:', error);
-      });
-    } else {
-      this.showToast(`${item.name} 功能开发中`);
     }
   }
 
@@ -515,145 +414,166 @@ struct MainPage {
     this.openExamPage();
   }
 
-  private logExamCardRender(exam: ExamItem): string {
-    if (Math.floor(this.nowTick / 1000) % 10 === 0) {
-      console.info(`[HomeDebug] ExamCardBuilder render: exam=${exam.courseName} beginTime=${exam.beginTime} nowTick=${this.nowTick} remaining=${Math.floor((exam.beginTime - this.nowTick) / 1000)}s`);
+  @Builder
+  private EmptyStateBuilder(): void {
+    ImmersiveLightWrapper({ radius: 20, lightIntensity: 2.0 }) {
+      Column({ space: 12 }) {
+        Text('当前没有课表数据')
+          .fontSize(18)
+          .fontWeight(FontWeight.Medium)
+          .fontColor($r('app.color.text_primary'));
+
+        Text('先导入一次课表，首页会自动展示今日课程和考试倒计时')
+          .fontSize(13)
+          .fontColor($r('app.color.text_secondary'))
+          .textAlign(TextAlign.Center)
+          .maxLines(2)
+          .width('100%');
+
+        Button('前往在线导入')
+          .height(40)
+          .fontSize(14)
+          .fontColor('#FFFFFF')
+          .backgroundColor($r('app.color.primary_color'))
+          .borderRadius(20)
+          .onClick(() => this.openImporter());
+      }
+      .width('92%')
+      .padding(16)
+      .alignItems(HorizontalAlign.Center);
     }
-    return exam.courseName;
   }
 
-  private logExamSectionRender(): string {
-    const nextExam = this.getNextExam();
-    if (Math.floor(this.nowTick / 1000) % 10 === 0) {
-      console.info(`[HomeDebug] ExamCardsSection render: nowTick=${this.nowTick} nextExam=${nextExam?.courseName ?? 'none'}`);
+  @Builder
+  private ActionButtonsRow(): void {
+    Row({ space: 12 }) {
+      Button('课表详情')
+        .fontSize(14)
+        .fontWeight(FontWeight.Medium)
+        .fontColor($r('app.color.primary_color'))
+        .backgroundColor($r('app.color.accent_bg_color'))
+        .borderRadius(12)
+        .height(42)
+        .layoutWeight(1)
+        .onClick(() => this.openTable());
+
+      Button('考试详情')
+        .fontSize(14)
+        .fontWeight(FontWeight.Medium)
+        .fontColor($r('app.color.warning_color'))
+        .backgroundColor($r('app.color.tag_bg_exam'))
+        .borderRadius(12)
+        .height(42)
+        .layoutWeight(1)
+        .onClick(() => this.openExamPage());
+
+      Button('日程')
+        .fontSize(14)
+        .fontWeight(FontWeight.Medium)
+        .fontColor($r('app.color.success_color'))
+        .backgroundColor($r('app.color.tag_bg_done'))
+        .borderRadius(12)
+        .height(42)
+        .layoutWeight(1)
+        .onClick(() => this.openSchedule());
     }
-    return '最近考试倒计时';
+    .width('100%')
+    .padding({ left: 16, right: 16 });
+  }
+
+  @Builder
+  private HomeScheduleSection(): void {
+    if (!this.hasData) {
+      AnimatedCard({ delay: 200 }) {
+        this.EmptyStateBuilder();
+      }
+    } else if (this.showExamInfoCard) {
+      AnimatedCard({ delay: 200 }) {
+        ExamCountdownCard({
+          nextExam: this.getNextExam(),
+          nowTick: this.nowTick,
+          onSwitchToCourse: () => {
+            this.showExamInfoCard = false;
+          },
+          onOpenExamPage: () => {
+            this.openExamPage();
+          },
+          onOpenExamDetail: (e: ExamItem) => {
+            this.openExamDetail(e);
+          }
+        });
+      }
+    } else {
+      if (this.settings.showToday) {
+        AnimatedCard({ delay: 200 }) {
+          NextCourseCardComponent({
+            title: '今日课程',
+            courses: this.todayCourses,
+            isToday: true,
+            onSwitchToExam: () => {
+              this.showExamInfoCard = true;
+            }
+          });
+        }
+      }
+      if (this.settings.showTomorrow) {
+        AnimatedCard({ delay: 300 }) {
+          NextCourseCardComponent({
+            title: '明日课程',
+            courses: this.tomorrowCourses,
+            isToday: false
+          });
+        }
+      }
+    }
   }
 
   @Builder
   private HomeContent(): void {
     Scroll() {
       Column({ space: 12 }) {
-        Column({ space: 12 }) {
-          Row() {
-            Row({ space: 12 }) {
-              Stack() {
-                Circle()
-                  .width(52)
-                  .height(52)
-                  .fill('rgba(255,255,255,0.2)')
-                Image($r('app.media.mine'))
-                  .width(28)
-                  .height(28)
-                  .fillColor('#FFFFFF')
-              }
-
-              Column({ space: 4 }) {
-                Text('HI助手')
-                  .fontSize(28)
-                  .fontWeight(FontWeight.Bold)
-                  .fontColor('#FFFFFF')
-
-                Text(`第${this.currentWeek}周`)
-                  .fontSize(13)
-                  .fontColor('rgba(255,255,255,0.7)')
-              }
-              .alignItems(HorizontalAlign.Start);
+        if (this.currentBreakpoint === 'sm') {
+          HomeHeaderComponent({
+            currentWeek: this.currentWeek,
+            heroHint: this.getHeroHint(),
+            todayCourseCount: this.todayCourses.length,
+            futureExamCount: this.getFutureExamCount(),
+            weekCourseCount: this.getWeekCourseCount(),
+            onOpenSettings: () => {
+              this.openSettings();
             }
-
-            Blank();
-
-            Column({ space: 4 }) {
-              Image($r('app.media.set'))
-                .width(20)
-                .height(20)
-                .fillColor('#FFFFFF')
-              Text('设置')
-                .fontSize(11)
-                .fontColor('rgba(255,255,255,0.8)')
-            }
-            .onClick(() => this.openSettings());
-          }
-          .width('100%');
-
-          Text(this.getHeroHint())
-            .fontSize(13)
-            .fontColor('rgba(255,255,255,0.85)')
-            .maxLines(1)
-            .textOverflow({ overflow: TextOverflow.Ellipsis })
-            .width('100%');
-
-          QuickStatComponent({
-            stats: [
-              { label: '今日课程', value: this.todayCourses.length.toString(), color: $r('app.color.primary_color') },
-              { label: '待考科目', value: this.getFutureExamCount().toString(), color: $r('app.color.warning_color') },
-              { label: '本周课程', value: this.getWeekCourseCount().toString(), color: $r('app.color.success_color') },
-            ]
           });
-        }
-        .width('100%')
-        .padding({ left: 16, right: 16, top: 20, bottom: 8 })
-        .borderRadius(24)
-        .linearGradient({
-          angle: 135,
-          colors: [['#667eea', 0], ['#764ba2', 0.5], ['#f093fb', 1]]
-        })
-        .shadow({ radius: 20, color: 'rgba(102, 126, 234, 0.3)', offsetY: 8 });
 
-        if (!this.hasData) {
-          AnimatedCard({ delay: 200 }) {
-            this.EmptyStateBuilder();
-          }
-        } else if (this.showExamInfoCard) {
-          AnimatedCard({ delay: 200 }) {
-            this.ExamCardsSection();
-          }
+          this.HomeScheduleSection();
+          this.ActionButtonsRow();
         } else {
-          if (this.settings.showToday) {
-            AnimatedCard({ delay: 200 }) {
-              this.CourseListBuilder('今日课程', this.todayCourses, true);
+          // 折叠屏与平板宽屏响应式布局（双栏联动）
+          GridRow({ columns: { md: 8, lg: 12 }, gutter: { x: 16, y: 16 } }) {
+            GridCol({ span: { md: 3, lg: 4 } }) {
+              Column({ space: 12 }) {
+                HomeHeaderComponent({
+                  currentWeek: this.currentWeek,
+                  heroHint: this.getHeroHint(),
+                  todayCourseCount: this.todayCourses.length,
+                  futureExamCount: this.getFutureExamCount(),
+                  weekCourseCount: this.getWeekCourseCount(),
+                  onOpenSettings: () => {
+                    this.openSettings();
+                  }
+                });
+                this.ActionButtonsRow();
+              }
+            }
+
+            GridCol({ span: { md: 5, lg: 8 } }) {
+              Column({ space: 12 }) {
+                this.HomeScheduleSection();
+              }
             }
           }
-          if (this.settings.showTomorrow) {
-            AnimatedCard({ delay: 300 }) {
-              this.CourseListBuilder('明日课程', this.tomorrowCourses, false);
-            }
-          }
+          .width('100%')
+          .padding({ left: 16, right: 16 });
         }
-
-        Row({ space: 12 }) {
-          Button('课表详情')
-            .fontSize(14)
-            .fontWeight(FontWeight.Medium)
-            .fontColor($r('app.color.primary_color'))
-            .backgroundColor($r('app.color.accent_bg_color'))
-            .borderRadius(12)
-            .height(42)
-            .layoutWeight(1)
-            .onClick(() => this.openTable());
-
-          Button('考试详情')
-            .fontSize(14)
-            .fontWeight(FontWeight.Medium)
-            .fontColor($r('app.color.warning_color'))
-            .backgroundColor($r('app.color.tag_bg_exam'))
-            .borderRadius(12)
-            .height(42)
-            .layoutWeight(1)
-            .onClick(() => this.openExamPage());
-
-          Button('日程')
-            .fontSize(14)
-            .fontWeight(FontWeight.Medium)
-            .fontColor($r('app.color.success_color'))
-            .backgroundColor($r('app.color.tag_bg_done'))
-            .borderRadius(12)
-            .height(42)
-            .layoutWeight(1)
-            .onClick(() => this.openSchedule());
-        }
-        .width('100%')
-        .padding({ left: 16, right: 16 });
       }
       .width('100%')
       .padding({ left: 0, right: 0, top: 12, bottom: 24 })
@@ -668,141 +588,15 @@ struct MainPage {
   @Builder
   private DiscoverContent(): void {
     Scroll() {
-      Column({ space: 10 }) {
-        Column({ space: 4 }) {
-          Text('发现')
-            .fontSize(28)
-            .fontWeight(FontWeight.Bold)
-            .fontColor($r('app.color.text_primary'));
-
-          Text('校园实用工具')
-            .fontSize(14)
-            .fontColor($r('app.color.text_secondary'));
+      QuickLinksGrid({
+        tools: this.tools,
+        latestGpa: this.latestGpa,
+        todayEventCount: this.todayEventCount,
+        currentBreakpoint: this.currentBreakpoint,
+        onToolClick: (tool: HomeToolItem) => {
+          this.onToolClick(tool);
         }
-        .width('100%')
-        .alignItems(HorizontalAlign.Start)
-        .padding({ left: 16, right: 16 });
-
-        Text('最近使用')
-          .fontSize(13)
-          .fontWeight(FontWeight.Medium)
-          .fontColor($r('app.color.text_tertiary'))
-          .width('100%')
-          .padding({ left: 16, right: 16 });
-
-        Row({ space: 12 }) {
-          Column() {
-            Text('📊')
-              .fontSize(24);
-            Text('成绩查询')
-              .fontSize(12)
-              .fontWeight(FontWeight.Medium)
-              .fontColor($r('app.color.text_primary'))
-              .margin({ top: 4 });
-            Text(this.latestGpa === '--' ? '点击导入' : `GPA ${this.latestGpa}`)
-              .fontSize(10)
-              .fontColor($r('app.color.text_tertiary'))
-              .margin({ top: 2 });
-          }
-          .layoutWeight(1)
-          .height(90)
-          .borderRadius(14)
-          .backgroundColor($r('app.color.accent_bg_color'))
-          .justifyContent(FlexAlign.Center)
-          .onClick(() => {
-            const gradeTool = this.tools.find(t => t.title === '成绩查询');
-            if (gradeTool) this.onToolClick(gradeTool);
-          });
-
-          Column() {
-            Text('📅')
-              .fontSize(24);
-            Text('校园日历')
-              .fontSize(12)
-              .fontWeight(FontWeight.Medium)
-              .fontColor($r('app.color.text_primary'))
-              .margin({ top: 4 });
-            Text(this.todayEventCount > 0 ? `今日 ${this.todayEventCount} 件事` : '查看日程')
-              .fontSize(10)
-              .fontColor($r('app.color.text_tertiary'))
-              .margin({ top: 2 });
-          }
-          .layoutWeight(1)
-          .height(90)
-          .borderRadius(14)
-          .backgroundColor($r('app.color.tag_bg_done'))
-          .justifyContent(FlexAlign.Center)
-          .onClick(() => {
-            const calTool = this.tools.find(t => t.title === '校园日历');
-            if (calTool) this.onToolClick(calTool);
-          });
-
-          Column() {
-            Text('📚')
-              .fontSize(24);
-            Text('图书馆')
-              .fontSize(12)
-              .fontWeight(FontWeight.Medium)
-              .fontColor($r('app.color.text_primary'))
-              .margin({ top: 4 });
-            Text('点击打开')
-              .fontSize(10)
-              .fontColor($r('app.color.text_tertiary'))
-              .margin({ top: 2 });
-          }
-          .layoutWeight(1)
-          .height(90)
-          .borderRadius(14)
-          .backgroundColor($r('app.color.primary_light_color'))
-          .justifyContent(FlexAlign.Center)
-          .onClick(() => {
-            const libTool = this.tools.find(t => t.title === '图书馆');
-            if (libTool) this.onToolClick(libTool);
-          });
-        }
-        .width('100%')
-        .padding({ left: 16, right: 16 });
-
-        Text('所有功能')
-          .fontSize(13)
-          .fontWeight(FontWeight.Medium)
-          .fontColor($r('app.color.text_tertiary'))
-          .width('100%')
-          .padding({ left: 16, right: 16 });
-
-        Grid() {
-          ForEach(this.tools, (tool: ToolItem) => {
-            GridItem() {
-              Column({ space: 8 }) {
-                if (tool.iconImage) {
-                  Image(tool.iconImage)
-                    .width(28)
-                    .height(28);
-                } else {
-                  Text(tool.icon)
-                    .fontSize(28);
-                }
-                Text(tool.title)
-                  .fontSize(13)
-                  .fontColor($r('app.color.text_primary'));
-              }
-              .width('100%')
-              .height(90)
-              .borderRadius(16)
-              .backgroundColor($r('app.color.card_background'))
-              .justifyContent(FlexAlign.Center)
-              .onClick(() => this.onToolClick(tool));
-            }
-          });
-        }
-        .columnsTemplate('1fr 1fr 1fr 1fr 1fr')
-        .columnsGap(14)
-        .rowsGap(14)
-        .padding({ left: 16, right: 16 })
-        .width('100%');
-      }
-      .width('100%')
-      .padding({ top: 8, bottom: 24 });
+      });
     }
     .layoutWeight(1)
     .width('100%')
@@ -947,222 +741,6 @@ struct MainPage {
   }
 
   @Builder
-  private EmptyStateBuilder(): void {
-    ImmersiveLightWrapper({ radius: 20, lightIntensity: 2.0 }) {
-      Column({ space: 12 }) {
-        Text('当前没有课表数据')
-          .fontSize(18)
-          .fontWeight(FontWeight.Medium)
-          .fontColor($r('app.color.text_primary'));
-
-        Text('先导入一次课表，首页会自动展示今日课程和考试倒计时')
-          .fontSize(13)
-          .fontColor($r('app.color.text_secondary'))
-          .textAlign(TextAlign.Center)
-          .maxLines(2)
-          .width('100%');
-
-        Button('前往在线导入')
-          .height(40)
-          .fontSize(14)
-          .fontColor('#FFFFFF')
-          .backgroundColor($r('app.color.primary_color'))
-          .borderRadius(20)
-          .onClick(() => this.openImporter());
-      }
-      .width('92%')
-      .padding(16)
-      .alignItems(HorizontalAlign.Center);
-    }
-  }
-
-  @Builder
-  private CourseListBuilder(title: string, courses: Course[], showSwitch: boolean): void {
-    ImmersiveLightWrapper({ radius: 20, lightIntensity: 2.0 }) {
-      Column() {
-        Row() {
-          if (showSwitch) {
-            Row({ space: 8 }) {
-              Text(title)
-                .fontSize(18)
-                .fontWeight(FontWeight.Bold)
-                .fontColor($r('app.color.text_primary'));
-
-              Text(`${courses.length}门课程`)
-                .fontSize(12)
-                .fontColor($r('app.color.primary_color'));
-            }
-
-            Blank();
-
-            Image($r('app.media.switch'))
-              .width(18)
-              .height(18)
-              .fillColor($r('app.color.primary_color'))
-              .onClick(() => {
-                this.showExamInfoCard = true;
-              });
-          } else {
-            Text(title)
-              .fontSize(18)
-              .fontWeight(FontWeight.Bold)
-              .fontColor($r('app.color.text_primary'));
-
-            Blank();
-
-            Text(`${courses.length}门`)
-              .fontSize(12)
-              .fontColor($r('app.color.primary_color'))
-              .padding({ left: 8, right: 8, top: 4, bottom: 4 })
-              .backgroundColor($r('app.color.accent_bg_color'))
-              .borderRadius(12);
-          }
-        }
-        .width('100%')
-        .margin({ bottom: 8 });
-
-        if (courses.length === 0) {
-          Text('暂无课程')
-            .fontSize(14)
-            .fontColor($r('app.color.text_secondary'))
-            .width('100%')
-            .padding(12)
-            .borderRadius(12)
-            .backgroundColor($r('app.color.page_background'));
-        } else {
-          ForEach(courses, (course: Course, index: number) => {
-            AnimatedListItem({ delay: index * 50 }) {
-              Row({ space: 10 }) {
-                Column()
-                  .width(4)
-                  .height(50)
-                  .borderRadius(3)
-                  .backgroundColor($r('app.color.primary_color'));
-
-                Column({ space: 3 }) {
-                  Text(course.name)
-                    .fontSize(15)
-                    .fontWeight(FontWeight.Medium)
-                    .fontColor($r('app.color.text_primary'))
-                    .width('100%')
-                    .maxLines(1)
-                    .textOverflow({ overflow: TextOverflow.Ellipsis });
-
-                  Text(this.formatCourseTime(course))
-                    .fontSize(12)
-                    .fontColor($r('app.color.text_secondary'))
-                    .width('100%');
-
-                  Text(`${course.roomName || '地点未知'} · ${course.teacherName || '教师未知'}`)
-                    .fontSize(12)
-                    .fontColor($r('app.color.text_tertiary'))
-                    .width('100%')
-                    .maxLines(1)
-                    .textOverflow({ overflow: TextOverflow.Ellipsis });
-                }
-                .layoutWeight(1)
-                .alignItems(HorizontalAlign.Start);
-              }
-              .width('100%')
-              .padding(12)
-              .margin({ bottom: 8 })
-              .borderRadius(12)
-              .backgroundColor($r('app.color.page_background'));
-            }
-          });
-        }
-      }
-      .width('92%')
-      .padding(12);
-    }
-  }
-
-  @Builder
-  private ExamCardBuilder(exam: ExamItem): void {
-    Column({ space: 6 }) {
-      Row({ space: 6 }) {
-        Text(this.logExamCardRender(exam))
-          .fontSize(15)
-          .fontWeight(FontWeight.Medium)
-          .fontColor($r('app.color.text_primary'))
-          .maxLines(1)
-          .textOverflow({ overflow: TextOverflow.Ellipsis })
-          .layoutWeight(1);
-
-        Text(exam.examType || '未知')
-          .fontSize(10)
-          .fontColor($r('app.color.primary_color'))
-          .padding({ left: 6, right: 6, top: 2, bottom: 2 })
-          .backgroundColor($r('app.color.accent_bg_color'))
-          .borderRadius(8);
-      }
-      .width('100%');
-
-      CountdownCard({
-        examName: '',
-        examDate: exam.examDate,
-        examTimeRange: exam.examTimeRange,
-        beginTime: exam.beginTime,
-        compact: false
-      });
-    }
-    .width('100%')
-    .padding(12)
-    .borderRadius(12)
-    .backgroundColor($r('app.color.page_background'))
-    .onClick(() => this.openExamDetail(exam));
-  }
-
-  @Builder
-  private ExamCardsSection(): void {
-    ImmersiveLightWrapper({ radius: 20, lightIntensity: 2.0 }) {
-      Column({ space: 10 }) {
-        Row() {
-          Row({ space: 6 }) {
-            Text('⏳')
-              .fontSize(16);
-            Text(this.logExamSectionRender())
-              .fontSize(18)
-              .fontWeight(FontWeight.Bold)
-              .fontColor($r('app.color.text_primary'));
-          }
-          Blank();
-          Button('全部')
-            .height(30)
-            .fontSize(12)
-            .fontColor($r('app.color.primary_color'))
-            .backgroundColor($r('app.color.accent_bg_color'))
-            .borderRadius(12)
-            .onClick(() => this.openExamPage());
-
-          Image($r('app.media.switch'))
-            .width(18)
-            .height(18)
-            .fillColor($r('app.color.warning_color'))
-            .margin({ left: 10 })
-            .onClick(() => {
-              this.showExamInfoCard = false;
-            });
-        }
-        .width('100%');
-
-        if (this.getUpcomingExams(1).length > 0) {
-          this.ExamCardBuilder(this.getNextExam()!);
-        } else {
-          Text('暂无考试安排，好好放松一下吧 🎉')
-            .fontSize(14)
-            .fontColor($r('app.color.text_secondary'))
-            .width('100%')
-            .textAlign(TextAlign.Center)
-            .padding({ top: 16, bottom: 16 });
-        }
-      }
-      .width('92%')
-      .padding(12);
-    }
-  }
-
-  @Builder
   private TabBarItem(title: string, iconRes: Resource, index: number): void {
     Column({ space: 4 }) {
       Image(iconRes)
@@ -1218,10 +796,10 @@ struct MainPage {
           this.currentTabIndex = index;
         })
         .layoutWeight(1)
-        .width('100%')
+        .width('100%');
       }
       .width('100%')
-      .height('100%')
+      .height('100%');
 
       ToastComponent({
         message: this.toastMessage,

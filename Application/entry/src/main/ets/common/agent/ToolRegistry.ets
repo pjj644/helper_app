@@ -336,6 +336,38 @@ export class ToolRegistry {
         required: ['eventId'],
         requiresConfirmation: true,
         riskLevel: 'medium'
+      },
+      {
+        name: 'generate_study_plan',
+        description: '分析所有即将到来的考试，结合剩余天数自动生成每日考前复习计划',
+        parameters: {
+          'dailyHours': { type: 'number', description: '每日复习小时数，默认4' },
+          'focusCourse': { type: 'string', description: '重点复习课程名称，可选' }
+        },
+        required: [],
+        requiresConfirmation: false,
+        riskLevel: 'low'
+      },
+      {
+        name: 'query_campus_guide',
+        description: '查询电子科技大学校园生活指南与政策（校车时刻/免修/保研政策/场馆）',
+        parameters: {
+          'category': { type: 'string', description: '分类：bus/academic_policy/hospital/facilities/all' },
+          'keyword': { type: 'string', description: '关键词' }
+        },
+        required: ['category'],
+        requiresConfirmation: false,
+        riskLevel: 'low'
+      },
+      {
+        name: 'parse_text_to_schedule',
+        description: '从通知公告等文本中智能解析日程（标题/时间/地点）',
+        parameters: {
+          'rawText': { type: 'string', description: '原始文本' }
+        },
+        required: ['rawText'],
+        requiresConfirmation: false,
+        riskLevel: 'low'
       }
     ]
     return tools

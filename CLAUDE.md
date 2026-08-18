@@ -54,7 +54,9 @@ devecocli check compat                                       # 跨 SDK API 兼�
 后端大脑（LangGraph.js，本地电脑）+ 手机执行工具（数据留在设备）。
 
 - 后端（独立 git）：`C:\Users\28399\Desktop\华为云\后端服务\ai-proxy`，`npm run dev` 起，端口 3000。
-- 前端：`common/agent/` - `BackendAgentClient`（SSE + POST）、`ToolExecutor`（30 工具）、`ToolRegistry`（风险等级镜像）。
+- 前端：`common/agent/` - `BackendAgentClient`（SSE + POST）、`ToolExecutor`（33 工具）、`ToolRegistry`（风险等级镜像）、`VisionScheduleHelper`（智谱 GLM-4V 视觉识别）、`common/speech/SpeechRecognizerHelper`（CoreSpeechKit 语音输入）。
+- 后端知识库：`src/knowledge/store.ts` (`CampusKnowledgeStore`) 支持校车/教务/医院/场馆/生活多模块检索。
+- 桌面卡片：`EntryFormAbility.ets` + `CourseWidgetCard2x2.ets` 支持鸿蒙 2x2/2x4 万能课表服务卡片。
 - 后端地址在「应用设置 -> 助手后端」配置（填 LAN IP）。明文 HTTP 已全局 `allowsCleartext`。
 - **加一个工具要改 3 处**：后端 `src/tools.ts`（schema + meta）、前端 `ToolExecutor.ets`（执行）、`ToolRegistry.ets`（风险镜像）。详见 [`doc/AI_AGENT.md`](./doc/AI_AGENT.md)。
 
