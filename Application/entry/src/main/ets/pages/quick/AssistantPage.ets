@@ -276,7 +276,11 @@ export struct AssistantPage {
       'set_reminder_enabled': '设置提醒开关',
       'set_remind_minutes': '设置提醒时间',
       'refresh_reminders': '刷新提醒',
-      'navigate_to_page': '导航到页面'
+      'navigate_to_page': '导航到页面',
+      'query_campus_guide': '查询成电指南',
+      'generate_study_plan': '生成突击规划',
+      'parse_text_to_schedule': '解析日程文本',
+      'search_jwc_news': '检索教务处官网'
     };
     return nameMap[toolName] || toolName;
   }

@@ -368,6 +368,17 @@ export class ToolRegistry {
         required: ['rawText'],
         requiresConfirmation: false,
         riskLevel: 'low'
+      },
+      {
+        name: 'search_jwc_news',
+        description: '从电子科技大学教务处官网(www.jwc.uestc.edu.cn)实时检索最新教务通知、考试公告、选拔公示与新闻',
+        parameters: {
+          'keyword': { type: 'string', description: '检索关键词' },
+          'category': { type: 'string', description: '分类：all(全部)、jxtz(教学通知)、kwtz(考务通知)、sjjx(实践教学)、xjgl(学籍管理)' }
+        },
+        required: ['keyword'],
+        requiresConfirmation: false,
+        riskLevel: 'low'
       }
     ]
     return tools

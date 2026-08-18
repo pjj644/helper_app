@@ -14,6 +14,8 @@ import { calculateSemesterId, getSemesterLabelById } from '../../model/classTabl
 import { AppConstants, RouterConstants } from '../constants/AppConstants'
 import { router } from '@kit.ArkUI'
 import { common } from '@kit.AbilityKit'
+import { http } from '@kit.NetworkKit'
+import { SettingsRepository } from '../../repository/SettingsRepository'
 
 export interface ToolResult {
   success: boolean
@@ -405,6 +407,8 @@ export class ToolExecutor {
           return this.queryCampusGuide(args)
         case 'parse_text_to_schedule':
           return this.parseTextToSchedule(args)
+        case 'search_jwc_news':
+          return await this.searchJwcNews(args)
         default:
           return { success: false, data: `未知工具: ${toolName}` }
       }
@@ -1406,5 +1410,43 @@ export class ToolExecutor {
     }
     return { success: true, data: JSON.stringify(parseResult) }
   }
+
+  private async searchJwcNews(args: Record<string, Object>): Promise<ToolResult> {
+    const keyword = this.getStringArg(args, 'keyword', '');
+    const category = this.getStringArg(args, 'category', 'all');
+    let backendUrl = AppConstants.AI_AGENT_URL;
+    try {
+      backendUrl = await SettingsRepository.getAgentBackendUrl(this.context);
+    } catch (e) {
+      // ignore
+    }
+
+    const endpoint = `${backendUrl.replace(/\/+$/, '')}/api/jwc/search?keyword=${encodeURIComponent(keyword)}&category=${encodeURIComponent(category)}&limit=6`;
+    const httpRequest = http.createHttp();
+    try {
+      const response = await httpRequest.request(endpoint, {
+        method: http.RequestMethod.GET,
+        header: {
+          'x-proxy-key': 'uestc-helper-proxy-key-change-me'
+        },
+        readTimeout: 10000,
+        connectTimeout: 5000
+      });
+
+      if (response.responseCode === 200 && response.result) {
+        let resStr = response.result as string;
+        if (typeof resStr !== 'string') {
+          resStr = JSON.stringify(response.result);
+        }
+        return { success: true, data: resStr };
+      }
+      return { success: false, data: `教务处检索服务异常: HTTP ${response.responseCode}` };
+    } catch (err) {
+      return { success: false, data: `连接教务处检索服务失败: ${String(err)}` };
+    } finally {
+      httpRequest.destroy();
+    }
+  }
 }
+
 
