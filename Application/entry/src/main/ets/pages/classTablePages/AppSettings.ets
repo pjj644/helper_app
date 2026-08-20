@@ -18,6 +18,7 @@ import { ReminderService } from '../../service/ReminderService';
 import { ScheduleService } from '../../service/ScheduleService';
 import { LoadingOverlay } from '../../components/LoadingOverlay';
 import { SettingsRepository } from '../../repository/SettingsRepository';
+import { FloatingWindowManager } from '../../common/agent/FloatingWindowManager';
 
 @Entry
 @Component
@@ -62,6 +63,7 @@ struct AppSettings {
   @State autoUpdateEnabled: boolean = false;
   @State agentBackendUrl: string = '';
   @State showAgentToolCalls: boolean = false;
+  @State floatingBallEnabled: boolean = true;
 
   private appSettings: UISettings = UISettings.getInstance();
   private featureDetector: FeatureDetector = FeatureDetector.getInstance();
@@ -148,6 +150,7 @@ struct AppSettings {
 
   private loadAgentDisplaySettings(): void {
     this.showAgentToolCalls = PreferencesUtil.getInstance().getBoolean(AppConstants.SETTING_AI_SHOW_TOOL_CALLS_KEY, false);
+    this.floatingBallEnabled = FloatingWindowManager.getInstance().getIsEnabled();
   }
 
   private updateMaterialLevelText(): void {
@@ -544,6 +547,30 @@ struct AppSettings {
           .onChange((isOn: boolean) => {
             this.showAgentToolCalls = isOn;
             PreferencesUtil.getInstance().putBoolean(AppConstants.SETTING_AI_SHOW_TOOL_CALLS_KEY, isOn);
+          })
+      }
+      .width('100%')
+      .padding({ top: 12, bottom: 12 })
+
+      Divider().color($r('app.color.divider_color'))
+
+      Row() {
+        Column({ space: 4 }) {
+          Text('开启全局 AI 悬浮球')
+            .fontSize(15)
+            .fontColor($r('app.color.text_primary'))
+          Text('在非 AI 助手页面显示可拖拽悬浮球，支持展开 Mini 助手与当前页面感知')
+            .fontSize(12)
+            .fontColor($r('app.color.text_tertiary'))
+        }
+        .alignItems(HorizontalAlign.Start)
+        .layoutWeight(1)
+
+        Toggle({ type: ToggleType.Switch, isOn: this.floatingBallEnabled })
+          .selectedColor($r('app.color.primary_color'))
+          .onChange((isOn: boolean) => {
+            this.floatingBallEnabled = isOn;
+            FloatingWindowManager.getInstance().setEnabled(isOn);
           })
       }
       .width('100%')

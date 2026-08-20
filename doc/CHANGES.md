@@ -4,6 +4,26 @@
 
 ---
 
+## 2026-08: 全局悬浮 AI 伴随助手与页面级感知控制
+
+### 1. 全局悬浮球与 Mini 覆盖浮窗 (Floating Window SubSystem)
+- **HarmonyOS 子窗口架构 (`FloatingWindowManager.ets`)**：
+  - 基于 `windowStage.createSubWindow` 实现全局跨页面透明子窗口，支持应用内多级路由无缝悬浮。
+  - **球态 (Ball Mode)**：60×60 vp 发光呼吸球，支持自由全屏拖拽与贴边吸附物理反馈。
+  - **浮窗态 (Panel Mode)**：点击展开为覆盖在当前页面的 Mini 助手卡片，右上角配备 `[-]` 缩小至悬浮球与 `[X]` 关闭悬浮球，支持精简对话、语音输入与快捷感知胶囊。
+  - **智能避让与开关持久化**：在全屏 AI 助手页（`AssistantPage`）自动避让隐藏，离开后自动恢复；在助手侧边栏与应用设置中提供独立开关（`setting_floating_ball_enabled`）。
+
+### 2. 页面上下文感知引擎 (`PageContextTracker.ets`)
+- 建立全局页面感知快照中心，课表网格（`tableUI`）、成绩查询（`GradePage`）、考试安排（`ExamPage`）以及首页各 Tab 实时上报当前展示数据（选中的周次/课程数/GPA/倒计时）与可用操作集合。
+- Mini 助手与后端 Agent 对话时自动注入当前页面实时数据快照，赋予 AI 敏锐的当前页面感知能力。
+- 新增 `get_current_page_context` 元工具，前后端三处同步。
+
+### 3. UI 动作与视觉引导执行器 (`UIActionDispatcher.ets`)
+- 建立 UI 指令分发总线，支持 AI 通过 `execute_page_action` 直接触发页面动作（如自动切周、触发教务数据导入、切换Tab等）。
+- 支持聚光灯高亮视觉引导（Spotlight Guidance），为用户提供直观的操作指引。
+
+---
+
 ## 2026-08: 评奖升级与多模态智能体演进
 
 ### 1. 交互多模态化（语音 ASR + 智谱视觉日程识别）

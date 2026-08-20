@@ -78,6 +78,8 @@ export class AppConstants {
   static readonly AI_TOOL_RESULT_PATH: string = 'api/tool-result';
   static readonly SETTING_AGENT_BACKEND_URL_KEY: string = 'setting_agent_backend_url';
   static readonly SETTING_AI_SHOW_TOOL_CALLS_KEY: string = 'setting_ai_show_tool_calls';
+  static readonly SETTING_FLOATING_BALL_ENABLED_KEY: string = 'setting_floating_ball_enabled';
+  static readonly FLOATING_SUBWINDOW_NAME: string = 'ai_floating_subwindow';
 
   static readonly CONTENT_MAX_LINE: number = 2;
   static readonly MAX_ID: number = 100;
@@ -148,5 +150,6 @@ export class RouterConstants {
   static readonly PAGE_LOGIN: string = 'pages/login/loginIndex';
   static readonly PAGE_ACCOUNT_MANAGE: string = 'pages/login/AccountManage';
   static readonly PAGE_ASSISTANT: string = 'pages/quick/AssistantPage';
+  static readonly PAGE_FLOATING_SUBWINDOW: string = 'pages/quick/FloatingSubWindowContent';
   static readonly PAGE_WEB: string = 'pages/classTablePages/WebPage';
 }

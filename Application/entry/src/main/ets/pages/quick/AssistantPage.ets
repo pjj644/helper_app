@@ -7,6 +7,8 @@ import { BackendAgentClient, AgentCallbacks, AgentMessage } from '../../common/a
 import { SpeechRecognizerHelper } from '../../common/speech/SpeechRecognizerHelper';
 import { VisionScheduleHelper, VisionScheduleResult } from '../../common/agent/VisionScheduleHelper';
 import { SettingsRepository } from '../../repository/SettingsRepository';
+import { FloatingWindowManager } from '../../common/agent/FloatingWindowManager';
+import { PageContextTracker } from '../../common/agent/PageContextTracker';
 import { common } from '@kit.AbilityKit';
 import { promptAction } from '@kit.ArkUI';
 
@@ -50,6 +52,7 @@ export struct AssistantPage {
   @State showDeleteDialog: boolean = false;
   @State pendingDeleteSessionId: string = '';
   @State showToolCalls: boolean = false;
+  @State isFloatingBallEnabled: boolean = true;
   @State isRecording: boolean = false;
   @StorageLink(ThemeManager.THEME_STORAGE_KEY) isDarkMode: boolean = false;
   private scroller: Scroller = new Scroller();
@@ -58,6 +61,15 @@ export struct AssistantPage {
   private speechHelper: SpeechRecognizerHelper = new SpeechRecognizerHelper();
 
   aboutToAppear(): void {
+    FloatingWindowManager.getInstance().setAssistantPageActive(true);
+    this.isFloatingBallEnabled = FloatingWindowManager.getInstance().getIsEnabled();
+    PageContextTracker.getInstance().updateSnapshot(
+      'assistant',
+      'AI助手',
+      '全屏 AI 智能助手界面',
+      {},
+      []
+    );
     this.dotTimer = setInterval(() => {
       this.streamingDot = !this.streamingDot;
     }, 500);
@@ -69,6 +81,7 @@ export struct AssistantPage {
   }
 
   aboutToDisappear(): void {
+    FloatingWindowManager.getInstance().setAssistantPageActive(false);
     this.syncCurrentSession();
     this.saveSessions();
     if (this.dotTimer !== -1) {
@@ -79,6 +92,8 @@ export struct AssistantPage {
   }
 
   onPageShow(): void {
+    FloatingWindowManager.getInstance().setAssistantPageActive(true);
+    this.isFloatingBallEnabled = FloatingWindowManager.getInstance().getIsEnabled();
     this.loadToolCallDisplaySetting();
     setTimeout(() => {
       this.scroller.scrollEdge(Edge.Bottom);
@@ -1148,6 +1163,49 @@ export struct AssistantPage {
         .layoutWeight(1)
         .padding({ left: 12, right: 12 })
       }
+
+      Divider().color($r('app.color.divider_color')).strokeWidth(0.5);
+
+      // 助手设置快捷区
+      Column({ space: 8 }) {
+        Row() {
+          Text('开启全局 AI 悬浮球')
+            .fontSize(14)
+            .fontColor(ThemeManager.getTextPrimaryColor())
+            .layoutWeight(1);
+
+          Toggle({ type: ToggleType.Switch, isOn: this.isFloatingBallEnabled })
+            .selectedColor($r('app.color.primary_color'))
+            .onChange((isOn: boolean) => {
+              this.isFloatingBallEnabled = isOn;
+              FloatingWindowManager.getInstance().setEnabled(isOn);
+            });
+        }
+        .width('100%')
+        .padding({ left: 16, right: 16, top: 8, bottom: 8 });
+
+        Row() {
+          Text('显示工具调用过程')
+            .fontSize(14)
+            .fontColor(ThemeManager.getTextPrimaryColor())
+            .layoutWeight(1);
+
+          Toggle({ type: ToggleType.Switch, isOn: this.showToolCalls })
+            .selectedColor($r('app.color.primary_color'))
+            .onChange((isOn: boolean) => {
+              this.showToolCalls = isOn;
+              try {
+                const pref = preferences.getPreferencesSync(getContext(this), { name: AppConstants.COURSE_TABLE_PREF_NAME });
+                pref.putSync(AppConstants.SETTING_AI_SHOW_TOOL_CALLS_KEY, isOn);
+                pref.flushSync();
+              } catch (e) {}
+            });
+        }
+        .width('100%')
+        .padding({ left: 16, right: 16, bottom: 12 });
+      }
+      .width('100%')
+      .backgroundColor(ThemeManager.getCardColor())
     }
     .width('100%')
     .height('100%')

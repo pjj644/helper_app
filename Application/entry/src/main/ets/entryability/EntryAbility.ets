@@ -7,6 +7,8 @@ import { ThemeManager } from '../common/utils/ThemeManager';
 import { UISettings } from '../common/UISettings';
 import { PreferencesUtil } from '../common/PreferencesUtil';
 
+import { FloatingWindowManager } from '../common/agent/FloatingWindowManager';
+
 const HILOG_DOMAIN = 0x0000;
 const TAG = '[EntryAbility]';
 
@@ -46,6 +48,8 @@ export default class EntryAbility extends UIAbility {
         return;
       }
       hilog.info(HILOG_DOMAIN, TAG, 'Succeeded in loading the content.');
+      // 初始化全局悬浮窗管理器
+      FloatingWindowManager.getInstance().init(windowStage, this.context);
     });
   }
 

@@ -15,6 +15,8 @@ import { common } from '@kit.AbilityKit'
 import { http } from '@kit.NetworkKit'
 import { SettingsRepository } from '../../repository/SettingsRepository'
 import { DataQueryEngine, QueryFilter } from './DataQueryEngine'
+import { PageContextTracker } from './PageContextTracker'
+import { UIActionDispatcher } from './UIActionDispatcher'
 
 export interface ToolResult {
   success: boolean
@@ -148,6 +150,10 @@ export class ToolExecutor {
           return await this.generateStudyPlan(args)
         case 'parse_text_to_schedule':
           return this.parseTextToSchedule(args)
+        case 'get_current_page_context':
+          return this.getCurrentPageContext()
+        case 'execute_page_action':
+          return await this.executePageAction(args)
 
         // === 向后兼容旧工具分发 ===
         case 'query_today_courses':
@@ -672,5 +678,44 @@ export class ToolExecutor {
       upcomingExams: upcomingExams
     }
     return { success: true, data: JSON.stringify(planData) }
+  }
+
+  // === 页面感知与 UI 操作工具 ===
+  private getCurrentPageContext(): ToolResult {
+    const snapshot = PageContextTracker.getInstance().getSnapshot()
+    return {
+      success: true,
+      data: JSON.stringify(snapshot)
+    }
+  }
+
+  private async executePageAction(args: Record<string, Object>): Promise<ToolResult> {
+    const action: string = this.getStringArg(args, 'action')
+    const paramsRaw: Object | undefined = args['params']
+    const params: Record<string, Object> = (paramsRaw && typeof paramsRaw === 'object')
+      ? paramsRaw as Record<string, Object>
+      : args
+
+    if (action === 'show_guidance') {
+      const targetElementId: string = this.getStringArg(params, 'targetElementId')
+      const hintText: string = this.getStringArg(params, 'hintText')
+      const durationMs: number = this.getNumberArg(params, 'durationMs', 5000)
+      UIActionDispatcher.getInstance().showGuidance({
+        targetElementId: targetElementId,
+        hintText: hintText,
+        durationMs: durationMs
+      })
+      return { success: true, data: JSON.stringify({ message: `已显示引导提示：${hintText}` }) }
+    }
+
+    const ok: boolean = await UIActionDispatcher.getInstance().dispatch(action, params)
+    return {
+      success: ok,
+      data: JSON.stringify({
+        action: action,
+        dispatched: ok,
+        message: ok ? `页面动作 [${action}] 执行成功` : `当前页面未响应动作 [${action}]，可能不支持或未在该页面`
+      })
+    }
   }
 }

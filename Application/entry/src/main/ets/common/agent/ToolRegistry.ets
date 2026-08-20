@@ -101,6 +101,25 @@ export class ToolRegistry {
         requiresConfirmation: false,
         riskLevel: 'low'
       },
+      {
+        name: 'get_current_page_context',
+        description: '获取用户手机当前所在的页面名称、数据概览及可用操作集合',
+        parameters: {},
+        required: [],
+        requiresConfirmation: false,
+        riskLevel: 'low'
+      },
+      {
+        name: 'execute_page_action',
+        description: '在当前页面触发 UI 交互动作（如切换周次、切换Tab、触发导入、显示聚光灯引导等）',
+        parameters: {
+          'action': { type: 'string', description: '动作类型：switch_week/switch_tab/import_courses/import_grades/import_exams/show_guidance' },
+          'params': { type: 'object', description: '动作参数' }
+        },
+        required: ['action'],
+        requiresConfirmation: false,
+        riskLevel: 'low'
+      },
 
       // 向后兼容保留
       {

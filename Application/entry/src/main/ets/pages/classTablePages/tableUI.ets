@@ -16,6 +16,8 @@ import { ThemeManager } from '../../common/utils/ThemeManager';
 import { getSemesterOptions, SemesterOptionSet, getSemesterLabelById, calculateSemesterId } from '../../model/classTableModel/ExamAccessRules';
 import { CourseRepository } from '../../repository/CourseRepository';
 import { CourseService } from '../../service/CourseService';
+import { PageContextTracker } from '../../common/agent/PageContextTracker';
+import { UIActionDispatcher } from '../../common/agent/UIActionDispatcher';
 
 @Entry
 @Component
@@ -66,16 +68,67 @@ struct TableUI {
   private readonly MAX_ZOOM_SCALE: number = 1.4;
   private readonly TABLE_EDGE_PADDING: number = 20;
   private readonly TABLE_BOTTOM_GAP: number = 68;
+  private unregisterSwitchWeek: (() => void) | null = null;
+  private unregisterImport: (() => void) | null = null;
 
   aboutToAppear() {
     this.initSemesterOptions();
     this.updateWeekDates();
     this.tryLoadPendingCourseData();
     this.tryLoadCourseData();
+
+    this.unregisterSwitchWeek = UIActionDispatcher.getInstance().registerHandler('switch_week', (params: Record<string, Object>) => {
+      const targetWeek = Number(params['week'] || params['targetWeek']);
+      if (targetWeek >= 1 && targetWeek <= this.maxWeeks) {
+        this.currentWeek = targetWeek;
+        this.updateWeekDates();
+        this.reportPageContext();
+        return true;
+      }
+      return false;
+    });
+
+    this.unregisterImport = UIActionDispatcher.getInstance().registerHandler('import_courses', () => {
+      router.pushUrl({ url: 'pages/classTablePages/Index' });
+      return true;
+    });
+
+    this.reportPageContext();
+  }
+
+  aboutToDisappear() {
+    if (this.unregisterSwitchWeek) {
+      this.unregisterSwitchWeek();
+      this.unregisterSwitchWeek = null;
+    }
+    if (this.unregisterImport) {
+      this.unregisterImport();
+      this.unregisterImport = null;
+    }
   }
 
   onPageShow() {
     this.tryLoadPendingCourseData();
+    this.reportPageContext();
+  }
+
+  private reportPageContext(): void {
+    const weekCourses = this.courseModel.getCoursesForWeek(this.currentWeek);
+    const names = weekCourses.slice(0, 10).map((c: Course) => `${c.name}@周${c.time.dayOfWeek}第${c.time.startSection}节(${c.roomName || '待定'})`);
+    PageContextTracker.getInstance().updateSnapshot(
+      'tableUI',
+      '周课表网格',
+      `当前展示第 ${this.currentWeek} 周课表，本周共有 ${weekCourses.length} 门课`,
+      {
+        'currentWeek': this.currentWeek,
+        'courseCount': weekCourses.length,
+        'courses': names
+      },
+      [
+        { actionId: 'switch_week', label: '切换周次', description: '切换至指定教学周课表' },
+        { actionId: 'import_courses', label: '导入教务课表', description: '从教务系统导入课表' }
+      ]
+    );
   }
 
   private initSemesterOptions(): void {

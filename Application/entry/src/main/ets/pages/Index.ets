@@ -27,6 +27,9 @@ import { ToastComponent } from '../components/ToastComponents';
 import { GradeService } from '../service/GradeService';
 import { ScheduleService } from '../service/ScheduleService';
 import { AuthService } from '../service/AuthService';
+import { PageContextTracker } from '../common/agent/PageContextTracker';
+import { FloatingWindowManager } from '../common/agent/FloatingWindowManager';
+import { UIActionDispatcher } from '../common/agent/UIActionDispatcher';
 import { BreakpointUtils } from '../common/utils/BreakpointUtils';
 import { HomeHeaderComponent } from '../components/home/HomeHeaderComponent';
 import { NextCourseCardComponent } from '../components/home/NextCourseCardComponent';
@@ -113,7 +116,15 @@ struct MainPage {
       animateTo({ curve: curves.springMotion(0.6, 0.8) }, () => {
         this.pageReady = true;
       });
+      this.updateCurrentTabContext();
     }, 40);
+
+    UIActionDispatcher.getInstance().registerHandler('switch_tab', (params: Record<string, Object>) => {
+      const idx = Number(params['tabIndex'] !== undefined ? params['tabIndex'] : 2);
+      this.currentTabIndex = idx;
+      this.updateCurrentTabContext();
+      return true;
+    });
   }
 
   aboutToDisappear(): void {
@@ -128,6 +139,73 @@ struct MainPage {
     this.loadQuickInfo();
     this.checkLoginStatus();
     ReminderService.refreshAllReminders(getContext(this));
+    this.updateCurrentTabContext();
+  }
+
+  private updateCurrentTabContext(): void {
+    FloatingWindowManager.getInstance().setAssistantPageActive(this.currentTabIndex === 1);
+
+    if (this.currentTabIndex === 0) {
+      PageContextTracker.getInstance().updateSnapshot(
+        'discover',
+        '发现',
+        '校园常用服务与功能导航',
+        { 'latestGpa': this.latestGpa, 'todayEvents': this.todayEventCount },
+        [
+          { actionId: 'open_map', label: '打开校园地图', description: '导航至校园GIS地图' },
+          { actionId: 'open_grades', label: '查成绩', description: '进入成绩查询页面' }
+        ]
+      );
+    } else if (this.currentTabIndex === 1) {
+      PageContextTracker.getInstance().updateSnapshot(
+        'assistant',
+        'AI助手',
+        '全屏智能助手对话',
+        {},
+        []
+      );
+    } else if (this.currentTabIndex === 2) {
+      const todayNames = this.todayCourses.map((c: Course) => `${c.name}@${c.roomName || '待定'}(第${c.time.startSection}节)`);
+      const dataSnap: Record<string, Object> = {
+        'currentWeek': this.currentWeek,
+        'todayCourseCount': this.todayCourses.length,
+        'tomorrowCourseCount': this.tomorrowCourses.length,
+        'futureExamCount': this.getFutureExamCount(),
+        'todayCourses': todayNames
+      };
+      PageContextTracker.getInstance().updateSnapshot(
+        'home_course',
+        '课程首页',
+        `当前第${this.currentWeek}周，今日${this.todayCourses.length}节课，明日${this.tomorrowCourses.length}节课，未来考试${this.getFutureExamCount()}场`,
+        dataSnap,
+        [
+          { actionId: 'open_full_table', label: '查看完整周课表', description: '跳转至全周课表网格页面' },
+          { actionId: 'import_courses', label: '导入教务课表', description: '从教务系统导入课表' },
+          { actionId: 'open_calendar', label: '打开日历', description: '进入日程日历' }
+        ]
+      );
+    } else if (this.currentTabIndex === 3) {
+      PageContextTracker.getInstance().updateSnapshot(
+        'calendar',
+        '校园日历',
+        '日程管理与系统日历事件',
+        { 'todayEvents': this.todayEventCount },
+        [
+          { actionId: 'add_schedule', label: '新建日程', description: '创建新的待办或日程' }
+        ]
+      );
+    } else if (this.currentTabIndex === 4) {
+      PageContextTracker.getInstance().updateSnapshot(
+        'mine',
+        '个人中心',
+        this.isLoggedIn ? `已登录用户：${this.loginEmail}` : '未登录状态',
+        { 'isLoggedIn': this.isLoggedIn, 'email': this.loginEmail },
+        [
+          { actionId: 'open_settings', label: '应用设置', description: '打开偏好设置' },
+          { actionId: 'open_login', label: '登录账号', description: '进入登录页面' }
+        ]
+      );
+    }
   }
 
   private async loadPageData(): Promise<void> {
@@ -794,6 +872,7 @@ struct MainPage {
         .barBackgroundColor($r('app.color.card_background'))
         .onChange((index: number) => {
           this.currentTabIndex = index;
+          this.updateCurrentTabContext();
         })
         .layoutWeight(1)
         .width('100%');

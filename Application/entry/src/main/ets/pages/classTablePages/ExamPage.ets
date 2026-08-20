@@ -5,6 +5,8 @@ import { ExamService } from '../../service/ExamService';
 import { ExamUtils } from '../../common/utils/ExamUtils';
 import { DateUtils } from '../../common/utils/DateUtils';
 import { ThemeManager } from '../../common/utils/ThemeManager';
+import { PageContextTracker } from '../../common/agent/PageContextTracker';
+import { UIActionDispatcher } from '../../common/agent/UIActionDispatcher';
 
 @Entry
 @Component
@@ -19,6 +21,7 @@ struct ExamPage {
   @State semesterOptionIds: number[] = [0];
   @State selectedSemesterIndex: number = 0;
   private tickTimer: number = -1;
+  private unregisterImport: (() => void) | null = null;
 
   private normalizeExamTypeIndex(index: number): number {
     if (index < 0 || index >= EXAM_TYPE_OPTIONS.length) {
@@ -50,12 +53,21 @@ struct ExamPage {
     this.tickTimer = setInterval(() => {
       this.nowTick = Date.now();
     }, 1000);
+
+    this.unregisterImport = UIActionDispatcher.getInstance().registerHandler('import_exams', () => {
+      this.openImport();
+      return true;
+    });
   }
 
   aboutToDisappear(): void {
     if (this.tickTimer >= 0) {
       clearInterval(this.tickTimer);
       this.tickTimer = -1;
+    }
+    if (this.unregisterImport) {
+      this.unregisterImport();
+      this.unregisterImport = null;
     }
   }
 
@@ -106,8 +118,23 @@ struct ExamPage {
     const selectedTypeId: number = ExamService.getExamTypeIdByIndex(this.selectedExamTypeIndex);
     const selectedSemesterId: number = this.semesterOptionIds[this.selectedSemesterIndex] || 0;
     const now: number = Date.now();
-    this.nowTick = now;
     this.exams = ExamService.filterExams(this.allExams, selectedTypeId, selectedSemesterId);
+
+    const examSummary = this.exams.slice(0, 8).map((e: ExamItem) => `${e.courseName}: ${e.examDate} ${e.examTimeRange} (${e.examLocation || '考场未定'})`);
+    PageContextTracker.getInstance().updateSnapshot(
+      'exam',
+      '考试安排',
+      `当前类型[${this.getSelectedExamTypeLabel()}]，共 ${this.exams.length} 场考试`,
+      {
+        'examType': this.getSelectedExamTypeLabel(),
+        'semester': this.getSelectedSemesterLabel(),
+        'totalExams': this.exams.length,
+        'exams': examSummary
+      },
+      [
+        { actionId: 'import_exams', label: '导入教务考试', description: '从教务系统在线导入考试安排' }
+      ]
+    );
   }
 
   private getSelectedSemesterId(): number {

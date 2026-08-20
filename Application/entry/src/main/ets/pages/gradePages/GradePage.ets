@@ -4,6 +4,8 @@ import { getPreviousSemesterId } from '../../model/classTableModel/ExamAccessRul
 import { GradeService } from '../../service/GradeService';
 import { ThemeManager } from '../../common/utils/ThemeManager';
 import { EmptyState } from '../../components/EmptyState';
+import { PageContextTracker } from '../../common/agent/PageContextTracker';
+import { UIActionDispatcher } from '../../common/agent/UIActionDispatcher';
 
 @Entry
 @Component
@@ -17,9 +19,21 @@ struct GradePage {
   @State courseCount: number = 0;
   @State isLoading: boolean = true;
   @StorageLink(ThemeManager.THEME_STORAGE_KEY) isDarkMode: boolean = false;
+  private unregisterAction: (() => void) | null = null;
 
   aboutToAppear(): void {
     this.loadGrades();
+    this.unregisterAction = UIActionDispatcher.getInstance().registerHandler('import_grades', (params: Record<string, Object>) => {
+      this.openGradeImport();
+      return true;
+    });
+  }
+
+  aboutToDisappear(): void {
+    if (this.unregisterAction) {
+      this.unregisterAction();
+      this.unregisterAction = null;
+    }
   }
 
   onPageShow(): void {
@@ -73,6 +87,22 @@ struct GradePage {
     }
     this.totalCredits = GradeUtils.getTotalCredits(this.filteredGrades);
     this.courseCount = this.filteredGrades.length;
+
+    const gradeListSummary = this.filteredGrades.slice(0, 10).map((g: GradeItem) => `${g.courseName}: ${g.finalScore || g.totalScore || '--'}分 (${g.gradePoint}绩点, ${g.credit}学分)`);
+    PageContextTracker.getInstance().updateSnapshot(
+      'grade',
+      '成绩查询',
+      `当前学期GPA: ${this.gpa.toFixed(2)}，总学分: ${this.totalCredits}，已出成绩科目: ${this.courseCount}门`,
+      {
+        'gpa': this.gpa.toFixed(2),
+        'totalCredits': this.totalCredits,
+        'courseCount': this.courseCount,
+        'topGrades': gradeListSummary
+      },
+      [
+        { actionId: 'import_grades', label: '从教务系统导入成绩', description: '打开教务成绩导入页面' }
+      ]
+    );
   }
 
   build() {
