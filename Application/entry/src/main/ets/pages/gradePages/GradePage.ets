@@ -1,5 +1,6 @@
 import { router } from '@kit.ArkUI';
 import { GradeItem, GradeSemesterOption, GradeUtils } from '../../model/GradeModel';
+import { getPreviousSemesterId } from '../../model/classTableModel/ExamAccessRules';
 import { GradeService } from '../../service/GradeService';
 import { ThemeManager } from '../../common/utils/ThemeManager';
 import { EmptyState } from '../../components/EmptyState';
@@ -48,8 +49,21 @@ struct GradePage {
     return opts;
   }
 
+  private getSelectedSemesterId(): number {
+    return this.semesterOptions[this.selectedSemesterIndex]?.semesterId || 0;
+  }
+
+  private openGradeImport(): void {
+    const currentSemId: number = this.getSelectedSemesterId();
+    const targetSemId: number = currentSemId > 0 ? currentSemId : getPreviousSemesterId();
+    router.pushUrl({
+      url: 'pages/gradePages/GradeImport',
+      params: { semesterId: targetSemId }
+    });
+  }
+
   private applyFilter(): void {
-    const semesterId: number = this.semesterOptions[this.selectedSemesterIndex]?.semesterId || 0;
+    const semesterId: number = this.getSelectedSemesterId();
     if (semesterId === 0) {
       this.filteredGrades = this.grades;
       this.gpa = GradeService.calculateOverallGPA(this.grades);
@@ -75,7 +89,7 @@ struct GradePage {
           .backgroundColor(ThemeManager.getAccentBgColor())
           .borderRadius(8)
           .onClick(() => {
-            router.pushUrl({ url: 'pages/gradePages/GradeImport' });
+            this.openGradeImport();
           });
       }
       .width('100%')
@@ -128,7 +142,7 @@ struct GradePage {
               title: '暂无成绩数据',
               description: '请点击右上角"在线导入"获取成绩',
               buttonText: '在线导入',
-              onButtonClick: () => router.pushUrl({ url: 'pages/gradePages/GradeImport' })
+              onButtonClick: () => this.openGradeImport()
             });
           }
           .width('100%')

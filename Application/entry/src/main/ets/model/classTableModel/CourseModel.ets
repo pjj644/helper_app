@@ -352,20 +352,22 @@ export interface WeekDateInfo {
 
 // 获取本周日期数组（周一到周日）
 export function getWeekDates(): WeekDateInfo[] {
-  const dates: WeekDateInfo[] = [];
-  const now = new Date();
-  const currentDay = now.getDay() || 7; // 1-7
+  return getWeekDatesForWeek(getCurrentWeek());
+}
 
-  // 计算本周一的日期
-  const monday = new Date(now);
-  monday.setDate(now.getDate() - currentDay + 1);
+// 获取指定教学周（1-20周）的周一到周日日期数组
+export function getWeekDatesForWeek(targetWeek: number): WeekDateInfo[] {
+  const termStart: Date = new Date(2026, 7, 31); // 2026-08-31 周一
+  termStart.setHours(0, 0, 0, 0);
+
+  const targetMondayMs: number = termStart.getTime() + (Math.max(1, targetWeek) - 1) * 7 * 24 * 60 * 60 * 1000;
+  const dates: WeekDateInfo[] = [];
 
   for (let i = 0; i < 7; i++) {
-    const date = new Date(monday);
-    date.setDate(monday.getDate() + i);
+    const d: Date = new Date(targetMondayMs + i * 24 * 60 * 60 * 1000);
     dates.push({
-      month: date.getMonth() + 1,
-      date: date.getDate(),
+      month: d.getMonth() + 1,
+      date: d.getDate(),
       dayOfWeek: i + 1,
     });
   }

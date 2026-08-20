@@ -58,6 +58,8 @@ struct ExamImport {
   private readonly MAX_PARSE_RETRY: number = 5;
   private vpnAutoDetected: boolean = false;
   private vpnPortalNavigated: boolean = false;
+  private http500RetryCount: number = 0;
+  private readonly MAX_HTTP_500_RETRY: number = 2;
 
   aboutToAppear(): void {
     const params = router.getParams() as Record<string, string>;
@@ -262,8 +264,8 @@ struct ExamImport {
           this.showRefreshBtn = false;
           console.info(`testTag ExamImport onPageEnd url=${url}`);
 
-          if (url.includes('authserver/login')) {
-            this.message = this.isVpnMode ? 'VPN模式：请先完成统一身份认证登录' : '请先登录教务系统，登录后会自动跳转考试页';
+          if (VpnEncoder.isLoginPage(url) || url.includes('authserver/login')) {
+            this.message = this.isVpnMode ? 'VPN模式：请先完成统一身份认证登录' : '请先登录统一身份认证，登录后会自动跳转考试页';
             this.isProcessing = false;
             this.hasJumpedToExam = false;
             this.vpnPortalNavigated = false;
@@ -283,15 +285,6 @@ struct ExamImport {
             return;
           }
 
-          if (url.includes('home!childmenus.action') && url.includes('menu.id=844')) {
-            if (!this.hasJumpedToExam) {
-              this.hasJumpedToExam = true;
-              console.info('testTag ExamImport reached menu page and will jump to exam page');
-              setTimeout(() => this.navigateToExamPage(), 600);
-            }
-            return;
-          }
-
           if (url.includes('stdExamTable!examTable.action')) {
             this.message = '已进入考试页面，正在抓取';
             console.info('testTag ExamImport entered exam page, schedule parse');
@@ -299,20 +292,53 @@ struct ExamImport {
             return;
           }
 
-          if (this.isVpnMode && VpnEncoder.isVpnEamsUrl(url) && !url.includes('stdExamTable!examTable.action') && !url.includes('home!childmenus.action')) {
-            this.message = '已登录，正在定位考试页面';
-            this.hasJumpedToExam = false;
-            console.info('testTag ExamImport VPN EAMS non-target page, will jump to exam page');
-            setTimeout(() => this.navigateToExamPage(), 600);
-            return;
-          }
+          // 运行通用登录状态与重复登录检测脚本
+          const checkLoginJs = WebScrapeService.buildLoginCheckScript();
+          this.controller.runJavaScript(checkLoginJs, (error: Error | null, result: string) => {
+            if (error) {
+              console.error(`testTag ExamImport checkLogin error:`, error);
+              return;
+            }
+            try {
+              let loginResult: string = result;
+              if (result.trim().startsWith('"')) {
+                const inner: string = JSON.parse(result);
+                if (typeof inner === 'string') {
+                  loginResult = inner;
+                }
+              }
+              const loginStatus = JSON.parse(loginResult) as Record<string, string>;
+              console.info(`testTag ExamImport loginStatus:`, loginStatus);
 
-          if (url.includes('/eams/') && !url.includes('stdExamTable!examTable.action') && !url.includes('home!childmenus.action')) {
-            this.message = '已登录，正在定位考试页面';
-            this.hasJumpedToExam = false;
-            console.info('testTag ExamImport in eams non-target page, will jump to exam page');
-            setTimeout(() => this.navigateToExamPage(), 600);
-          }
+              if (loginStatus.status === 'repeat_login_prompt') {
+                console.info('testTag ExamImport 检测到重复登录提示，执行自动确认');
+                this.message = '检测到多设备登录提示，正在自动确认...';
+                const confirmUrl: string = (loginStatus.href && loginStatus.href.length > 0) ?
+                  loginStatus.href :
+                  (this.isVpnMode ? VpnEncoder.buildVpnHomeUrl() : 'https://eams.uestc.edu.cn/eams/home.action');
+                setTimeout(() => {
+                  console.info('testTag ExamImport loadUrl confirm repeat login:', confirmUrl);
+                  this.controller.loadUrl(confirmUrl);
+                }, 300);
+                return;
+              }
+
+              if (loginStatus.status === 'logged_in') {
+                if (!this.hasJumpedToExam) {
+                  this.hasJumpedToExam = true;
+                  this.message = '已登录，正在跳转考试页面...';
+                  console.info('testTag ExamImport logged_in confirmed, jumping to exam page');
+                  setTimeout(() => this.navigateToExamPage(), 800);
+                }
+              } else if (loginStatus.status === 'not_logged_in') {
+                console.info('testTag ExamImport not_logged_in, waiting for credentials');
+                this.isProcessing = false;
+                this.message = '请完成统一身份认证登录';
+              }
+            } catch (e) {
+              console.error('testTag ExamImport parse loginStatus error:', e);
+            }
+          });
         })
         .onHttpErrorReceive((event) => {
           const statusCode = event.response.getResponseCode();
@@ -322,8 +348,14 @@ struct ExamImport {
             this.switchToVpnMode();
             return;
           }
-          if (statusCode !== 403) {
-            this.showRefreshBtn = true;
+          if (statusCode === 500 && this.http500RetryCount < this.MAX_HTTP_500_RETRY) {
+            this.http500RetryCount++;
+            this.message = `教务系统会话就绪中，正在重试(${this.http500RetryCount}/${this.MAX_HTTP_500_RETRY})...`;
+            console.info(`testTag ExamImport HTTP 500, retrying in 1.5s (attempt ${this.http500RetryCount})`);
+            setTimeout(() => {
+              this.navigateToExamPage();
+            }, 1500);
+            return;
           }
         })
         .onErrorReceive((event) => {

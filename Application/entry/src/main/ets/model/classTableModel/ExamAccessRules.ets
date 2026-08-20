@@ -150,9 +150,36 @@ export function getSemesterLabelById(semesterId: number): string {
   return toSemesterLabel(targetSemester);
 }
 
+export function getPreviousSemesterId(date: Date = new Date()): number {
+  return calculateSemesterId(date) - SEMESTER_ID_STEP;
+}
+
 export function buildExamTableUrl(semesterId: number, examTypeId: number): string {
   const normalizedExamType: number = normalizeExamTypeId(examTypeId);
   return `${EAMS_EXAM_TABLE_BASE_URL}?semester.id=${semesterId}&examType.id=${normalizedExamType}`;
+}
+
+export interface GradeSemesterOptionItem {
+  semesterId: number;
+  label: string;
+}
+
+export function getGradeSemesterOptions(baseDate: Date = new Date()): GradeSemesterOptionItem[] {
+  const options: GradeSemesterOptionItem[] = [{ semesterId: 0, label: '所有学期' }];
+  const currentSemester: AcademicSemester = getCurrentAcademicSemester(baseDate);
+  const currentIndex: number = toSemesterIndex(currentSemester);
+  const endIndex: number = currentIndex + 2;
+  const startIndex: number = currentIndex - 10;
+
+  for (let index = endIndex; index >= startIndex; index--) {
+    const semester: AcademicSemester = fromSemesterIndex(index);
+    const endYear: number = semester.startYear + 1;
+    const label: string = `${semester.startYear}-${endYear}-${semester.termNumber}`;
+    const id: number = getSemesterIdByYearTerm(semester.startYear, semester.termNumber);
+    options.push({ semesterId: id, label });
+  }
+
+  return options;
 }
 
 export function getSemesterOptions(): SemesterOptionSet {
@@ -161,17 +188,45 @@ export function getSemesterOptions(): SemesterOptionSet {
 
   const currentSemester: AcademicSemester = getCurrentAcademicSemester(new Date());
   const currentIndex: number = toSemesterIndex(currentSemester);
-  const endIndex: number = currentIndex + 1;
-  const startIndex: number = toSemesterIndex({ startYear: 2022, termNumber: 1 });
+  const endIndex: number = currentIndex + 2;
+  const startIndex: number = currentIndex - 10;
 
   for (let index = endIndex; index >= startIndex; index--) {
     const semester: AcademicSemester = fromSemesterIndex(index);
-    const label: string = toSemesterLabel(semester);
+    const endYear: number = semester.startYear + 1;
+    const label: string = `${semester.startYear}-${endYear}-${semester.termNumber}`;
     const id: number = getSemesterIdByYearTerm(semester.startYear, semester.termNumber);
     options.push({ value: label });
     semesterIds.push(id);
   }
 
   return { options, semesterIds };
+}
+
+export function parseSemesterIdFromAcademicYear(academicYearText: string): number | undefined {
+  if (!academicYearText) {
+    return undefined;
+  }
+  const clean: string = academicYearText.replace(/\s+/g, '');
+  // Match "2024-2025-1", "2024-2025-2", "2024-2025_1", "2024-2025-1学期"
+  const matchNum: RegExpMatchArray | null = clean.match(/(\d{4})[-_~](\d{4})[-_~]?([12])/);
+  if (matchNum) {
+    const startYear: number = Number.parseInt(matchNum[1], 10);
+    const termNumber: number = Number.parseInt(matchNum[3], 10);
+    if (Number.isFinite(startYear) && (termNumber === 1 || termNumber === 2)) {
+      return getSemesterIdByYearTerm(startYear, termNumber);
+    }
+  }
+  // Match "2024-2025学年第一学期", "2024-2025学年第二学期"
+  const matchCn: RegExpMatchArray | null = clean.match(/(\d{4})[-_~](\d{4})[^\d]*([一二12])/);
+  if (matchCn) {
+    const startYear: number = Number.parseInt(matchCn[1], 10);
+    const termStr: string = matchCn[3];
+    const termNumber: number = (termStr === '一' || termStr === '1') ? 1 : 2;
+    if (Number.isFinite(startYear)) {
+      return getSemesterIdByYearTerm(startYear, termNumber);
+    }
+  }
+  return undefined;
 }
 

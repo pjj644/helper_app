@@ -497,7 +497,7 @@ export class ToolExecutor {
       'settings': RouterConstants.PAGE_SETTINGS,
       'course_import': RouterConstants.PAGE_COURSE_IMPORT,
       'exam_import': RouterConstants.PAGE_EXAM_IMPORT,
-      'grade_import': RouterConstants.PAGE_GRADE,
+      'grade_import': RouterConstants.PAGE_GRADE_IMPORT,
       'assistant': RouterConstants.PAGE_ASSISTANT,
       'home': RouterConstants.PAGE_INDEX
     }

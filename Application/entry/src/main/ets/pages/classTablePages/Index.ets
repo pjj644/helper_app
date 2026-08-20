@@ -7,6 +7,7 @@ import { CourseService } from '../../service/CourseService';
 import { CourseRepository } from '../../repository/CourseRepository';
 import { VpnEncoder } from '../../common/utils/VpnEncoder';
 import { LoadingOverlay } from '../../components/LoadingOverlay';
+import { calculateSemesterId } from '../../model/classTableModel/ExamAccessRules';
 
 interface CourseActivity {
   teacherId: string;
@@ -39,6 +40,7 @@ interface LoginStatus {
   location?: string;
   error?: string;
   reason?: string;
+  href?: string;
 }
 
 @Entry
@@ -67,7 +69,7 @@ struct Index {
   private returnToHome: boolean = false;
   private lastCourseData: string = '';
   private currentActivities: CourseActivity[][] = [];
-  private courseTableTargetSemesterId: number = 0;
+  private courseTableTargetSemesterId: number = calculateSemesterId();
   private pendingSemesterSwitchId: number = 0;
   private isPageActive: boolean = false;
   private vpnAutoDetected: boolean = false;
@@ -76,9 +78,12 @@ struct Index {
   private readonly MAX_SEMESTER_SWITCH_RETRY: number = 2;
   private table0NotFoundCount: number = 0;
   private readonly MAX_TABLE0_NOT_FOUND: number = 5;
+  private http500RetryCount: number = 0;
+  private readonly MAX_HTTP_500_RETRY: number = 2;
 
   aboutToAppear(): void {
     this.isPageActive = true;
+    this.courseTableTargetSemesterId = calculateSemesterId();
     const params = router.getParams() as Record<string, string>;
     this.returnToHome = !!(params && params['returnHome'] === '1');
     if (params && params['semesterId']) {
@@ -294,7 +299,19 @@ struct Index {
             this.switchToVpnMode();
             return;
           }
-          this.handlePageLoadFailure('HTTP错误: ' + statusCode);
+          if (statusCode === 500 && this.http500RetryCount < this.MAX_HTTP_500_RETRY) {
+            this.http500RetryCount++;
+            this.message = `教务系统会话就绪中，正在重试(${this.http500RetryCount}/${this.MAX_HTTP_500_RETRY})...`;
+            console.info(`testTag Index HTTP 500, retrying in 1.5s (attempt ${this.http500RetryCount})`);
+            setTimeout(() => {
+              if (!this.isPageActive) {
+                return;
+              }
+              this.navigateToCourseTable();
+            }, 1500);
+            return;
+          }
+          this.showRefreshBtn = true;
         })
         .onErrorReceive((error) => {
           console.error('testTag页面加载错误:', error.error.getErrorInfo());
@@ -359,7 +376,7 @@ struct Index {
     console.info('testTag当前页面URL:', url);
 
     if (VpnEncoder.isLoginPage(url) || url.includes(this.loginUrlPattern)) {
-      this.message = this.isVpnMode ? 'VPN模式：请完成统一身份认证登录' : '请完成登录';
+      this.message = this.isVpnMode ? 'VPN模式：请完成统一身份认证登录' : '请完成统一身份认证登录';
       this.isLoggedIn = false;
       this.needManualClick = false;
       this.manualMode = false;
@@ -389,30 +406,10 @@ struct Index {
         console.info('testTag VPN模式：检测到WebVPN门户页，等待加载教务系统...');
         this.vpnNavigatedFromPortal = true;
         this.message = 'VPN登录成功，等待加载教务系统...';
-        return;
-      }
-
-      if (VpnEncoder.isVpnEamsUrl(url)) {
-        if (this.manualMode) {
-          return;
-        }
-        console.info('testTag VPN模式：检测到VPN代理的EAMS页面，使用VPN URL导航课表');
-        this.isLoggedIn = true;
         setTimeout(() => {
-          this.doNavigateToCourseTable();
+          this.controller.loadUrl(VpnEncoder.buildVpnEamsPortalUrl());
         }, 1000);
         return;
-      }
-    } else {
-      if (url.includes('eams.uestc.edu.cn') && !url.includes('login')) {
-        if (this.manualMode) {
-          return;
-        }
-        console.info('testTag当前在eams页面，设置为已登录状态，准备跳转课表...');
-        this.isLoggedIn = true;
-        setTimeout(() => {
-          this.navigateToCourseTable();
-        }, 1000);
       }
     }
   }
@@ -422,42 +419,24 @@ struct Index {
       return;
     }
 
-    this.message = '检查登录状态...';
     const currentUrl: string = this.controller.getUrl();
     console.info('testTag检查登录状态，当前URL:', currentUrl);
 
     if (VpnEncoder.isLoginPage(currentUrl) || currentUrl.includes(this.loginUrlPattern)) {
       console.info('testTag当前在登录页面，需要登录');
-      this.message = this.isVpnMode ? 'VPN模式：请完成统一身份认证登录' : '请完成登录';
+      this.message = this.isVpnMode ? 'VPN模式：请完成统一身份认证登录' : '请完成统一身份认证登录';
+      this.isLoggedIn = false;
+      this.isProcessing = false;
       return;
     }
 
-    if (this.isVpnMode) {
-      if (VpnEncoder.isVpnEamsUrl(currentUrl)) {
-        console.info('testTag VPN模式：已登录（VPN代理EAMS页面），准备跳转课表...');
-        this.message = '已登录，正在跳转课表...';
-        setTimeout(() => {
-          this.navigateToCourseTable();
-        }, 1000);
-        return;
-      }
-      if (VpnEncoder.isWebvpnPortal(currentUrl)) {
-        console.info('testTag VPN模式：在WebVPN门户页，导航到EAMS...');
-        this.message = 'VPN登录成功，正在跳转教务系统...';
-        setTimeout(() => {
-          this.controller.loadUrl(VpnEncoder.buildVpnEamsPortalUrl());
-        }, 1000);
-        return;
-      }
-    } else {
-      if (currentUrl.includes('eams.uestc.edu.cn')) {
-        console.info('testTag已登录（基于URL判断），准备跳转课表...');
-        this.message = '已登录，正在跳转课表...';
-        setTimeout(() => {
-          this.navigateToCourseTable();
-        }, 1000);
-        return;
-      }
+    if (this.isVpnMode && VpnEncoder.isWebvpnPortal(currentUrl)) {
+      console.info('testTag VPN模式：在WebVPN门户页，导航到EAMS...');
+      this.message = 'VPN登录成功，正在跳转教务系统...';
+      setTimeout(() => {
+        this.controller.loadUrl(VpnEncoder.buildVpnEamsPortalUrl());
+      }, 1000);
+      return;
     }
 
     const checkLoginJs: string = WebScrapeService.buildLoginCheckScript();
@@ -465,7 +444,6 @@ struct Index {
     this.controller.runJavaScript(checkLoginJs, (error: Error | null, result: string) => {
       if (error) {
         console.error('testTag检查登录状态失败:', error);
-        this.message = '检查登录状态失败，请手动操作';
         return;
       }
 
@@ -481,20 +459,37 @@ struct Index {
         const loginStatus: LoginStatus = JSON.parse(loginResult) as LoginStatus;
         console.info('testTag登录状态:', loginStatus);
 
+        if (loginStatus.status === 'repeat_login_prompt') {
+          console.info('testTag检测到重复登录踢出确认页，执行自动确认');
+          this.message = '检测到多设备登录提示，正在自动确认...';
+          const confirmUrl: string = (loginStatus.href && loginStatus.href.length > 0) ?
+            loginStatus.href :
+            (this.isVpnMode ? VpnEncoder.buildVpnHomeUrl() : 'https://eams.uestc.edu.cn/eams/home.action');
+          setTimeout(() => {
+            if (!this.isPageActive) {
+              return;
+            }
+            console.info('testTag loadUrl confirm repeat login:', confirmUrl);
+            this.controller.loadUrl(confirmUrl);
+          }, 300);
+          return;
+        }
+
         if (loginStatus.status === 'logged_in') {
           console.info('testTag检测到已登录，原因:', loginStatus.reason || 'unknown');
+          this.isLoggedIn = true;
           this.message = '已登录，正在跳转课表...';
           setTimeout(() => {
             this.navigateToCourseTable();
-          }, 1000);
-        } else {
-          console.info('testTag未登录或状态未知:', loginStatus.status);
-          this.message = '请完成登录';
+          }, 800);
+        } else if (loginStatus.status === 'not_logged_in') {
+          console.info('testTag未登录，等待用户输入凭据');
+          this.isLoggedIn = false;
+          this.isProcessing = false;
+          this.message = '请完成统一身份认证登录';
         }
       } catch (e) {
         console.error('testTag解析登录状态失败:', e);
-        this.message = '请完成登录';
-        this.showWebView = true;
       }
     });
   }

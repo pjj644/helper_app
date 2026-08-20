@@ -50,13 +50,11 @@ export class GradeService {
   }
 
   static calculateSemesterGPA(grades: GradeItem[]): number {
-    const graded: GradeItem[] = grades.filter((g: GradeItem) => g.gradePoint > 0 && g.credit > 0);
-    return GradeUtils.calculateGPA(graded);
+    return GradeUtils.calculateGPA(grades);
   }
 
   static calculateOverallGPA(grades: GradeItem[]): number {
-    const graded: GradeItem[] = grades.filter((g: GradeItem) => g.gradePoint > 0 && g.credit > 0);
-    return GradeUtils.calculateGPA(graded);
+    return GradeUtils.calculateGPA(grades);
   }
 
   static parseRawGrades(rawGrades: RawGradeRow[], semesterId: number): GradeItem[] {

@@ -36,7 +36,8 @@ export class AppConstants {
   static readonly SCHOOL_SEMESTER_END: string = '2027-01-18';
 
   static readonly EAMS_HOME_URL: string = 'https://eams.uestc.edu.cn/eams/home!index.action';
-  static readonly EAMS_GRADE_URL_BASE: string = 'https://eams.uestc.edu.cn/eams/teach/grade/course/person!search.action';
+  static readonly EAMS_GRADE_URL_BASE: string = 'https://eams.uestc.edu.cn/eams/teach/grade/course/person!history.action';
+  static readonly EAMS_GRADE_SEARCH_URL_BASE: string = 'https://eams.uestc.edu.cn/eams/teach/grade/course/person!search.action';
   static readonly EAMS_USUAL_GRADE_URL_BASE: string = 'https://eams.uestc.edu.cn/eams/teach/grade/usual/usual-grade-std!search.action';
   static readonly EAMS_LOGIN_URL_PATTERN: string = 'idas.uestc.edu.cn/authserver/login';
   static readonly EAMS_EXAM_MENU_URL: string = 'https://eams.uestc.edu.cn/eams/home!childmenus.action?menu.id=844';
@@ -141,6 +142,7 @@ export class RouterConstants {
   static readonly PAGE_EXAM: string = 'pages/classTablePages/ExamPage';
   static readonly PAGE_EXAM_IMPORT: string = 'pages/classTablePages/ExamImport';
   static readonly PAGE_GRADE: string = 'pages/gradePages/GradePage';
+  static readonly PAGE_GRADE_IMPORT: string = 'pages/gradePages/GradeImport';
   static readonly PAGE_CALENDAR: string = 'pages/schedulePages/CalendarPage';
   static readonly PAGE_SETTINGS: string = 'pages/classTablePages/AppSettings';
   static readonly PAGE_LOGIN: string = 'pages/login/loginIndex';

@@ -144,28 +144,71 @@ export class WebScrapeService {
     return `
       (function() {
         try {
-          var currentUrl = window.location.href;
+          var currentUrl = window.location.href || '';
 
-          if (currentUrl.includes('login')) {
+          // 1. 登录页面判定（统一身份认证 / CAS / IDAS 或页面含登录输入框）
+          if (currentUrl.includes('authserver/login') || currentUrl.includes('idas.uestc.edu.cn') ||
+              document.querySelector('input[type="password"]') || document.querySelector('#username') ||
+              document.querySelector('input[name="username"]')) {
             return JSON.stringify({ status: 'not_logged_in', reason: 'on_login_page' });
           }
 
-          if (currentUrl.includes('eams.uestc.edu.cn') && !currentUrl.includes('login')) {
-            return JSON.stringify({ status: 'logged_in', reason: 'url_check' });
+          var bodyText = document.body ? (document.body.innerText || '') : '';
+          var htmlText = document.documentElement ? (document.documentElement.innerHTML || '') : '';
+
+          // 2. 检查是否为多账号/重复登录踢出确认页 (home.action)
+          if (htmlText.includes('重复登录') || htmlText.includes('已将之前的登录踢出') ||
+              (currentUrl.includes('home.action') && (bodyText.includes('点击此处') || htmlText.includes('点击此处')))) {
+            var links = document.querySelectorAll('a');
+            var targetHref = 'https://eams.uestc.edu.cn/eams/home.action';
+            for (var i = 0; i < links.length; i++) {
+              var t = (links[i].innerText || '').trim();
+              var h = links[i].getAttribute('href') || '';
+              if (t.includes('点击此处') || h.includes('home.action')) {
+                targetHref = links[i].href || targetHref;
+                break;
+              }
+            }
+            if (targetHref.indexOf('http://') === 0 && targetHref.indexOf('http://webvpn') !== 0) {
+              targetHref = 'https://' + targetHref.substring(7);
+            }
+            return JSON.stringify({ status: 'repeat_login_prompt', href: targetHref });
           }
 
-          if (currentUrl.includes('webvpn.uestc.edu.cn') && currentUrl.includes('/eams/') && !currentUrl.includes('login')) {
-            return JSON.stringify({ status: 'logged_in', reason: 'vpn_url_check' });
-          }
-
-          var bodyText = document.body ? document.body.innerText : '';
-          if (bodyText.includes('我的课表') || bodyText.includes('退出') || bodyText.includes('个人信息')) {
-            return JSON.stringify({ status: 'logged_in', reason: 'content_check' });
+          // 3. 已登录页面判定：在教务系统/WebVPN域名下且已非登录/踢出页
+          if (currentUrl.includes('eams.uestc.edu.cn') || currentUrl.includes('webvpn.uestc.edu.cn')) {
+            return JSON.stringify({ status: 'logged_in', reason: 'eams_authenticated' });
           }
 
           return JSON.stringify({ status: 'unknown', url: currentUrl });
         } catch (e) {
           return JSON.stringify({ status: 'error', error: e.message });
+        }
+      })()
+    `;
+  }
+
+  static buildConfirmRepeatLoginScript(): string {
+    return `
+      (function() {
+        try {
+          var links = document.querySelectorAll('a');
+          for (var i = 0; i < links.length; i++) {
+            var t = (links[i].innerText || '').trim();
+            var h = links[i].getAttribute('href') || '';
+            if (t.includes('点击此处') || h.includes('home.action')) {
+              var targetHref = links[i].href || 'https://eams.uestc.edu.cn/eams/home.action';
+              if (targetHref.indexOf('http://') === 0 && targetHref.indexOf('http://webvpn') !== 0) {
+                targetHref = 'https://' + targetHref.substring(7);
+              }
+              window.location.replace(targetHref);
+              return JSON.stringify({ success: true, method: 'navigated', href: targetHref });
+            }
+          }
+          window.location.replace('https://eams.uestc.edu.cn/eams/home.action');
+          return JSON.stringify({ success: true, method: 'navigated_fallback' });
+        } catch (e) {
+          return JSON.stringify({ success: false, error: e.message });
         }
       })()
     `;
@@ -219,35 +262,54 @@ export class WebScrapeService {
     return `
 (function() {
   try {
+    var allDocs = [document];
+    var iframes = document.querySelectorAll('iframe, frame');
+    for (var f = 0; f < iframes.length; f++) {
+      try {
+        var doc = iframes[f].contentDocument || (iframes[f].contentWindow ? iframes[f].contentWindow.document : null);
+        if (doc) {
+          allDocs.push(doc);
+        }
+      } catch (fe) {}
+    }
+
     var resultTable = null;
     var resultName = '';
 
-    var gridtable = document.querySelector('.gridtable');
-    if (gridtable) { resultTable = gridtable; resultName = '.gridtable'; }
-    if (!resultTable) { var gt2 = document.querySelector('#grid10066233341'); if (gt2) { resultTable = gt2; resultName = '#grid10066233341'; } }
-    if (!resultTable) { var gt3 = document.querySelector('#grid18466436161'); if (gt3) { resultTable = gt3; resultName = '#grid18466436161'; } }
-    if (!resultTable) {
-      var allTables = document.querySelectorAll('table');
+    for (var d = 0; d < allDocs.length; d++) {
+      var currentDoc = allDocs[d];
+      var gridtable = currentDoc.querySelector('.gridtable');
+      if (gridtable) { resultTable = gridtable; resultName = '.gridtable (doc ' + d + ')'; break; }
+      var gt2 = currentDoc.querySelector('#grid10066233341') || currentDoc.querySelector('#grid18466436161');
+      if (gt2) { resultTable = gt2; resultName = 'gridId (doc ' + d + ')'; break; }
+
+      var allTables = currentDoc.querySelectorAll('table');
       for (var ti = 0; ti < allTables.length; ti++) {
         var t = allTables[ti];
         var html = (t.innerHTML || '').toLowerCase();
         if (html.indexOf('学分') >= 0 || html.indexOf('成绩') >= 0 || html.indexOf('绩点') >= 0 ||
             html.indexOf('credit') >= 0 || html.indexOf('score') >= 0 || html.indexOf('course') >= 0) {
           resultTable = t;
-          resultName = 'table[' + ti + '] (keyword match)';
+          resultName = 'table[' + ti + '] (keyword match doc ' + d + ')';
           break;
         }
       }
-    }
-    if (!resultTable && allTables.length > 0) {
-      resultTable = allTables[0];
-      resultName = 'table[0] (fallback)';
+      if (resultTable) break;
     }
 
     if (!resultTable) {
       return JSON.stringify({
         grades: [],
-        diagnostics: { currentUrl: window.location.href, rowCount: 0, parsedCount: 0, sampleRow: 'no table found', tableCountOnPage: document.querySelectorAll('table').length },
+        diagnostics: {
+          currentUrl: window.location.href,
+          pageTitle: document.title || '',
+          rowCount: 0,
+          parsedCount: 0,
+          sampleRow: 'no table found',
+          allTablesOnPage: document.querySelectorAll('table').length,
+          iframeCount: iframes.length,
+          bodySnippet: (document.body ? (document.body.innerText || '') : '').substring(0, 300)
+        },
         error: '未找到成绩表格'
       });
     }
@@ -299,16 +361,31 @@ export class WebScrapeService {
 
     var diagnostics = {
       currentUrl: window.location.href,
+      pageTitle: document.title || '',
       tableSelector: resultName,
       rowCount: rows.length,
       parsedCount: grades.length,
       sampleRow: grades.length > 0 ? JSON.stringify(grades[0]) : 'none',
       allTablesOnPage: document.querySelectorAll('table').length,
-      bodyLength: (document.body && document.body.innerHTML) ? document.body.innerHTML.length : 0
+      bodyLength: (document.body && document.body.innerHTML) ? document.body.innerHTML.length : 0,
+      bodySnippet: (document.body ? (document.body.innerText || '') : '').substring(0, 300)
     };
     return JSON.stringify({ grades: grades, diagnostics: diagnostics, error: null });
   } catch(e) {
-    return JSON.stringify({ grades: [], diagnostics: { currentUrl: window.location.href, rowCount: 0, parsedCount: 0, sampleRow: 'exception: ' + (e && e.message), allTablesOnPage: 0, bodyLength: 0 }, error: 'parse error: ' + (e && e.message) });
+    return JSON.stringify({
+      grades: [],
+      diagnostics: {
+        currentUrl: window.location.href,
+        pageTitle: document.title || '',
+        rowCount: 0,
+        parsedCount: 0,
+        sampleRow: 'exception: ' + (e && e.message),
+        allTablesOnPage: 0,
+        bodyLength: 0,
+        bodySnippet: (document.body ? (document.body.innerText || '') : '').substring(0, 300)
+      },
+      error: 'parse error: ' + (e && e.message)
+    });
   }
 })();
 `;

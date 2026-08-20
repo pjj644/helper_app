@@ -140,10 +140,13 @@ export class VpnEncoder {
     );
   }
 
-  static buildVpnGradeUrl(semesterId: number): string {
-    return VpnEncoder.buildVpnEamsUrl(
-      `/eams/teach/grade/course/person!search.action?semesterId=${semesterId}&projectType=`
-    );
+  static buildVpnGradeUrl(semesterId: number = 0): string {
+    if (semesterId > 0) {
+      return VpnEncoder.buildVpnEamsUrl(
+        `/eams/teach/grade/course/person!search.action?semesterId=${semesterId}&projectType=`
+      );
+    }
+    return VpnEncoder.buildVpnEamsUrl('/eams/teach/grade/course/person!history.action');
   }
 
   static buildVpnHomeUrl(): string {

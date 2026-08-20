@@ -10,6 +10,7 @@ import {
   getCurrentWeek,
   getCurrentDateInfo,
   getWeekDates,
+  getWeekDatesForWeek,
 } from '../../model/classTableModel/CourseModel';
 import { ThemeManager } from '../../common/utils/ThemeManager';
 import { getSemesterOptions, SemesterOptionSet, getSemesterLabelById, calculateSemesterId } from '../../model/classTableModel/ExamAccessRules';
@@ -68,6 +69,7 @@ struct TableUI {
 
   aboutToAppear() {
     this.initSemesterOptions();
+    this.updateWeekDates();
     this.tryLoadPendingCourseData();
     this.tryLoadCourseData();
   }
@@ -693,6 +695,7 @@ struct TableUI {
   }
 
   private updateWeekDates(): void {
+    this.weekDates = getWeekDatesForWeek(this.currentWeek);
   }
 
   @Builder

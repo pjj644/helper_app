@@ -7,6 +7,7 @@ import { AppConstants } from '../../common/constants/AppConstants';
 import { VpnEncoder } from '../../common/utils/VpnEncoder';
 import { Logger } from '../../common/utils/Logger';
 import { LoadingOverlay } from '../../components/LoadingOverlay';
+import { calculateSemesterId, getGradeSemesterOptions, getPreviousSemesterId, GradeSemesterOptionItem } from '../../model/classTableModel/ExamAccessRules';
 
 const TAG = 'GradeImport';
 
@@ -18,29 +19,79 @@ struct GradeImport {
   @State isProcessing: boolean = true;
   @State isVpnMode: boolean = false;
   @State showRefreshBtn: boolean = false;
+  @State selectedSemesterIndex: number = 0;
   controller: webview.WebviewController = new webview.WebviewController();
-  @State currentUrl: string = AppConstants.EAMS_HOME_URL;
+  @State currentUrl: string = AppConstants.EAMS_PORTAL_URL;
   private returnHome: boolean = false;
   private semesterId: number = 0;
   private gradeUrl: string = '';
   private parseRetryCount: number = 0;
-  private readonly MAX_PARSE_RETRY: number = 5;
+  private readonly MAX_PARSE_RETRY: number = 2;
   private destroyed: boolean = false;
   private pendingTimer: number = -1;
   private hasNavigatedToGrade: boolean = false;
   private vpnAutoDetected: boolean = false;
   private vpnPortalNavigated: boolean = false;
+  private pollCount: number = 0;
+  private http500RetryCount: number = 0;
+  private readonly MAX_HTTP_500_RETRY: number = 2;
+  private semesterOptionList: GradeSemesterOptionItem[] = [];
 
   aboutToAppear(): void {
     const params = router.getParams() as Record<string, Object>;
     this.returnHome = !!(params && params['returnHome']);
-    this.semesterId = (params && params['semesterId']) ? Number(params['semesterId']) : 483;
-    this.gradeUrl = `${AppConstants.EAMS_GRADE_URL_BASE}?semesterId=${this.semesterId}&projectType=`;
+    const rawOptions: GradeSemesterOptionItem[] = getGradeSemesterOptions();
+    this.semesterOptionList = rawOptions.filter((o: GradeSemesterOptionItem) => o.semesterId > 0);
+
+    const defaultSemId: number = getPreviousSemesterId();
+    this.semesterId = (params && params['semesterId']) ? Number(params['semesterId']) : defaultSemId;
+    if (this.semesterId <= 0) {
+      this.semesterId = defaultSemId;
+    }
+
+    let foundIdx: number = -1;
+    for (let i = 0; i < this.semesterOptionList.length; i++) {
+      if (this.semesterOptionList[i].semesterId === this.semesterId) {
+        foundIdx = i;
+        break;
+      }
+    }
+    this.selectedSemesterIndex = foundIdx >= 0 ? foundIdx : 0;
+    if (foundIdx >= 0) {
+      this.semesterId = this.semesterOptionList[foundIdx].semesterId;
+    }
+
+    this.gradeUrl = `${AppConstants.EAMS_GRADE_SEARCH_URL_BASE}?semesterId=${this.semesterId}&projectType=`;
     this.message = '请登录后等待自动抓取成绩信息';
     this.destroyed = false;
     this.hasNavigatedToGrade = false;
-    Logger.debug(TAG, `aboutToAppear semesterId=${this.semesterId} gradeUrl=${this.gradeUrl}`);
+    this.pollCount = 0;
+    this.http500RetryCount = 0;
+    Logger.info(TAG, `aboutToAppear semesterId=${this.semesterId} gradeUrl=${this.gradeUrl}`);
     this.initVpnMode();
+  }
+
+  private getSemesterSelectOptions(): SelectOption[] {
+    const opts: SelectOption[] = [];
+    for (let i = 0; i < this.semesterOptionList.length; i++) {
+      opts.push({ value: this.semesterOptionList[i].label });
+    }
+    return opts;
+  }
+
+  private onSemesterSelected(index: number): void {
+    if (index < 0 || index >= this.semesterOptionList.length) {
+      return;
+    }
+    this.selectedSemesterIndex = index;
+    this.semesterId = this.semesterOptionList[index].semesterId;
+    this.gradeUrl = `${AppConstants.EAMS_GRADE_SEARCH_URL_BASE}?semesterId=${this.semesterId}&projectType=`;
+    this.parseRetryCount = 0;
+    this.autoDone = false;
+    this.hasNavigatedToGrade = true;
+    this.message = `正在切换到学期 ${this.semesterOptionList[index].label}...`;
+    Logger.info(TAG, `switch semester to ${this.semesterId} (${this.semesterOptionList[index].label})`);
+    this.navigateToGradePage();
   }
 
   private async initVpnMode(): Promise<void> {
@@ -89,7 +140,7 @@ struct GradeImport {
           for (var i = 0; i < links.length; i++) {
             var href = links[i].getAttribute('href') || '';
             var text = (links[i].innerText || '').trim();
-            if (href.includes('person!search.action') || href.includes('grade') || text.includes('成绩') || text.includes('Grade')) {
+            if (href.includes('person!search.action') || href.includes('person!history.action') || href.includes('grade') || text.includes('成绩') || text.includes('Grade')) {
               return JSON.stringify({ found: true, href: links[i].href, text: text });
             }
           }
@@ -141,16 +192,16 @@ struct GradeImport {
     });
   }
 
-  private mergeWithLocalExams(imported: GradeItem[]): Promise<GradeItem[]> {
+  private mergeWithLocalGrades(imported: GradeItem[]): Promise<GradeItem[]> {
     return GradeService.loadGrades(getContext(this)).then((existing: GradeItem[]) => {
       return GradeService.mergeGrades(existing, imported);
     });
   }
 
   private async saveAndReturn(grades: GradeItem[]): Promise<void> {
-    const mergedExams: GradeItem[] = await this.mergeWithLocalExams(grades);
-    Logger.debug(TAG, `saveAndReturn imported=${grades.length} merged=${mergedExams.length}`);
-    await GradeService.saveGrades(getContext(this), mergedExams);
+    const mergedGrades: GradeItem[] = await this.mergeWithLocalGrades(grades);
+    Logger.debug(TAG, `saveAndReturn imported=${grades.length} merged=${mergedGrades.length}`);
+    await GradeService.saveGrades(getContext(this), mergedGrades);
     this.getUIContext().getPromptAction().showToast({ message: `成绩导入成功，本次${grades.length}条` });
     router.back();
   }
@@ -159,15 +210,17 @@ struct GradeImport {
     if (this.destroyed || this.autoDone) {
       return;
     }
+    this.pollCount = 0;
     this.pollForGradeData();
   }
 
   private pollForGradeData(): void {
+    this.pollCount++;
     const checkScript = `(function(){
       var bodyLen = (document.body && document.body.innerHTML) ? document.body.innerHTML.length : 0;
       var tables = document.querySelectorAll('table');
       var gridRows = 0;
-      var gridtable = document.querySelector('.gridtable');
+      var gridtable = document.querySelector('.gridtable') || document.querySelector('table');
       if (gridtable) {
         var tbody = gridtable.querySelector('tbody');
         var rows = tbody ? tbody.querySelectorAll('tr') : gridtable.querySelectorAll('tr');
@@ -192,15 +245,15 @@ struct GradeImport {
           parsed = JSON.parse(parsed) as Object;
         }
         const status = parsed as Record<string, number>;
-        Logger.debug(TAG, `pollForGradeData bodyLen=${status.bodyLen} tables=${status.tableCount} gridRows=${status.gridRows}`);
+        Logger.debug(TAG, `pollForGradeData bodyLen=${status.bodyLen} tables=${status.tableCount} gridRows=${status.gridRows} pollCount=${this.pollCount}`);
 
-        if (status.gridRows > 1 || status.bodyLen > 5000) {
-          Logger.debug(TAG, 'data seems loaded, start parse');
-          this.message = '数据已加载，正在抓取';
+        if (status.gridRows > 1 || status.bodyLen > 2000 || this.pollCount >= 3) {
+          Logger.debug(TAG, 'data seems loaded or poll limit reached, start parse');
+          this.message = '正在解析成绩数据...';
           this.pendingTimer = setTimeout(() => {
             this.pendingTimer = -1;
             this.parseGradeRows();
-          }, 800);
+          }, 500);
           return;
         }
 
@@ -220,7 +273,7 @@ struct GradeImport {
         return;
       }
       this.pollForGradeData();
-    }, 1500);
+    }, 1200);
   }
 
   private retryParseWithDelay(reason: string): void {
@@ -229,23 +282,18 @@ struct GradeImport {
       return;
     }
     if (this.parseRetryCount >= this.MAX_PARSE_RETRY) {
-      if (!this.isVpnMode && !this.vpnAutoDetected) {
-        Logger.info(TAG, `GradeImport retry exhausted, switching to VPN mode`);
-        this.switchToVpnMode();
-        return;
-      }
-      this.message = '解析失败：页面数据未就绪，请停留成绩页后手动重试';
+      this.message = '当前未查询到有效成绩记录，可返回或稍后重试';
       this.isProcessing = false;
-      Logger.error(TAG, `retry exhausted reason=${reason}`);
+      Logger.info(TAG, `retry completed reason=${reason}`);
       return;
     }
     this.parseRetryCount++;
-    this.message = `数据尚未就绪，正在重试(${this.parseRetryCount}/${this.MAX_PARSE_RETRY})`;
+    this.message = `数据解析中，正在尝试二次提取(${this.parseRetryCount}/${this.MAX_PARSE_RETRY})`;
     Logger.debug(TAG, `retryParse reason=${reason} retry=${this.parseRetryCount}`);
     this.pendingTimer = setTimeout(() => {
       this.pendingTimer = -1;
       this.parseGradeRows();
-    }, 1200);
+    }, 1000);
   }
 
   private parseGradeRows(): void {
@@ -287,8 +335,10 @@ struct GradeImport {
         const payload = parsed as GradeParsePayload;
         if (payload.diagnostics) {
           const d = payload.diagnostics;
-          Logger.debug(TAG, `diagnostics url=${d.currentUrl} selector=${d.tableSelector} rows=${d.rowCount} parsed=${d.parsedCount}`);
-          Logger.debug(TAG, `diagnostics sampleRow=${d.sampleRow}`);
+          Logger.info(TAG, `diagnostics url=${d.currentUrl} title=${d.pageTitle || ''} selector=${d.tableSelector || ''} tables=${d.allTablesOnPage || 0} rows=${d.rowCount} parsed=${d.parsedCount}`);
+          if (d.bodySnippet) {
+            Logger.info(TAG, `diagnostics snippet=${d.bodySnippet}`);
+          }
         }
 
         if (payload.error) {
@@ -304,7 +354,7 @@ struct GradeImport {
 
         const grades: GradeItem[] = GradeService.parseRawGrades(payload.grades, this.semesterId);
         if (grades.length === 0) {
-          this.message = '未抓取到成绩信息，请先确认该学期有成绩后重试';
+          this.message = '未抓取到有效成绩信息';
           this.isProcessing = false;
           Logger.debug(TAG, 'grades empty after normalization');
           return;
@@ -350,38 +400,50 @@ struct GradeImport {
       Row({ space: 8 }) {
         Button('返回')
           .onClick(() => router.back());
-        Button('手动重试抓取')
+        Select(this.getSemesterSelectOptions())
+          .selected(this.selectedSemesterIndex)
+          .value(this.semesterOptionList[this.selectedSemesterIndex]?.label || '选择学期')
+          .onSelect((index: number) => {
+            this.onSemesterSelected(index);
+          })
+          .width(130);
+        Button('重新抓取')
           .onClick(() => {
             if (this.destroyed) {
               return;
             }
             this.parseRetryCount = 0;
-            this.message = '重新抓取...';
+            this.autoDone = false;
+            this.message = '正在重新抓取...';
             const url = this.controller.getUrl();
-            Logger.debug(TAG, `manual retry click url=${url}`);
+            Logger.info(TAG, `manual retry click url=${url}`);
             if (url.includes('person!search.action')) {
               this.waitForDataLoad();
               return;
             }
             this.hasNavigatedToGrade = false;
-            this.findAndNavigateToGradeLink();
+            this.navigateToGradePage();
           });
       }
-      .margin({ left: 12, right: 12, bottom: 8 })
-      .width('100%');
+      .margin({ bottom: 8 })
 
       Web({ src: this.currentUrl, controller: this.controller })
         .width('100%')
         .height('100%')
         .domStorageAccess(true)
         .javaScriptAccess(true)
+        .fileAccess(true)
+        .imageAccess(true)
+        .onlineImageAccess(true)
+        .mixedMode(MixedMode.All)
+        .cacheMode(CacheMode.Default)
         .onPageEnd(() => {
           const url = this.controller.getUrl();
           this.showRefreshBtn = false;
           Logger.debug(TAG, `onPageEnd url=${url}`);
 
-          if (url.includes('authserver/login')) {
-            this.message = this.isVpnMode ? 'VPN模式：请先完成统一身份认证登录' : '请先登录教务系统，登录后会自动跳转成绩页';
+          if (VpnEncoder.isLoginPage(url) || url.includes('authserver/login')) {
+            this.message = this.isVpnMode ? 'VPN模式：请先完成统一身份认证登录' : '请先登录统一身份认证，登录后会自动跳转成绩页';
             this.isProcessing = false;
             this.hasNavigatedToGrade = false;
             this.vpnPortalNavigated = false;
@@ -401,32 +463,65 @@ struct GradeImport {
             return;
           }
 
-          if (url.includes('person!search.action')) {
+          if (url.includes('person!search.action') || url.includes('person!history.action') || url.includes('teach/grade/course/person')) {
             this.message = '已进入成绩页面，正在抓取';
-            Logger.debug(TAG, 'entered grade page, schedule parse');
+            Logger.info(TAG, `entered grade page: ${url}, schedule parse`);
+            this.http500RetryCount = 0;
             setTimeout(() => this.waitForDataLoad(), 1500);
             return;
           }
 
-          if (this.isVpnMode && VpnEncoder.isVpnEamsUrl(url) && !url.includes('person!search.action') && !url.includes('login')) {
-            if (!this.hasNavigatedToGrade) {
-              this.hasNavigatedToGrade = true;
-              this.message = '已登录，正在准备进入成绩页面...';
-              Logger.debug(TAG, 'VPN EAMS page, will navigate to grade (once)');
-              setTimeout(() => this.navigateToGradePage(), 2500);
+          // 运行通用登录状态与重复登录检测脚本
+          const checkLoginJs = WebScrapeService.buildLoginCheckScript();
+          this.controller.runJavaScript(checkLoginJs, (error: Error | null, result: string) => {
+            if (error) {
+              Logger.error(TAG, `checkLogin error: ${JSON.stringify(error)}`);
+              return;
             }
-            return;
-          }
+            try {
+              let loginResult: string = result;
+              if (result.trim().startsWith('"')) {
+                const inner: string = JSON.parse(result);
+                if (typeof inner === 'string') {
+                  loginResult = inner;
+                }
+              }
+              const loginStatus = JSON.parse(loginResult) as Record<string, string>;
+              Logger.debug(TAG, `loginStatus: ${JSON.stringify(loginStatus)}`);
 
-          if (url.includes('/eams/') && !url.includes('person!search.action') && !url.includes('login')) {
-            if (!this.hasNavigatedToGrade) {
-              this.hasNavigatedToGrade = true;
-              this.message = '已登录，正在准备进入成绩页面...';
-              Logger.debug(TAG, 'in eams page, will find and navigate to grade (once)');
-              setTimeout(() => this.findAndNavigateToGradeLink(), 2500);
+              if (loginStatus.status === 'repeat_login_prompt') {
+                Logger.info(TAG, '检测到重复登录提示，执行自动确认');
+                this.message = '检测到多设备登录提示，正在自动确认...';
+                const confirmUrl: string = (loginStatus.href && loginStatus.href.length > 0) ?
+                  loginStatus.href :
+                  (this.isVpnMode ? VpnEncoder.buildVpnHomeUrl() : 'https://eams.uestc.edu.cn/eams/home.action');
+                setTimeout(() => {
+                  if (this.destroyed) {
+                    return;
+                  }
+                  Logger.info(TAG, `loadUrl confirm repeat login: ${confirmUrl}`);
+                  this.controller.loadUrl(confirmUrl);
+                }, 300);
+                return;
+              }
+
+              if (loginStatus.status === 'logged_in') {
+                if (!this.hasNavigatedToGrade) {
+                  this.hasNavigatedToGrade = true;
+                  const semLabel: string = this.semesterOptionList[this.selectedSemesterIndex]?.label || '';
+                  this.message = `已登录，正在跳转至 ${semLabel} 成绩页面...`;
+                  Logger.info(TAG, `logged_in confirmed, navigating to grade: ${this.gradeUrl}`);
+                  setTimeout(() => this.navigateToGradePage(), 800);
+                }
+              } else if (loginStatus.status === 'not_logged_in') {
+                Logger.debug(TAG, 'not_logged_in, waiting for credentials');
+                this.isProcessing = false;
+                this.message = '请完成统一身份认证登录';
+              }
+            } catch (e) {
+              Logger.error(TAG, `parse loginStatus error: ${JSON.stringify(e)}`);
             }
-            return;
-          }
+          });
         })
         .onHttpErrorReceive((event) => {
           const statusCode = event.response.getResponseCode();
@@ -436,8 +531,17 @@ struct GradeImport {
             this.switchToVpnMode();
             return;
           }
-          if (statusCode !== 403) {
-            this.showRefreshBtn = true;
+          if (statusCode === 500 && this.http500RetryCount < this.MAX_HTTP_500_RETRY) {
+            this.http500RetryCount++;
+            this.message = `教务系统会话就绪中，正在重试(${this.http500RetryCount}/${this.MAX_HTTP_500_RETRY})...`;
+            Logger.info(TAG, `Grade HTTP 500, retrying in 1.5s (attempt ${this.http500RetryCount})`);
+            setTimeout(() => {
+              if (this.destroyed) {
+                return;
+              }
+              this.navigateToGradePage();
+            }, 1500);
+            return;
           }
         })
         .onErrorReceive((event) => {

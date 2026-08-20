@@ -1,3 +1,5 @@
+import { parseSemesterIdFromAcademicYear, getGradeSemesterOptions } from './classTableModel/ExamAccessRules';
+
 export interface GradeItem {
   academicYear: string;
   courseCode: string;
@@ -35,12 +37,15 @@ export interface GradeParsePayload {
 
 export interface GradeDiagnostics {
   currentUrl: string;
+  pageTitle?: string;
   tableSelector?: string;
   rowCount: number;
   parsedCount: number;
   sampleRow: string;
   allTablesOnPage?: number;
+  iframeCount?: number;
   bodyLength?: number;
+  bodySnippet?: string;
 }
 
 export interface GradeSemesterOption {
@@ -49,9 +54,9 @@ export interface GradeSemesterOption {
 }
 
 export class GradeUtils {
-  static parseRawGrade(row: RawGradeRow, semesterId: number): GradeItem {
+  static parseRawGrade(row: RawGradeRow, fallbackSemesterId: number): GradeItem {
     let gradePointNum: number = 0;
-    const gp: string = row.gradePoint.trim();
+    const gp: string = (row.gradePoint || '').trim();
     if (gp && gp !== '--' && gp !== '') {
       const parsed: number = Number.parseFloat(gp);
       if (!Number.isNaN(parsed)) {
@@ -59,6 +64,15 @@ export class GradeUtils {
       }
     }
     const creditNum: number = Number.parseFloat(row.credit) || 0;
+
+    let targetSemesterId: number = fallbackSemesterId;
+    if (row.academicYear) {
+      const parsedId: number | undefined = parseSemesterIdFromAcademicYear(row.academicYear);
+      if (parsedId !== undefined && parsedId > 0) {
+        targetSemesterId = parsedId;
+      }
+    }
+
     return {
       academicYear: row.academicYear,
       courseCode: row.courseCode,
@@ -71,7 +85,7 @@ export class GradeUtils {
       makeupScore: row.makeupScore,
       finalScore: row.finalScore,
       gradePoint: gradePointNum,
-      semesterId: semesterId,
+      semesterId: targetSemesterId,
     };
   }
 
@@ -80,9 +94,15 @@ export class GradeUtils {
     let totalCredits: number = 0;
     for (let i = 0; i < grades.length; i++) {
       const g: GradeItem = grades[i];
-      if (g.gradePoint > 0 && g.credit > 0) {
-        totalGradePoints += g.gradePoint * g.credit;
-        totalCredits += g.credit;
+      if (g.credit > 0 && typeof g.gradePoint === 'number' && !Number.isNaN(g.gradePoint)) {
+        // 包含实际已出分课程（含挂科0绩点），排除未出分或无成绩记录（'--'）的科目
+        const hasScore: boolean = (g.totalScore !== undefined && g.totalScore.length > 0 && g.totalScore !== '--') ||
+          (g.finalScore !== undefined && g.finalScore.length > 0 && g.finalScore !== '--') ||
+          (g.gradePoint > 0);
+        if (hasScore) {
+          totalGradePoints += g.gradePoint * g.credit;
+          totalCredits += g.credit;
+        }
       }
     }
     if (totalCredits === 0) {
@@ -106,17 +126,30 @@ export class GradeUtils {
     const map: Record<number, string> = {};
     for (let i = 0; i < grades.length; i++) {
       const g: GradeItem = grades[i];
-      if (!map[g.semesterId]) {
+      if (g.semesterId > 0 && !map[g.semesterId]) {
         map[g.semesterId] = g.academicYear;
       }
     }
-    const options: GradeSemesterOption[] = [{ semesterId: 0, label: '所有学期' }];
-    const ids: number[] = Object.keys(map).map((k: string) => Number.parseInt(k)).sort((a: number, b: number) => b - a);
-    for (let i = 0; i < ids.length; i++) {
-      const id: number = ids[i];
-      options.push({ semesterId: id, label: map[id] });
+
+    const standardOptions = getGradeSemesterOptions();
+    const result: GradeSemesterOption[] = [];
+    const seenIds = new Set<number>();
+
+    for (let i = 0; i < standardOptions.length; i++) {
+      const opt = standardOptions[i];
+      result.push({ semesterId: opt.semesterId, label: opt.label });
+      seenIds.add(opt.semesterId);
     }
-    return options;
+
+    const allMapKeys = Object.keys(map);
+    for (let i = 0; i < allMapKeys.length; i++) {
+      const id: number = Number.parseInt(allMapKeys[i], 10);
+      if (Number.isFinite(id) && !seenIds.has(id)) {
+        result.push({ semesterId: id, label: map[id] || `学期 ${id}` });
+      }
+    }
+
+    return result;
   }
 
   static filterBySemester(grades: GradeItem[], semesterId: number): GradeItem[] {
