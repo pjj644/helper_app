@@ -144,37 +144,36 @@ export class FloatingWindowManager {
     }
 
     this.isCreating = true;
-    this.windowStage.createSubWindow(AppConstants.FLOATING_SUBWINDOW_NAME, (err: BusinessError, data: window.Window) => {
+    this.windowStage.createSubWindow(AppConstants.FLOATING_SUBWINDOW_NAME, (err: BusinessError, win: window.Window) => {
       this.isCreating = false;
       if (err.code) {
         console.error('[FloatingWindowManager] createSubWindow failed:', JSON.stringify(err));
         return;
       }
 
-      this.subWindow = data;
-      try {
-        // 设置全透明背景
-        this.subWindow.setWindowBackgroundColor('#00000000');
+      this.subWindow = win;
 
-        // 初始设为球态尺寸与位置
-        this.subWindow.resize(this.ballSizePx, this.ballSizePx);
-        this.subWindow.moveWindowTo(this.ballPosX, this.ballPosY);
+      // 必须先调用 setUIContent，在内容加载完毕后再设置窗口属性与展示
+      this.subWindow.setUIContent(RouterConstants.PAGE_FLOATING_SUBWINDOW, (loadErr: BusinessError) => {
+        if (loadErr.code) {
+          console.error('[FloatingWindowManager] setUIContent failed:', JSON.stringify(loadErr));
+          return;
+        }
 
-        // 加载内容
-        this.subWindow.loadContent(RouterConstants.PAGE_FLOATING_SUBWINDOW, (loadErr: BusinessError) => {
-          if (loadErr.code) {
-            console.error('[FloatingWindowManager] loadContent failed:', JSON.stringify(loadErr));
-            return;
-          }
+        try {
+          this.subWindow?.setWindowBackgroundColor('#00000000');
+          this.subWindow?.resize(this.ballSizePx, this.ballSizePx);
+          this.subWindow?.moveWindowTo(this.ballPosX, this.ballPosY);
+
           if (this.isEnabled && !this.isAssistantPageActive) {
             this.subWindow?.showWindow();
             this.currentMode = 'BALL';
             AppStorage.setOrCreate('floating_window_mode', 'BALL');
           }
-        });
-      } catch (e) {
-        console.error('[FloatingWindowManager] configure subWindow error:', JSON.stringify(e));
-      }
+        } catch (confErr) {
+          console.error('[FloatingWindowManager] configure subWindow error:', JSON.stringify(confErr));
+        }
+      });
     });
   }
 
@@ -273,10 +272,13 @@ export class FloatingWindowManager {
       return;
     }
     try {
-      this.subWindow.minimize();
+      this.subWindow.destroyWindow();
     } catch (e) {
-      console.error('[FloatingWindowManager] hideWindow error:', JSON.stringify(e));
+      console.error('[FloatingWindowManager] hide error:', JSON.stringify(e));
     }
+    this.subWindow = null;
+    this.currentMode = 'BALL';
+    AppStorage.setOrCreate('floating_window_mode', 'BALL');
   }
 
   public destroy(): void {

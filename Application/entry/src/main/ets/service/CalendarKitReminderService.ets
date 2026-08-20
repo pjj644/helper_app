@@ -40,7 +40,7 @@ export class CalendarKitReminderService {
     }
   }
 
-  static async checkCalendarPermission(context: common.UIAbilityContext): Promise<boolean> {
+  static async checkCalendarPermission(context: Context): Promise<boolean> {
     try {
       const atManager = abilityAccessCtrl.createAtManager();
       const grantStatus = await atManager.checkAccessToken(context.applicationInfo.accessTokenId, 'ohos.permission.WRITE_CALENDAR');
@@ -57,6 +57,11 @@ export class CalendarKitReminderService {
     try {
       if (CalendarKitReminderService.calendar) {
         return CalendarKitReminderService.calendar;
+      }
+
+      const hasPerm = await CalendarKitReminderService.checkCalendarPermission(context);
+      if (!hasPerm) {
+        return null;
       }
 
       if (!CalendarKitReminderService.calendarMgr) {
