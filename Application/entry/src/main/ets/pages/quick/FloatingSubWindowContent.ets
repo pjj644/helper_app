@@ -7,6 +7,7 @@ import { BackendAgentClient, AgentCallbacks, AgentMessage } from '../../common/a
 import { ToolExecutor } from '../../common/agent/ToolExecutor';
 import { SpeechRecognizerHelper } from '../../common/speech/SpeechRecognizerHelper';
 import { ThemeManager } from '../../common/utils/ThemeManager';
+import { ChatSessionRepository, ChatSession, ChatMessage, ChatDisplayMessage } from '../../repository/ChatSessionRepository';
 
 interface MiniDisplayMessage {
   role: 'user' | 'assistant' | 'tool';
@@ -25,6 +26,8 @@ export struct FloatingSubWindowContent {
   @State isDragging: boolean = false;
 
   @State pageSnapshot: PageSnapshot = PageContextTracker.getInstance().getSnapshot();
+  @State currentSessionId: string = '';
+  @State sessionMessages: ChatMessage[] = [];
   @State messages: MiniDisplayMessage[] = [
     {
       role: 'assistant',
@@ -47,6 +50,8 @@ export struct FloatingSubWindowContent {
   private dragStartY: number = 0;
 
   aboutToAppear(): void {
+    this.initOrLoadSession();
+
     // 监听页面上下文变化
     PageContextTracker.getInstance().addListener((snapshot: PageSnapshot) => {
       this.pageSnapshot = snapshot;
@@ -77,11 +82,96 @@ export struct FloatingSubWindowContent {
     this.speechHelper.release();
   }
 
+  // === 会话管理逻辑 ===
+  private initOrLoadSession(): void {
+    try {
+      const context = getContext(this);
+      const sessions = ChatSessionRepository.getSessions(context);
+      if (sessions.length > 0) {
+        const latest = sessions[0];
+        this.currentSessionId = latest.id;
+        this.sessionMessages = [...latest.messages];
+        if (latest.displayMessages && latest.displayMessages.length > 0) {
+          this.messages = latest.displayMessages.map((d: ChatDisplayMessage): MiniDisplayMessage => ({
+            role: (d.role === 'user' ? 'user' : 'assistant') as 'user' | 'assistant' | 'tool',
+            content: d.content,
+            isError: d.isError
+          }));
+        }
+      } else {
+        this.startNewChat(false);
+      }
+    } catch (e) {
+      this.startNewChat(false);
+    }
+  }
+
+  private startNewChat(showToast: boolean = true): void {
+    if (this.currentClient) {
+      this.currentClient.cancel();
+      this.currentClient = null;
+    }
+    this.isLoading = false;
+    const newSession = ChatSessionRepository.createNewSession();
+    this.currentSessionId = newSession.id;
+    this.sessionMessages = [];
+    this.messages = [
+      {
+        role: 'assistant',
+        content: '你好！我是你的 AI 伴随助手。已开启新对话，我可以感知当前页面内容，指导操作或代你执行指令。'
+      }
+    ];
+    try {
+      const context = getContext(this);
+      ChatSessionRepository.saveOrUpdateSession(context, newSession);
+    } catch (e) {
+      // ignore
+    }
+    if (showToast) {
+      promptAction.showToast({ message: '已开启新对话', duration: 1500 });
+    }
+    setTimeout(() => {
+      this.scroller.scrollEdge(Edge.Bottom);
+    }, 100);
+  }
+
+  private persistCurrentSession(context: Context): void {
+    const displayList: ChatDisplayMessage[] = this.messages.map((m: MiniDisplayMessage): ChatDisplayMessage => ({
+      role: m.role,
+      content: m.content,
+      isError: !!m.isError
+    }));
+
+    let title = '新对话';
+    for (let i = 0; i < this.sessionMessages.length; i++) {
+      if (this.sessionMessages[i].role === 'user') {
+        title = this.sessionMessages[i].content.slice(0, 16);
+        break;
+      }
+    }
+
+    const session: ChatSession = {
+      id: this.currentSessionId || `${Date.now()}`,
+      title: title,
+      messages: [...this.sessionMessages],
+      displayMessages: displayList,
+      createdAt: Number(this.currentSessionId) || Date.now(),
+      updatedAt: Date.now()
+    };
+
+    ChatSessionRepository.saveOrUpdateSession(context, session);
+  }
+
   // === 消息发送逻辑 ===
   private async sendMessage(textToSend?: string): Promise<void> {
     const raw = textToSend !== undefined ? textToSend : this.inputText.trim();
     if (raw.length === 0 || this.isLoading) {
       return;
+    }
+
+    if (!this.currentSessionId) {
+      const newS = ChatSessionRepository.createNewSession();
+      this.currentSessionId = newS.id;
     }
 
     this.inputText = '';
@@ -92,6 +182,9 @@ export struct FloatingSubWindowContent {
     this.messages.push({ role: 'assistant', content: '' });
     this.isLoading = true;
 
+    // 记录到会话消息
+    this.sessionMessages.push({ role: 'user', content: raw });
+
     setTimeout(() => {
       this.scroller.scrollEdge(Edge.Bottom);
     }, 100);
@@ -101,12 +194,17 @@ export struct FloatingSubWindowContent {
     const contextPrompt = tracker.getFormattedPromptContext();
     const promptWithContext = `[系统当前页面信息]:\n${contextPrompt}\n\n[用户指令]:\n${raw}`;
 
-    const history: AgentMessage[] = [
-      { role: 'user', content: promptWithContext }
-    ];
+    const history: AgentMessage[] = [];
+    for (let i = 0; i < this.sessionMessages.length - 1; i++) {
+      history.push({ role: this.sessionMessages[i].role, content: this.sessionMessages[i].content });
+    }
+    history.push({ role: 'user', content: promptWithContext });
 
     const context = getContext(this) as common.UIAbilityContext;
     const executor = new ToolExecutor(context);
+
+    // 发送前先保存用户消息
+    this.persistCurrentSession(context);
 
     const callbacks: AgentCallbacks = {
       onToolCallStart: (toolName: string, args: string) => {
@@ -133,17 +231,21 @@ export struct FloatingSubWindowContent {
           }
           this.messages[assistantMsgIndex].isError = true;
         }
+        this.persistCurrentSession(context);
       },
       onComplete: () => {
         this.isLoading = false;
         this.currentClient = null;
+        if (this.messages[assistantMsgIndex]) {
+          this.sessionMessages.push({ role: 'assistant', content: this.messages[assistantMsgIndex].content });
+        }
+        this.persistCurrentSession(context);
       }
     };
 
     const client = new BackendAgentClient(context, executor, callbacks);
     this.currentClient = client;
-    const sessionId = `mini_session_${Date.now()}`;
-    await client.run(sessionId, history);
+    await client.run(this.currentSessionId, history);
   }
 
   // === 语音识别控制 ===
@@ -299,8 +401,23 @@ export struct FloatingSubWindowContent {
 
           Blank();
 
-          // 右侧：缩小按钮 [-] 与 关闭悬浮球按钮 [X]
+          // 右侧：新建对话 [+]、缩小按钮 [-] 与 关闭悬浮球按钮 [X]
           Row({ space: 8 }) {
+            // 开启新对话 [+]
+            Button() {
+              Text('＋')
+                .fontSize(16)
+                .fontWeight(FontWeight.Bold)
+                .fontColor(this.isDarkMode ? '#D1D5DB' : '#4B5563');
+            }
+            .width(30)
+            .height(30)
+            .type(ButtonType.Circle)
+            .backgroundColor(this.isDarkMode ? '#374151' : '#F3F4F6')
+            .onClick(() => {
+              this.startNewChat(true);
+            });
+
             // 缩小为悬浮球 [-]
             Button() {
               Text('－')

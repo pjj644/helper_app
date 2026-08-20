@@ -63,7 +63,7 @@ struct AppSettings {
   @State autoUpdateEnabled: boolean = false;
   @State agentBackendUrl: string = '';
   @State showAgentToolCalls: boolean = false;
-  @State floatingBallEnabled: boolean = true;
+  @StorageLink('floating_ball_enabled') floatingBallEnabled: boolean = true;
 
   private appSettings: UISettings = UISettings.getInstance();
   private featureDetector: FeatureDetector = FeatureDetector.getInstance();

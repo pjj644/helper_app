@@ -11,32 +11,12 @@ import { FloatingWindowManager } from '../../common/agent/FloatingWindowManager'
 import { PageContextTracker } from '../../common/agent/PageContextTracker';
 import { common } from '@kit.AbilityKit';
 import { promptAction } from '@kit.ArkUI';
+import { ChatSessionRepository, ChatSession, ChatMessage, ChatDisplayMessage } from '../../repository/ChatSessionRepository';
 
 const MAX_HISTORY_ROUNDS: number = 10;
 
-interface Message {
-  role: 'system' | 'user' | 'assistant';
-  content: string;
-}
-
-interface DisplayMessage {
-  role: string;
-  content: string;
-  isError: boolean;
-  toolName?: string;
-  toolArgs?: string;
-  toolResult?: string;
-  isToolSuccess?: boolean;
-}
-
-interface ChatSession {
-  id: string;
-  title: string;
-  messages: Message[];
-  displayMessages: DisplayMessage[];
-  createdAt: number;
-  updatedAt: number;
-}
+type Message = ChatMessage;
+type DisplayMessage = ChatDisplayMessage;
 
 @Entry
 @Component
@@ -52,7 +32,7 @@ export struct AssistantPage {
   @State showDeleteDialog: boolean = false;
   @State pendingDeleteSessionId: string = '';
   @State showToolCalls: boolean = false;
-  @State isFloatingBallEnabled: boolean = true;
+  @StorageLink('floating_ball_enabled') isFloatingBallEnabled: boolean = true;
   @State isRecording: boolean = false;
   @StorageLink(ThemeManager.THEME_STORAGE_KEY) isDarkMode: boolean = false;
   private scroller: Scroller = new Scroller();
@@ -62,7 +42,6 @@ export struct AssistantPage {
 
   aboutToAppear(): void {
     FloatingWindowManager.getInstance().setAssistantPageActive(true);
-    this.isFloatingBallEnabled = FloatingWindowManager.getInstance().getIsEnabled();
     PageContextTracker.getInstance().updateSnapshot(
       'assistant',
       'AI助手',
@@ -93,7 +72,7 @@ export struct AssistantPage {
 
   onPageShow(): void {
     FloatingWindowManager.getInstance().setAssistantPageActive(true);
-    this.isFloatingBallEnabled = FloatingWindowManager.getInstance().getIsEnabled();
+    this.loadSessions();
     this.loadToolCallDisplaySetting();
     setTimeout(() => {
       this.scroller.scrollEdge(Edge.Bottom);
@@ -114,12 +93,7 @@ export struct AssistantPage {
     console.info('[AI Debug] loadSessions start');
     try {
       const context = getContext(this);
-      const pref = preferences.getPreferencesSync(context, { name: AppConstants.COURSE_TABLE_PREF_NAME });
-      const jsonStr: string = pref.getSync(AppConstants.AI_CHAT_SESSIONS_KEY, '[]') as string;
-      console.info('[AI Debug] loaded sessions json length:', jsonStr.length);
-      if (jsonStr && jsonStr !== '[]') {
-        this.sessions = JSON.parse(jsonStr) as ChatSession[];
-      }
+      this.sessions = ChatSessionRepository.getSessions(context);
     } catch (error) {
       console.error('[AI Debug] loadSessions error:', JSON.stringify(error));
       this.sessions = [];
@@ -138,9 +112,7 @@ export struct AssistantPage {
   private saveSessions(): void {
     try {
       const context = getContext(this);
-      const pref = preferences.getPreferencesSync(context, { name: AppConstants.COURSE_TABLE_PREF_NAME });
-      pref.putSync(AppConstants.AI_CHAT_SESSIONS_KEY, JSON.stringify(this.sessions));
-      pref.flushSync();
+      ChatSessionRepository.saveSessions(context, this.sessions);
     } catch (error) {
       console.error('saveSessions error:', JSON.stringify(error));
     }
