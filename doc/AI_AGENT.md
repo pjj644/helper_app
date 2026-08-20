@@ -1,7 +1,7 @@
 # AI 助手子系统 (AI_AGENT.md)
 
-> 当前架构：**后端 LangGraph 大脑（本地电脑）+ ArkTS 前端（展示 + 工具执行）**。
-> 迁移过程见 [AI_AGENT_PLAN.md](./AI_AGENT_PLAN.md)；逐阶段改动见 [CHANGES.md](./CHANGES.md)。
+> 当前架构：**后端 LangGraph 大脑（本地电脑）+ ArkTS 前端（统一控制引擎与数据查询引擎）**。
+> 演进方案：**统一控制引擎（Universal App Control Engine）**——将原 33+ 分散硬编码工具收敛为 4 个全能原子元工具 + 1 个声明式流水线执行器。
 
 ## 架构
 
@@ -12,30 +12,62 @@
 │  ├─ 语音输入(CoreSpeech) │────────▶│  ├─ POST /api/chat -> SSE 流  │
 │  ├─ 拍照/相册海报识别    │         │  ├─ POST /api/vision/parse.. │
 │  ├─ 会话/历史/气泡 UI    │         │  ├─ GET /api/knowledge/se.. │
-│  ├─ 确认弹窗            │         │  ├─ StateGraph(Messages)      │
-│  └─ BackendAgentClient  │  POST ↑ │  │   ├─ agentNode(DeepSeek)   │
+│  ├─ 统一确认弹窗         │         │  ├─ StateGraph(Messages)      │
+│  └─ BackendAgentClient   │  POST ↑ │  │   ├─ agentNode(DeepSeek)   │
 │     ├─ SSE 解析          │────────▶│  │   └─ toolsNode(interrupt)  │
-│     └─ ToolExecutor(33项)│         │  ├─ SqliteSaver 检查点        │
-│        读写手机本地数据   │         │  ├─ 智谱 GLM-4V (多模态视觉)  │
-│                          │         │  ├─ CampusKnowledgeStore(RAG)│
-│                          │         │  └─ DeepSeek API (推理核心)  │
+│     ├─ ToolExecutor      │         │  ├─ SqliteSaver 检查点        │
+│     │   ├─ DataQueryEngine│        │  ├─ 智谱 GLM-4V (多模态视觉)  │
+│     │   └─ Pipeline 批处理│        │  ├─ CampusKnowledgeStore(RAG)│
+│     └─ 读写手机本地数据  │         │  └─ DeepSeek API (推理核心)  │
 └──────────────────────────┘         └──────────────────────────────┘
 ```
 
 - **大脑在后端**：LangGraph 编排、DeepSeek 推理、智谱 GLM-4V 视觉识别、CampusKnowledgeStore RAG 知识检索、SQLite 持久化会话状态。手机只发用户新消息（`{session_id, message}`），**历史由后端检查点管理**。
-- **工具在手机端执行**：33 个工具读写设备本地数据（课表/考试/成绩/日程/日历/复习规划/成电指南/文本日程解析）。后端 `tools.ts` 只定义 schema + stub，执行时走 interrupt，把 `tool_calls` 推给手机，手机跑完 POST 回结果，后端 `Command({resume})` 继续。
+- **端侧统一控制引擎**：前端实现 `DataQueryEngine`（内存级通用数据多维过滤）与 `ToolExecutor` 批处理执行器。后端 `tools.ts` 仅需 Bind 5 个核心元工具，执行时走 interrupt，端侧批量执行并回传结果。
 
-## 交互多模态化与扩展接口
+## 统一控制元工具清单（5 大核心工具）
 
-1. **语音对话（ASR 输入）**：
-   - 前端基于鸿蒙原生 `@kit.CoreSpeechKit` (`speechRecognizer`) 封装 `SpeechRecognizerHelper`。
-   - 用户点击麦克风按钮说话，实时流式转写文字上屏。
-2. **海报/通知截图识别（Vision 多模态）**：
-   - 前端通过 `PhotoViewPicker` 免权限选择海报或通知图片，转为 Base64。
-   - 调用后端 `POST /api/vision/parse-schedule`，由智谱开放平台 `glm-4v-plus` 提取结构化日程（标题、日期、起止时间、地点、详情），并在聊天界面展示日程卡片。
-3. **成电深度知识库（Campus Knowledge RAG）**：
-   - 后端建立 `CampusKnowledgeStore` 检索框架，支持按分类与关键词权重匹配。
-   - 提供 `GET /api/knowledge/search` 接口与 `query_campus_guide` 工具，涵盖校车时刻、缓考补考保研政策、校医院医保报销、图书馆与场馆开放指南。
+### 1. `app_data_query`（统一数据智能查询器，Low 风险，无需确认）
+- **功能**：统一查询 App 内所有核心数据（课表、考试、成绩/GPA、日程、系统日历、提醒配置、系统时间与教学周）。
+- **参数**：
+  - `domain`: `course` | `exam` | `grade` | `schedule` | `calendar` | `reminder_setting` | `system_info`
+  - `filter`: 包含 `date` (YYYY-MM-DD), `week` (1-20), `dayOfWeek` (1-7), `keyword`, `teacher`, `room`, `upcomingOnly`, `semesterId`, `minGpa`, `maxGpa`, `type`, `startDate`, `endDate`
+  - `limit`: 返回数量限制
+
+### 2. `app_data_mutate`（统一数据变更器，Medium 风险，需端侧确认）
+- **功能**：统一处理日程 CRUD（支持系统日历自动联动）、系统日历事件删除、提醒配置变更。
+- **参数**：
+  - `domain`: `schedule` | `calendar` | `reminder_setting`
+  - `action`: `create` | `update` | `delete`
+  - `payload`: 载荷数据对象
+  - `syncCalendar`: 是否同步写入系统日历（默认 `true`）
+  - `remindMinutesBefore`: 提前提醒分钟数（默认 `30`）
+
+### 3. `app_control`（统一应用与系统控制，High 风险 / 页面跳转 Low 风险）
+- **功能**：控制页面路由导航、云端同步/下载恢复、提醒数据全量重建刷新。
+- **参数**：
+  - `action`: `navigate` | `sync_cloud` | `download_cloud` | `refresh_reminders`
+  - `params`: `{ page?: string, syncScope?: 'all'|'courses'|'exams' }`
+
+### 4. `campus_search`（统一校园智搜，Low 风险，无需确认）
+- **功能**：统一检索成电校园生活指南（校车时刻/缓考补考/保研/校医院/场馆）及教务处官网实时公告新闻。
+- **参数**：
+  - `query`: 检索问题或关键词
+  - `source`: `guide` | `jwc_news` | `auto`
+  - `category`: `bus` | `academic_policy` | `hospital` | `facilities` | `all`
+
+### 5. `app_pipeline`（声明式复合流水线批处理，Medium 风险，需端侧确认）
+- **功能**：当遇到多步复合任务时（如“查下周二空闲时间 ➔ 创建自习日程 ➔ 写入日历”），一次性生成有序原子步骤并在端侧顺序批量执行，极大降低网络往返延迟。
+- **参数**：
+  - `steps`: `[{ stepId: string, tool: string, args: object }, ...]`
+
+---
+
+## 智能辅助工具
+- `generate_study_plan` - 考前智能突击复习规划师（按考试科目倒计时加权分配每日复习任务）
+- `parse_text_to_schedule` - 讲座/海报通知文本提取日程
+
+---
 
 ## 协议（SSE 下行 + HTTP POST 上行）
 
@@ -46,89 +78,19 @@
    - `error` - 错误
 2. 手机收到 `tool_call`：按 `requiresConfirmation` 决定是否弹确认框；执行 `ToolExecutor.execute(name, args)`；把结果 `POST /api/tool-result` `{session_id, batch_id, results:[{tool_call_id,success,data}]}`。
 3. 后端收到结果 -> `graph.stream(new Command({resume: results}), config)` 唤醒 `toolsNode`，继续推理。
-4. 断开检测：`res.on('close')` + `finished` 守卫；超时由 `PendingToolRegistry`（`TOOL_TIMEOUT_MS`）处理，超时回填错误结果。
+
+---
 
 ## 代码位置
 
 - **后端**（独立 git 仓库）：`C:\Users\28399\Desktop\华为云\后端服务\ai-proxy`
-  - `src/index.ts` - Express，`/api/chat` + `/api/tool-result` + `/api/vision/parse-schedule` + `/api/knowledge/search` + `/health`
-  - `src/graph.ts` - StateGraph：`agentNode`（注入 system prompt）、`toolsNode`（interrupt/resume）、`SqliteSaver`
-  - `src/llm.ts` - `createLLM()` -> `ChatOpenAI`（DeepSeek OpenAI 兼容）
-  - `src/vision.ts` - 智谱 GLM-4V 多模态海报与通知截图日程抽取服务
-  - `src/knowledge/store.ts` - `CampusKnowledgeStore` 知识检索与热加载管理器
-  - `src/knowledge/data/*.json` - 模块化成电知识库（校车/教务/医院/场馆/生活）
-  - `src/tools.ts` - **33 个工具的 schema + `toolMeta`**（requiresConfirmation / riskLevel）
-  - `src/prompt.ts` - `SYSTEM_PROMPT` / `APP_KNOWLEDGE` / `DETAIL_KEYWORDS` / `buildSystemPrompt`
-  - `src/registry.ts` - `PendingToolRegistry`（挂起工具的超时与清理）
-  - `.env`（gitignored）- `DEEPSEEK_API_KEY` / `ZHIPU_API_KEY` / `ZHIPU_VISION_MODEL` / `PROXY_AUTH_KEY` / `PORT=3000` / `CHECKPOINT_DB_PATH`
-  - 运行：`npm run dev`（tsx watch）
-- **前端**（根仓库 `D:\harmony\helper_app`，代码在 `Application/`）：`entry/src/main/ets/common/agent/`
-  - `BackendAgentClient.ets` - SSE 流 + tool-result 回传 + 断开/取消/重入保护
-  - `ToolExecutor.ets` - 33 个工具的实际执行（switch 分发到各 service）
-  - `ToolRegistry.ets` - 工具定义镜像 + `getRiskLevel`（确认弹窗显示风险等级用）
-  - `VisionScheduleHelper.ets` - 相册选图与视觉日程解析客户端
-  - `common/speech/SpeechRecognizerHelper.ets` - CoreSpeechKit 原生语音识别客户端
-- **入口页**：`pages/quick/AssistantPage.ets`
-- **后端地址**：用户在「应用设置 -> 助手后端」填写（默认 `http://192.168.1.100:3000`，填实际 LAN IP）。存 `SettingsRepository.getAgentBackendUrl`。明文 HTTP 已全局 `allowsCleartext`，无需改 module.json5。
-
-## 工具清单（33 个）
-
-**查询 / 上下文（低风险，无需确认）**
-- `get_current_datetime` - 日期/时间/星期/教学周/学期（**LLM 时间上下文，涉及"今天/本周"先调它**）
-- `query_today_courses` / `query_tomorrow_courses` / `query_week_courses` / `query_courses_by_date` - 课表查询
-- `query_course_by_name` - 按课名查时间/教室/周次
-- `query_current_week` - 当前教学周
-- `query_next_exam` / `query_all_exams` - 考试
-- `query_grades` / `query_gpa` - 成绩
-- `query_schedule` - 日程（可按日期）
-- `query_campus_guide` - **成电校园指南与校务政策检索**（校车时刻/缓考补考/保研GPA/校医院/图书馆/场馆）
-- `generate_study_plan` - **考前智能突击复习规划师**（按剩余天数与权重生成科目每日复习计划）
-- `parse_text_to_schedule` - **讲座/海报通知文本提取日程**
-- `check_time_conflict` - 时间冲突检测
-- `check_login_status` / `has_course_data` - 状态
-- `query_reminder_settings` - 提醒设置
-- `list_calendar_events` - 列出系统日历事件
-
-**写入（中/高风险，需确认）**
-- `create_schedule` / `update_schedule` / `delete_schedule` - 应用内日程 CRUD
-- `add_to_calendar` - 建日程并写入系统日历，带"提前 X 分钟提醒"
-- `add_exam_to_calendar` / `add_course_to_calendar` - 考试/课程写入系统日历
-- `remove_calendar_event` - 从系统日历移除
-- `set_reminder_enabled` / `set_remind_minutes` / `refresh_reminders` - 提醒设置
-- `sync_courses_to_cloud` / `sync_exams_to_cloud` / `sync_all_to_cloud` / `download_all_from_cloud` - 云同步（high）
-- `navigate_to_page` - 跳转页面（course_table/exam/grade/schedule/settings/course_import/exam_import/grade_import/assistant/home）
-
-## 添加一个新工具（改 3 处）
-
-1. **后端 `src/tools.ts`**：加 `tool()` schema + `toolMeta[name] = {requiresConfirmation, riskLevel}`。
-2. **前端 `ToolExecutor.ets`**：加 `switch` case + 私有执行方法（调对应 service）。
-3. **前端 `ToolRegistry.ets`**：加 `ToolDefinition`（参数 / required / requiresConfirmation / riskLevel）--确认弹窗读 `getRiskLevel`，必须与后端 meta 一致。
-
-> schema 只在后端给 LLM `bindTools`；执行只在手机端；`ToolRegistry` 是风险等级镜像。三者工具名必须一致。
-
-## 确认与风险
-
-- 是否弹确认：后端在 `tool_call` 事件里带 `requiresConfirmation`（来自 `toolMeta`），`BackendAgentClient` 据此调 `onConfirmationNeeded`。用户拒绝则回填"用户拒绝了此操作"。
-- 风险等级显示：`AssistantPage` 调 `ToolRegistry.getRiskLevel(name)` 在确认弹窗展示 low/medium/high。
-- 默认：未知工具 = low / 不确认。
-
-## 系统日历工具要点
-
-- 权限：写日历的工具先 `ensureCalendarPermission()`（`context as common.UIAbilityContext` 请求 `READ_CALENDAR` / `WRITE_CALENDAR`）。拒绝则返回失败，不崩溃。
-- 关联：`add_to_calendar` 写完日历后回填 `calendarEventId` 到应用内日程；`remove_calendar_event` 同步把应用内日程的 `calendarEventId` 清零；`update_schedule` 对已关联的做 `upsertEventReminder`。
-- 考试 / 课程写日历**不另建应用内日程**（避免与 `buildExamEvents` / `buildCourseEvents` 自动生成的重复），仅写系统日历。
-- `CalendarKitReminderService.listEvents(context,start,end)` - 读系统日历事件（`calendarManager.Event` 字段为 optional，已 `|| 0` 兜底）。
-
-## 会话历史
-
-- 后端 SQLite 检查点是 LLM 上下文**唯一真实源**（`thread_id = session_id`）。
-- 前端**额外**在本地 preferences 双存储一份历史（仅用于 UI 气泡回显，不发给后端）。
-
-## 已知交互
-
-- `refresh_reminders`（`ReminderService`）会先 `CalendarKitReminderService.clearAllEvents` 再重建提醒--这是**原有行为**。通过 `add_to_calendar` 写入且 `addToCalendar=true` 的事件会在 refresh 时被重新纳入（仅当通知代理失败才走日历）。本次扩充未改此逻辑。
-- 弱网下 `BackendAgentClient` 连接失败直接报错（提示去设置检查后端地址），未做自动重试。
-
-## 端到端测试
-
-见 [BUILD_AND_TEST.md](./BUILD_AND_TEST.md) 的「AI 助手 E2E」一节。
+  - `src/tools.ts` - 5 个核心元工具定义与 Schema
+  - `src/prompt.ts` - 统一控制引擎提示词与场景示例
+  - `src/graph.ts` - StateGraph（interrupt / resume 调度）
+  - `test/phone-sim.mjs` - 端侧元工具与 Pipeline 模拟联调脚本
+- **前端**（根仓库 `D:\harmony\helper_app`）：`entry/src/main/ets/common/agent/`
+  - `DataQueryEngine.ets` - 统一内存数据多维查询引擎
+  - `ToolExecutor.ets` - 元工具分发、数据变更与 Pipeline 执行器
+  - `ToolRegistry.ets` - 工具元数据与动态风险判定
+  - `BackendAgentClient.ets` - SSE 流式客户端
+  - `pages/quick/AssistantPage.ets` - 智能对话与气泡格式化渲染

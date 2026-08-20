@@ -255,6 +255,11 @@ export struct AssistantPage {
 
   private getToolDisplayName(toolName: string): string {
     const nameMap: Record<string, string> = {
+      'app_data_query': '查询应用数据',
+      'app_data_mutate': '变更应用数据',
+      'app_control': '应用系统控制',
+      'campus_search': '检索校园信息',
+      'app_pipeline': '执行复合流水线',
       'query_today_courses': '查询今日课程',
       'query_week_courses': '查询本周课程',
       'query_current_week': '查询当前周',
@@ -288,6 +293,12 @@ export struct AssistantPage {
   private formatToolResult(toolName: string, result: string): string {
     try {
       switch (toolName) {
+        case 'app_data_query':
+          return this.formatDataQueryResult(result)
+        case 'app_data_mutate':
+        case 'app_control':
+        case 'app_pipeline':
+          return this.formatGenericMessageResult(result)
         case 'query_today_courses':
           return this.formatCourseResult(result)
         case 'query_week_courses':
@@ -308,6 +319,81 @@ export struct AssistantPage {
     } catch (e) {
       return ''
     }
+  }
+
+  private formatGenericMessageResult(json: string): string {
+    try {
+      const data: Record<string, Object> = JSON.parse(json) as Record<string, Object>
+      if (data['message']) {
+        return String(data['message'])
+      }
+    } catch (e) {
+      // ignore
+    }
+    return ''
+  }
+
+  private formatDataQueryResult(json: string): string {
+    try {
+      const data: Record<string, Object> = JSON.parse(json) as Record<string, Object>
+      const domain: string = (data['domain'] as string) || ''
+      const items: Object[] = (data['items'] as Object[]) || []
+
+      if (domain === 'course') {
+        if (items.length === 0) return '未查询到相关课程'
+        let text: string = ''
+        for (let i = 0; i < items.length; i++) {
+          const c: Record<string, Object> = items[i] as Record<string, Object>
+          if (i > 0) text += '\n'
+          text += `📚 ${String(c['name'])} (${String(c['dayOfWeekLabel'] || '')} ${String(c['timeRange'] || '')})`
+          const room: string = String(c['room'] || '')
+          if (room.length > 0 && room !== 'undefined') text += ` · ${room}`
+          const teacher: string = String(c['teacher'] || '')
+          if (teacher.length > 0 && teacher !== 'undefined') text += ` · ${teacher}`
+        }
+        return text
+      } else if (domain === 'exam') {
+        if (items.length === 0) return '未查询到考试安排'
+        let text: string = ''
+        for (let i = 0; i < items.length; i++) {
+          const e: Record<string, Object> = items[i] as Record<string, Object>
+          if (i > 0) text += '\n'
+          text += `📝 ${String(e['courseName'])}`
+          text += `\n   📅 ${String(e['examDate'])} ${String(e['examTimeRange'])}`
+          const loc: string = String(e['examLocation'] || '')
+          if (loc.length > 0 && loc !== 'undefined') text += ` · 📍 ${loc}`
+          const cd: string = String(e['countdown'] || '')
+          if (cd.length > 0 && cd !== 'undefined') text += `\n   ⏰ ${cd}`
+        }
+        return text
+      } else if (domain === 'grade') {
+        let text: string = `📊 总GPA: ${String(data['overallGPA'] || '0.00')}\n`
+        for (let i = 0; i < items.length; i++) {
+          const g: Record<string, Object> = items[i] as Record<string, Object>
+          text += `\n📖 ${String(g['courseName'])}`
+          text += `\n   成绩: ${String(g['totalScore'])} · 绩点: ${String(g['gradePoint'])} · 学分: ${String(g['credit'])}`
+        }
+        return text
+      } else if (domain === 'schedule') {
+        if (items.length === 0) return '未查询到日程安排'
+        let text: string = ''
+        for (let i = 0; i < items.length; i++) {
+          const e: Record<string, Object> = items[i] as Record<string, Object>
+          if (i > 0) text += '\n'
+          text += `📌 ${String(e['title'])}`
+          text += `\n   📅 ${String(e['date'])} ${String(e['timeRange'])}`
+          const loc: string = String(e['location'] || '')
+          if (loc.length > 0 && loc !== 'undefined') text += ` · 📍 ${loc}`
+        }
+        return text
+      } else if (domain === 'system_info') {
+        const sys: Record<string, Object> = (data['data'] as Record<string, Object>) || {}
+        return `⏰ 当前时间: ${String(sys['date'] || '')} ${String(sys['time'] || '')} (${String(sys['dayOfWeekLabel'] || '')}) · 第 ${String(sys['currentWeek'] || '')} 教学周`
+      }
+    } catch (e) {
+      // ignore
+    }
+    return ''
   }
 
   private formatCourseResult(json: string): string {
@@ -457,7 +543,7 @@ export struct AssistantPage {
   private requestConfirmation(toolName: string, args: string): Promise<boolean> {
     return new Promise<boolean>((resolve: (value: boolean) => void) => {
       const displayName: string = this.getToolDisplayName(toolName);
-      const riskLevel: string = ToolRegistry.getRiskLevel(toolName);
+      const riskLevel: string = ToolRegistry.getRiskLevel(toolName, args);
       let message: string = `AI助手请求执行：${displayName}`;
       if (riskLevel === 'high') {
         message += '\n\n⚠️ 此操作涉及数据变更，请谨慎确认';
