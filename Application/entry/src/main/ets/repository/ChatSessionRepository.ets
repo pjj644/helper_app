@@ -6,6 +6,14 @@ export interface ChatMessage {
   content: string;
 }
 
+export interface AgentTelemetryInfo {
+  totalTokens?: number;
+  promptTokens?: number;
+  completionTokens?: number;
+  durationMs?: number;
+  ttftMs?: number;
+}
+
 export interface ChatDisplayMessage {
   role: string;
   content: string;
@@ -14,6 +22,7 @@ export interface ChatDisplayMessage {
   toolArgs?: string;
   toolResult?: string;
   isToolSuccess?: boolean;
+  telemetry?: AgentTelemetryInfo;
 }
 
 export interface ChatSession {

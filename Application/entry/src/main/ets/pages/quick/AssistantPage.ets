@@ -11,7 +11,8 @@ import { FloatingWindowManager } from '../../common/agent/FloatingWindowManager'
 import { PageContextTracker } from '../../common/agent/PageContextTracker';
 import { common } from '@kit.AbilityKit';
 import { promptAction } from '@kit.ArkUI';
-import { ChatSessionRepository, ChatSession, ChatMessage, ChatDisplayMessage } from '../../repository/ChatSessionRepository';
+import { ChatSessionRepository, ChatSession, ChatMessage, ChatDisplayMessage, AgentTelemetryInfo } from '../../repository/ChatSessionRepository';
+import { MarkdownBubble } from '../../common/agent/MarkdownBubble';
 
 const MAX_HISTORY_ROUNDS: number = 10;
 
@@ -32,6 +33,7 @@ export struct AssistantPage {
   @State showDeleteDialog: boolean = false;
   @State pendingDeleteSessionId: string = '';
   @State showToolCalls: boolean = false;
+  @State expandedToolIndices: number[] = [];
   @StorageLink('floating_ball_enabled') isFloatingBallEnabled: boolean = true;
   @State isRecording: boolean = false;
   @StorageLink(ThemeManager.THEME_STORAGE_KEY) isDarkMode: boolean = false;
@@ -332,7 +334,7 @@ export struct AssistantPage {
         for (let i = 0; i < items.length; i++) {
           const c: Record<string, Object> = items[i] as Record<string, Object>
           if (i > 0) text += '\n'
-          text += `📚 ${String(c['name'])} (${String(c['dayOfWeekLabel'] || '')} ${String(c['timeRange'] || '')})`
+          text += `[${String(c['name'])}] ${String(c['dayOfWeekLabel'] || '')} ${String(c['timeRange'] || '')}`
           const room: string = String(c['room'] || '')
           if (room.length > 0 && room !== 'undefined') text += ` · ${room}`
           const teacher: string = String(c['teacher'] || '')
@@ -345,20 +347,18 @@ export struct AssistantPage {
         for (let i = 0; i < items.length; i++) {
           const e: Record<string, Object> = items[i] as Record<string, Object>
           if (i > 0) text += '\n'
-          text += `📝 ${String(e['courseName'])}`
-          text += `\n   📅 ${String(e['examDate'])} ${String(e['examTimeRange'])}`
+          text += `[${String(e['courseName'])}] ${String(e['examDate'])} ${String(e['examTimeRange'])}`
           const loc: string = String(e['examLocation'] || '')
-          if (loc.length > 0 && loc !== 'undefined') text += ` · 📍 ${loc}`
+          if (loc.length > 0 && loc !== 'undefined') text += ` · ${loc}`
           const cd: string = String(e['countdown'] || '')
-          if (cd.length > 0 && cd !== 'undefined') text += `\n   ⏰ ${cd}`
+          if (cd.length > 0 && cd !== 'undefined') text += ` (${cd})`
         }
         return text
       } else if (domain === 'grade') {
-        let text: string = `📊 总GPA: ${String(data['overallGPA'] || '0.00')}\n`
+        let text: string = `总GPA: ${String(data['overallGPA'] || '0.00')}\n`
         for (let i = 0; i < items.length; i++) {
           const g: Record<string, Object> = items[i] as Record<string, Object>
-          text += `\n📖 ${String(g['courseName'])}`
-          text += `\n   成绩: ${String(g['totalScore'])} · 绩点: ${String(g['gradePoint'])} · 学分: ${String(g['credit'])}`
+          text += `\n- ${String(g['courseName'])}: 成绩 ${String(g['totalScore'])} · 绩点 ${String(g['gradePoint'])} · 学分 ${String(g['credit'])}`
         }
         return text
       } else if (domain === 'schedule') {
@@ -367,15 +367,14 @@ export struct AssistantPage {
         for (let i = 0; i < items.length; i++) {
           const e: Record<string, Object> = items[i] as Record<string, Object>
           if (i > 0) text += '\n'
-          text += `📌 ${String(e['title'])}`
-          text += `\n   📅 ${String(e['date'])} ${String(e['timeRange'])}`
+          text += `[${String(e['title'])}] ${String(e['date'])} ${String(e['startTime'])}-${String(e['endTime'])}`
           const loc: string = String(e['location'] || '')
-          if (loc.length > 0 && loc !== 'undefined') text += ` · 📍 ${loc}`
+          if (loc.length > 0 && loc !== 'undefined') text += ` · ${loc}`
         }
         return text
       } else if (domain === 'system_info') {
         const sys: Record<string, Object> = (data['data'] as Record<string, Object>) || {}
-        return `⏰ 当前时间: ${String(sys['date'] || '')} ${String(sys['time'] || '')} (${String(sys['dayOfWeekLabel'] || '')}) · 第 ${String(sys['currentWeek'] || '')} 教学周`
+        return `当前时间: ${String(sys['date'] || '')} ${String(sys['time'] || '')} (${String(sys['dayOfWeekLabel'] || '')}) · 第 ${String(sys['currentWeek'] || '')} 教学周`
       }
     } catch (e) {
       // ignore
@@ -641,11 +640,20 @@ export struct AssistantPage {
         self.saveSessions();
         self.scrollToBottom();
       },
-      onComplete: () => {
+      onComplete: (telemetry?: AgentTelemetryInfo) => {
         self.isLoading = false;
         const lastAssistantMsg: DisplayMessage | undefined = self.findLastAssistantMessage();
         if (lastAssistantMsg && lastAssistantMsg.content.length > 0) {
           self.messages = [...self.messages, { role: 'assistant', content: lastAssistantMsg.content }];
+          if (telemetry) {
+            const lastIdx: number = self.displayMessages.length - 1;
+            for (let i = lastIdx; i >= 0; i--) {
+              if (self.displayMessages[i].role === 'assistant') {
+                self.displayMessages[i].telemetry = telemetry;
+                break;
+              }
+            }
+          }
         }
         self.updateCurrentSessionTimestamp();
         self.syncCurrentSession();
@@ -772,50 +780,83 @@ export struct AssistantPage {
       }
 
       if (msg.role === 'tool_call') {
-        Column() {
-          Row({ space: 6 }) {
-            Text('🔧')
-              .fontSize(14)
-            Text(msg.content)
-              .fontSize(13)
-              .fontColor(ThemeManager.getTextSecondaryColor())
-          }
+        Row({ space: 6 }) {
+          Circle()
+            .width(6)
+            .height(6)
+            .fill('#007AFF')
+          Text(msg.content)
+            .fontSize(12)
+            .fontColor(ThemeManager.getTextSecondaryColor())
         }
-        .constraintSize({ maxWidth: '85%' })
-        .padding({ left: 12, right: 12, top: 8, bottom: 8 })
-        .borderRadius(12)
-        .backgroundColor(this.isDarkMode ? '#1A2A3A' : '#E8F4FD')
-        .alignItems(HorizontalAlign.Start)
+        .padding({ left: 10, right: 10, top: 5, bottom: 5 })
+        .borderRadius(8)
+        .backgroundColor(this.isDarkMode ? '#1E2433' : '#F2F4F7')
+        .border({ width: 0.5, color: this.isDarkMode ? '#2D3748' : '#E2E8F0' })
+        .alignItems(VerticalAlign.Center)
       } else if (msg.role === 'tool_result') {
-        Column() {
+        Column({ space: 4 }) {
           Row({ space: 6 }) {
-            Text(msg.isToolSuccess ? '✅' : '❌')
-              .fontSize(14)
+            Circle()
+              .width(6)
+              .height(6)
+              .fill(msg.isToolSuccess ? '#34C759' : '#FF3B30')
             Text(msg.content)
-              .fontSize(13)
+              .fontSize(12)
+              .fontWeight(FontWeight.Medium)
               .fontColor(msg.isToolSuccess ? ThemeManager.getTextPrimaryColor() : '#FF3B30')
+
+            if (msg.isToolSuccess && msg.toolResult && msg.toolResult.length > 0 && msg.toolName) {
+              Text(this.expandedToolIndices.indexOf(index) !== -1 ? '▾ 收起' : '▸ 查看数据')
+                .fontSize(11)
+                .fontColor('#007AFF')
+                .margin({ left: 4 })
+            }
           }
-          if (msg.isToolSuccess && msg.toolResult && msg.toolResult.length > 0 && msg.toolName) {
+          .padding({ left: 10, right: 10, top: 5, bottom: 5 })
+          .borderRadius(8)
+          .backgroundColor(this.isDarkMode ? '#1E2433' : '#F4F5F8')
+          .border({ width: 0.5, color: this.isDarkMode ? '#2D3748' : '#E2E8F0' })
+          .alignItems(VerticalAlign.Center)
+          .onClick(() => {
+            if (msg.isToolSuccess && msg.toolResult && msg.toolResult.length > 0) {
+              const pos = this.expandedToolIndices.indexOf(index);
+              if (pos !== -1) {
+                this.expandedToolIndices.splice(pos, 1);
+              } else {
+                this.expandedToolIndices.push(index);
+              }
+            }
+          })
+
+          if (this.expandedToolIndices.indexOf(index) !== -1 && msg.isToolSuccess && msg.toolResult && msg.toolResult.length > 0 && msg.toolName) {
             Text(this.formatToolResult(msg.toolName, msg.toolResult))
-              .fontSize(13)
+              .fontSize(12)
               .fontColor(ThemeManager.getTextSecondaryColor())
-              .margin({ top: 6 })
-              .maxLines(20)
-              .lineHeight(20)
+              .padding(8)
+              .backgroundColor(this.isDarkMode ? '#141820' : '#EDF0F5')
+              .borderRadius(6)
+              .margin({ top: 2 })
+              .maxLines(15)
+              .lineHeight(18)
           }
         }
-        .constraintSize({ maxWidth: '85%' })
-        .padding({ left: 12, right: 12, top: 8, bottom: 8 })
-        .borderRadius(12)
-        .backgroundColor(msg.isToolSuccess ? (this.isDarkMode ? '#1A2E1A' : '#E8F5E9') : (this.isDarkMode ? '#2E1A1A' : '#FFEBEE'))
         .alignItems(HorizontalAlign.Start)
       } else {
-        Column() {
-          Text(msg.content)
-            .fontSize(15)
-            .fontColor(msg.role === 'user' ? '#FFFFFF' : (msg.isError ? '#FF3B30' : ThemeManager.getTextPrimaryColor()))
-            .maxLines(Number.MAX_SAFE_INTEGER)
-            .copyOption(CopyOptions.LocalDevice)
+        Column({ space: 4 }) {
+          if (msg.role === 'assistant') {
+            MarkdownBubble({
+              content: msg.content,
+              isUser: false,
+              isError: msg.isError
+            })
+          } else {
+            Text(msg.content)
+              .fontSize(15)
+              .fontColor('#FFFFFF')
+              .maxLines(Number.MAX_SAFE_INTEGER)
+              .copyOption(CopyOptions.LocalDevice)
+          }
 
           if (msg.role === 'assistant' && this.isLoading && index === this.displayMessages.length - 1 && msg.content.length === 0) {
             Text(this.streamingDot ? '▌' : ' ')
@@ -823,8 +864,18 @@ export struct AssistantPage {
               .fontColor(ThemeManager.getTextPrimaryColor())
               .margin({ top: 2 })
           }
+
+          if (msg.role === 'assistant' && msg.telemetry && msg.telemetry.totalTokens) {
+            Row({ space: 4 }) {
+              Text(`⚡ ${msg.telemetry.totalTokens} Tokens · ${(Number(msg.telemetry.durationMs || 0) / 1000).toFixed(1)}s`)
+                .fontSize(10)
+                .fontColor(ThemeManager.getTextTertiaryColor())
+            }
+            .margin({ top: 4 })
+            .alignSelf(ItemAlign.End)
+          }
         }
-        .constraintSize({ maxWidth: '75%' })
+        .constraintSize({ maxWidth: msg.role === 'user' ? '75%' : '88%' })
         .padding({ left: 14, right: 14, top: 10, bottom: 10 })
         .borderRadius(18)
         .backgroundColor(msg.role === 'user' ? '#007AFF' : (this.isDarkMode ? '#2D2D2D' : '#F2F2F7'))

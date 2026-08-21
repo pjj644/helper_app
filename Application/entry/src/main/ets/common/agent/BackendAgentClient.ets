@@ -4,6 +4,8 @@ import { ToolExecutor, ToolResult } from './ToolExecutor'
 import { AppConstants } from '../constants/AppConstants'
 import { SettingsRepository } from '../../repository/SettingsRepository'
 
+import { AgentTelemetryInfo } from '../../repository/ChatSessionRepository'
+
 // 从 AgentOrchestrator.ets 迁入，签名不变 -> AssistantPage 回调实现一字不改
 export interface AgentCallbacks {
   onToolCallStart: (toolName: string, args: string) => void
@@ -11,7 +13,7 @@ export interface AgentCallbacks {
   onConfirmationNeeded: (toolName: string, args: string) => Promise<boolean>
   onTextChunk: (chunk: string) => void
   onError: (error: string) => void
-  onComplete: () => void
+  onComplete: (telemetry?: AgentTelemetryInfo) => void
 }
 
 export interface AgentMessage {
@@ -129,7 +131,7 @@ export class BackendAgentClient {
     })
   }
 
-  private finish(isError: boolean, msg: string): void {
+  private finish(isError: boolean, msg: string, telemetry?: AgentTelemetryInfo): void {
     if (this.finished) {
       return
     }
@@ -137,7 +139,7 @@ export class BackendAgentClient {
     if (isError) {
       this.callbacks.onError(msg)
     } else {
-      this.callbacks.onComplete()
+      this.callbacks.onComplete(telemetry)
     }
   }
 
@@ -169,7 +171,18 @@ export class BackendAgentClient {
         const toolCallsRaw: Object[] = (evt['tool_calls'] as Object[]) || []
         this.fireAndForget(this.handleToolCall(sessionId, batchId, toolCallsRaw, toolResultUrl))
       } else if (type === 'final') {
-        this.finish(false, '')
+        let telemetry: AgentTelemetryInfo | undefined = undefined
+        if (evt['telemetry']) {
+          const tRaw: Record<string, Object> = evt['telemetry'] as Record<string, Object>
+          telemetry = {
+            totalTokens: Number(tRaw['total_tokens'] || 0),
+            promptTokens: Number(tRaw['prompt_tokens'] || 0),
+            completionTokens: Number(tRaw['completion_tokens'] || 0),
+            durationMs: Number(tRaw['duration_ms'] || 0),
+            ttftMs: Number(tRaw['ttft_ms'] || 0),
+          }
+        }
+        this.finish(false, '', telemetry)
       } else if (type === 'error') {
         this.finish(true, (evt['message'] as string) || '未知错误')
       }
