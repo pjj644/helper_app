@@ -8,6 +8,7 @@ import { ToolExecutor } from '../../common/agent/ToolExecutor';
 import { SpeechRecognizerHelper } from '../../common/speech/SpeechRecognizerHelper';
 import { ThemeManager } from '../../common/utils/ThemeManager';
 import { ChatSessionRepository, ChatSession, ChatMessage, ChatDisplayMessage } from '../../repository/ChatSessionRepository';
+import { MarkdownBubble } from '../../common/agent/MarkdownBubble';
 
 interface MiniDisplayMessage {
   role: 'user' | 'assistant' | 'tool';
@@ -536,18 +537,31 @@ export struct FloatingSubWindowContent {
                         .fontSize(13);
                     }
                     .width(24)
-                    .height(24);
+                    .height(24)
+                    .alignSelf(ItemAlign.Start);
 
-                    Text(msg.content || (this.isLoading ? '正在思考中...' : ''))
-                      .fontSize(14)
-                      .fontColor(msg.isError ? '#EF4444' : (this.isDarkMode ? '#E5E7EB' : '#1F2937'))
-                      .backgroundColor(this.isDarkMode ? '#374151' : '#F3F4F6')
-                      .padding(10)
-                      .borderRadius({ topLeft: 2, topRight: 14, bottomLeft: 14, bottomRight: 14 })
-                      .constraintSize({ maxWidth: '82%' });
+                    Column() {
+                      if (this.isLoading && (!msg.content || msg.content.length === 0)) {
+                        Text('正在思考中...')
+                          .fontSize(13)
+                          .fontColor(ThemeManager.getTextSecondaryColor());
+                      } else {
+                        MarkdownBubble({
+                          content: msg.content,
+                          isUser: false,
+                          isError: msg.isError
+                        })
+                        .width('100%');
+                      }
+                    }
+                    .layoutWeight(1)
+                    .padding(10)
+                    .backgroundColor(this.isDarkMode ? '#374151' : '#F3F4F6')
+                    .borderRadius({ topLeft: 2, topRight: 14, bottomLeft: 14, bottomRight: 14 })
+                    .clip(true);
                   }
+                  .width('100%')
                   .alignItems(VerticalAlign.Top);
-                  Blank();
                 }
               }
               .width('100%')

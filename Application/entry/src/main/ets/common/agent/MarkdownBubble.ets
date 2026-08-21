@@ -73,20 +73,25 @@ export class MarkdownParser {
 
     // 1. 预处理：规范化标题与换行，清理多余的装饰 emoji
     let formattedText = rawText
-      // 标题与卡片前强制双换行
-      .replace(/([^\n])\s*(###?\s+)/gu, '$1\n\n$2')
+      // 1.1 修复紧贴在文字后面的 ### 标题 (例如 "成功：###会议" -> "成功：\n\n### 会议")
+      .replace(/([^\n])\s*(#{1,6})\s*/gu, '$1\n\n### ')
+      // 1.2 修复行首紧贴字体的 ### 标题 (例如 "###会议" -> "### 会议")
+      .replace(/^(#{1,6})\s*/gu, '### ')
+      // 1.3 修复 emoji 代替的标题 (例如 "📌 会议" -> "### 会议")
       .replace(/([^\n])\s*[📌📚🗓️📅]\s*/gu, '$1\n\n### ')
       .replace(/^[📌📚🗓️📅]\s*/gu, '### ')
-      // 在行内紧挨着的 "- 教师" / "- 教室" / "- 时间" 等属性前强制补充换行
+      // 1.4 在行内紧挨着的 "- 属性" (例如 "-日期：今天 -时间：19:00 -类型：会议" -> 换行)
       .replace(
-        /([^\n])\s*-\s*([^-\n]*?(?:教师|教室|地点|时间|节次|成绩|绩点|学分|周次|状态|倒计时|类型|标题|科目)[：:])/gu,
+        /([^\n])\s*[-•]\s*([^-\n]*?(?:教师|教室|地点|时间|节次|成绩|绩点|学分|周次|状态|倒计时|类型|标题|科目|日期|备注|说明|事件|群号|电话|链接)[：:])/gu,
         '$1\n- $2',
       )
-      // 过滤装饰型 emoji 保持极简高质感
+      // 1.5 修复卡片属性后面直接紧跟的总结/补充语句 (例如 "-类型：自定义日程-已同步至系统日历" 或 "已同步至系统日历如需补充")
+      .replace(/([^\n])\s*[-•]?\s*(已同步至|已添加到|同步到|如需|如果需要|需要我|如有|随时告诉我)/gu, '$1\n\n$2')
+      // 1.6 过滤装饰型 emoji 保持极简高质感
       .replace(/[📌🎒👨‍🏫📍⏰📝📚🗓️📅]/gu, '')
-      // 规范化总结语句换行
+      // 1.7 规范化总结语句换行
       .replace(/\)\s*(两节课|三节课|四节课|一节课|共\d+节|下午|上午|以上是|如需|需要我)/gu, ')\n\n$1')
-      // 过滤孤立的无标题 ### 标记行（防止模型输出裸 ###）
+      // 1.8 过滤孤立的无标题 ### 标记行（防止模型输出裸 ###）
       .replace(/^\s*#+\s*$/gm, '');
 
     const lines = formattedText.split('\n');
@@ -179,81 +184,94 @@ export class MarkdownParser {
         continue;
       }
 
-      // 3. 结构化卡片块识别（如 ### 课程名 紧随 - 教师 / - 教室 / - 时间）
-      if (trimmed.startsWith('### ') || (trimmed.startsWith('**') && trimmed.endsWith('**') && trimmed.length < 35)) {
-        const title = trimmed.replace(/^###\s+/, '').replace(/\*\*/g, '').trim();
+      // 3. 结构化卡片块识别（如 ### 课程名 / ### 会议 紧随 - 属性：值）
+      if (trimmed.startsWith('###') || (trimmed.startsWith('**') && trimmed.endsWith('**') && trimmed.length < 35)) {
+        const title = trimmed.replace(/^###+\s*/, '').replace(/\*\*/g, '').trim();
         const cardFields: KeyValueItem[] = [];
 
-        let j = i + 1;
-        while (j < lines.length) {
-          const nextTrimmed = lines[j].trim();
-          if (nextTrimmed.length === 0) {
-            j++;
-            break;
-          }
-          if (nextTrimmed.startsWith('###') || nextTrimmed.startsWith('#')) {
-            break;
-          }
-
-          // 匹配属性项（如 - 教师：陈碟 或 - 教室：品学楼B303）
-          if (nextTrimmed.startsWith('- ') || nextTrimmed.startsWith('• ')) {
-            const itemText = nextTrimmed.replace(/^[-•]\s*/, '');
-            const colonIdx = itemText.indexOf('：') !== -1 ? itemText.indexOf('：') : itemText.indexOf(':');
-
-            if (colonIdx !== -1) {
-              const labelPart = itemText.substring(0, colonIdx).trim();
-              const valuePart = itemText.substring(colonIdx + 1).trim();
-              cardFields.push({
-                label: labelPart,
-                value: valuePart,
-              });
-            } else {
-              cardFields.push({
-                label: '说明',
-                value: itemText,
-              });
+        if (title.length > 0) {
+          let j = i + 1;
+          while (j < lines.length) {
+            const nextTrimmed = lines[j].trim();
+            if (nextTrimmed.length === 0) {
+              j++;
+              break;
             }
-            j++;
-          } else {
-            break;
-          }
-        }
+            if (nextTrimmed.startsWith('###') || nextTrimmed.startsWith('#')) {
+              break;
+            }
 
-        if (cardFields.length > 0) {
-          blocks.push({
-            id: `card_${blockIdCounter++}`,
-            type: 'card',
-            cardTitle: title,
-            cardFields: cardFields,
-            spans: [],
-          });
-          i = j;
-          continue;
+            // 匹配属性项（如 - 教师：陈碟 或 - 时间：19:00 或 • 地点：品学楼）
+            if (nextTrimmed.startsWith('- ') || nextTrimmed.startsWith('• ') || nextTrimmed.startsWith('-') || nextTrimmed.startsWith('•')) {
+              const itemText = nextTrimmed.replace(/^[-•]\s*/, '');
+              const colonIdx = itemText.indexOf('：') !== -1 ? itemText.indexOf('：') : itemText.indexOf(':');
+
+              if (colonIdx !== -1) {
+                const labelPart = itemText.substring(0, colonIdx).trim();
+                const valuePart = itemText.substring(colonIdx + 1).trim();
+                if (labelPart.length > 0) {
+                  cardFields.push({
+                    label: labelPart,
+                    value: valuePart || '--',
+                  });
+                }
+              } else if (itemText.length > 0) {
+                cardFields.push({
+                  label: '说明',
+                  value: itemText,
+                });
+              }
+              j++;
+            } else {
+              break;
+            }
+          }
+
+          if (cardFields.length > 0) {
+            blocks.push({
+              id: `card_${blockIdCounter++}`,
+              type: 'card',
+              cardTitle: title,
+              cardFields: cardFields,
+              spans: [],
+            });
+            i = j;
+            continue;
+          }
         }
       }
 
       // 4. 普通标题检测 #, ##, ###
-      if (trimmed.startsWith('### ')) {
-        blocks.push({
-          id: `h3_${blockIdCounter++}`,
-          type: 'heading',
-          level: 3,
-          spans: MarkdownParser.parseInlineSpans(trimmed.substring(4)),
-        });
-      } else if (trimmed.startsWith('## ')) {
-        blocks.push({
-          id: `h2_${blockIdCounter++}`,
-          type: 'heading',
-          level: 2,
-          spans: MarkdownParser.parseInlineSpans(trimmed.substring(3)),
-        });
-      } else if (trimmed.startsWith('# ')) {
-        blocks.push({
-          id: `h1_${blockIdCounter++}`,
-          type: 'heading',
-          level: 1,
-          spans: MarkdownParser.parseInlineSpans(trimmed.substring(2)),
-        });
+      if (trimmed.startsWith('###')) {
+        const titleText = trimmed.replace(/^###+\s*/, '').trim();
+        if (titleText.length > 0) {
+          blocks.push({
+            id: `h3_${blockIdCounter++}`,
+            type: 'heading',
+            level: 3,
+            spans: MarkdownParser.parseInlineSpans(titleText),
+          });
+        }
+      } else if (trimmed.startsWith('##')) {
+        const titleText = trimmed.replace(/^##+\s*/, '').trim();
+        if (titleText.length > 0) {
+          blocks.push({
+            id: `h2_${blockIdCounter++}`,
+            type: 'heading',
+            level: 2,
+            spans: MarkdownParser.parseInlineSpans(titleText),
+          });
+        }
+      } else if (trimmed.startsWith('#')) {
+        const titleText = trimmed.replace(/^#+\s*/, '').trim();
+        if (titleText.length > 0) {
+          blocks.push({
+            id: `h1_${blockIdCounter++}`,
+            type: 'heading',
+            level: 1,
+            spans: MarkdownParser.parseInlineSpans(titleText),
+          });
+        }
       }
       // 5. 引用块 >
       else if (trimmed.startsWith('> ')) {
