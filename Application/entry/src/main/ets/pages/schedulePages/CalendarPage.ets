@@ -700,12 +700,18 @@ export struct CalendarPage {
 
             if (dayItem.markers.length > 0) {
               Row({ space: 2 }) {
-                ForEach(dayItem.markers, (type: ScheduleEventType) => {
-                  Circle({ width: 5, height: 5 })
+                ForEach(dayItem.markers.slice(0, 3), (type: ScheduleEventType) => {
+                  Circle({ width: 4.5, height: 4.5 })
                     .fill(ScheduleUtils.getTypeColor(type));
                 });
+                if (dayItem.markers.length > 3) {
+                  Text(`+${dayItem.markers.length - 3}`)
+                    .fontSize(7)
+                    .fontColor(ThemeManager.getTextTertiaryColor());
+                }
               }
               .justifyContent(FlexAlign.Center)
+              .alignItems(VerticalAlign.Center)
               .width('100%')
               .margin({ top: 2 });
             }

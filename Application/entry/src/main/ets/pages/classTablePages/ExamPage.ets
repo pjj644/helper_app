@@ -7,6 +7,7 @@ import { DateUtils } from '../../common/utils/DateUtils';
 import { ThemeManager } from '../../common/utils/ThemeManager';
 import { PageContextTracker } from '../../common/agent/PageContextTracker';
 import { UIActionDispatcher } from '../../common/agent/UIActionDispatcher';
+import { AppConstants } from '../../common/constants/AppConstants';
 
 @Entry
 @Component
@@ -434,12 +435,35 @@ struct ExamPage {
       }
       .width('100%');
 
-      Text(item.examLocation || '地点未知')
-        .fontSize(13)
-        .fontColor(ThemeManager.getTextSecondaryColor())
-        .width('100%')
-        .maxLines(1)
-        .textOverflow({ overflow: TextOverflow.Ellipsis });
+      Row({ space: 4 }) {
+        Text('📍')
+          .fontSize(12)
+        Text(item.examLocation || '地点未知')
+          .fontSize(13)
+          .fontColor(ThemeManager.getTextSecondaryColor())
+          .layoutWeight(1)
+          .maxLines(1)
+          .textOverflow({ overflow: TextOverflow.Ellipsis })
+
+        if (item.examLocation) {
+          Row({ space: 2 }) {
+            Text('🗺️ 查地图')
+              .fontSize(11)
+              .fontColor(ThemeManager.getAccentColor())
+          }
+          .padding({ left: 6, right: 6, top: 2, bottom: 2 })
+          .backgroundColor(ThemeManager.getAccentBgColor())
+          .borderRadius(6)
+          .onClick((e?: ClickEvent) => {
+            router.pushUrl({
+              url: 'pages/classTablePages/WebPage',
+              params: { title: '校园地图', url: AppConstants.GIS_MAP_URL }
+            });
+          })
+        }
+      }
+      .width('100%')
+      .alignItems(VerticalAlign.Center);
 
       Row() {
         Text(this.getSemesterLabel(item))
@@ -451,7 +475,8 @@ struct ExamPage {
         if (this.shouldShowCountDown(item)) {
           Text(`倒计时 ${DateUtils.formatCountDown(this.nowTick, item.beginTime)}`)
             .fontSize(12)
-            .fontColor(ThemeManager.getAccentColor());
+            .fontColor(this.getUrgencyBorderColor(item) !== 'transparent' ? this.getUrgencyBorderColor(item) : ThemeManager.getAccentColor())
+            .fontWeight(FontWeight.Medium);
         }
       }
       .width('100%');

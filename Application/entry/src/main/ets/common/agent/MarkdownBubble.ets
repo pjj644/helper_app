@@ -85,7 +85,9 @@ export class MarkdownParser {
       // 过滤装饰型 emoji 保持极简高质感
       .replace(/[📌🎒👨‍🏫📍⏰📝📚🗓️📅]/gu, '')
       // 规范化总结语句换行
-      .replace(/\)\s*(两节课|三节课|四节课|一节课|共\d+节|下午|上午|以上是|如需|需要我)/gu, ')\n\n$1');
+      .replace(/\)\s*(两节课|三节课|四节课|一节课|共\d+节|下午|上午|以上是|如需|需要我)/gu, ')\n\n$1')
+      // 过滤孤立的无标题 ### 标记行（防止模型输出裸 ###）
+      .replace(/^\s*#+\s*$/gm, '');
 
     const lines = formattedText.split('\n');
     let inCodeBlock = false;
@@ -357,6 +359,7 @@ export struct MarkdownBubble {
                       .padding({ left: 6, right: 6, top: 2, bottom: 2 })
                       .backgroundColor(this.isDarkMode ? '#242C3D' : '#EAEFF8')
                       .borderRadius(4)
+                      .flexShrink(0)
 
                     Text(field.value)
                       .fontSize(13)
@@ -382,6 +385,7 @@ export struct MarkdownBubble {
             color: this.isDarkMode ? '#2D3748' : '#E2E8F0',
           })
           .margin({ top: 2, bottom: 2 })
+          .clip(true)
         } else if (block.type === 'heading') {
           Row({ space: 6 }) {
             Column()

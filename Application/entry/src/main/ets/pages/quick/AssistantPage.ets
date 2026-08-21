@@ -850,6 +850,7 @@ export struct AssistantPage {
               isUser: false,
               isError: msg.isError
             })
+            .width('100%')
           } else {
             Text(msg.content)
               .fontSize(15)
@@ -875,15 +876,13 @@ export struct AssistantPage {
             .alignSelf(ItemAlign.End)
           }
         }
-        .constraintSize({ maxWidth: msg.role === 'user' ? '75%' : '88%' })
+        .layoutWeight(msg.role === 'assistant' ? 1 : undefined)
+        .constraintSize({ maxWidth: msg.role === 'user' ? '75%' : '100%' })
         .padding({ left: 14, right: 14, top: 10, bottom: 10 })
         .borderRadius(18)
         .backgroundColor(msg.role === 'user' ? '#007AFF' : (this.isDarkMode ? '#2D2D2D' : '#F2F2F7'))
         .alignItems(HorizontalAlign.Start)
-      }
-
-      if (msg.role === 'assistant') {
-        Blank()
+        .clip(true)
       }
     }
     .width('100%')
@@ -1294,6 +1293,25 @@ export struct AssistantPage {
     })
   }
 
+  @Builder
+  private PromptChipBuilder(label: string, promptText: string): void {
+    Button() {
+      Text(label)
+        .fontSize(13)
+        .fontColor('#007AFF')
+        .maxLines(1)
+    }
+    .height(34)
+    .padding({ left: 12, right: 12 })
+    .backgroundColor(this.isDarkMode ? '#1E2433' : '#EFF6FF')
+    .borderRadius(17)
+    .margin({ right: 8, bottom: 8 })
+    .onClick(() => {
+      this.inputText = promptText;
+      this.sendMessage();
+    })
+  }
+
   build() {
     Column() {
       this.TitleBarBuilder()
@@ -1309,27 +1327,49 @@ export struct AssistantPage {
 
         if (this.displayMessages.length === 0) {
           ListItem() {
-            Column() {
+            Column({ space: 12 }) {
               Image($r('app.media.ic_ai_assistant'))
-                .width(64)
-                .height(64)
-                .margin({ bottom: 16 })
+                .width(56)
+                .height(56)
+                .margin({ bottom: 4 })
 
-              Text('你好，我是成电校园助手')
+              Text('成电校园智能助手')
                 .fontSize(18)
                 .fontWeight(FontWeight.Bold)
                 .fontColor(ThemeManager.getTextPrimaryColor())
-                .margin({ bottom: 8 })
 
-              Text('我可以回答问题，也能帮你执行操作\n如：查询课表、同步数据、创建日程等')
-                .fontSize(14)
+              Text('支持全套教务查询、日程创建、系统日历同步与校园指南')
+                .fontSize(13)
                 .fontColor(ThemeManager.getTextSecondaryColor())
                 .textAlign(TextAlign.Center)
+
+              Column({ space: 8 }) {
+                Text('💡 快捷指令推荐')
+                  .fontSize(12)
+                  .fontWeight(FontWeight.Medium)
+                  .fontColor(ThemeManager.getTextTertiaryColor())
+                  .alignSelf(ItemAlign.Start)
+                  .margin({ left: 4 })
+
+                Flex({ wrap: FlexWrap.Wrap, justifyContent: FlexAlign.Start }) {
+                  this.PromptChipBuilder('📅 今天有哪些课？', '今天有哪些课？')
+                  this.PromptChipBuilder('📝 离我最近的考试', '离我最近的考试安排是什么？')
+                  this.PromptChipBuilder('📊 查这学期GPA', '帮我查一下这学期的GPA和成绩')
+                  this.PromptChipBuilder('🚌 清水河校车时刻', '查询清水河到沙河校区的校车时刻表')
+                  this.PromptChipBuilder('➕ 明天上午自习日程', '帮我明天上午9点到11点创建一个在图书馆自习的日程')
+                }
+                .width('100%')
+              }
+              .width('94%')
+              .padding(14)
+              .borderRadius(16)
+              .backgroundColor(ThemeManager.getCardColor())
+              .margin({ top: 12 })
             }
             .width('100%')
             .justifyContent(FlexAlign.Center)
             .alignItems(HorizontalAlign.Center)
-            .padding({ top: 120 })
+            .padding({ top: 40, left: 16, right: 16, bottom: 20 })
           }
         }
       }

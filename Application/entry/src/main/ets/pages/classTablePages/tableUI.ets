@@ -924,6 +924,24 @@ struct TableUI {
 
   private sectionNumbers: number[] = [1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12];
 
+  private isTodayColumn(dayOfWeek: number): boolean {
+    const today = new Date();
+    const todayDow = today.getDay() === 0 ? 7 : today.getDay();
+    return this.currentWeek === getCurrentWeek() && dayOfWeek === todayDow;
+  }
+
+  private getCurrentTimeOffset(): number {
+    const now = new Date();
+    const currentMinutes = now.getHours() * 60 + now.getMinutes();
+    const dayStartMinutes = 8 * 60 + 30; // 08:30
+    const dayEndMinutes = 22 * 60 + 45;   // 22:45
+    if (currentMinutes < dayStartMinutes || currentMinutes > dayEndMinutes) {
+      return -1;
+    }
+    const ratio = (currentMinutes - dayStartMinutes) / (dayEndMinutes - dayStartMinutes);
+    return ratio * (12 * this.getScaledSectionHeight());
+  }
+
   @Builder
   DayColumnBuilder(dayOfWeek: number) {
     Stack({ alignContent: Alignment.TopStart }) {
@@ -960,6 +978,22 @@ struct TableUI {
       .width('100%')
       .height('100%')
       .alignItems(HorizontalAlign.Center)
+
+      if (this.isTodayColumn(dayOfWeek) && this.getCurrentTimeOffset() >= 0) {
+        Row() {
+          Circle({ width: 7, height: 7 })
+            .fill('#FF3B30')
+            .margin({ left: -3.5 })
+          Row()
+            .layoutWeight(1)
+            .height(2)
+            .backgroundColor('#FF3B30')
+        }
+        .width('100%')
+        .alignItems(VerticalAlign.Center)
+        .position({ x: 0, y: this.getCurrentTimeOffset() })
+        .hitTestBehavior(HitTestMode.None)
+      }
     }
     .width(this.getScaledDayColumnWidth())
     .height(this.getTableHeight())
@@ -967,46 +1001,62 @@ struct TableUI {
 
   @Builder
   CourseCardBuilder(course: Course) {
-    Column() {
-      Text(this.extractCourseName(course.name))
-        .fontSize(course.time.duration >= 3 ? 14 : 13)
-        .fontWeight(FontWeight.Bold)
-        .fontColor(ThemeManager.getTextPrimaryColor())
-        .maxLines(this.getTitleMaxLines(course.time.duration))
-        .textOverflow({ overflow: TextOverflow.Ellipsis })
-        .width('100%')
-        .textAlign(TextAlign.Start)
-        .lineHeight(course.time.duration >= 3 ? 18 : 16)
+    Stack({ alignContent: Alignment.TopStart }) {
+      Column()
+        .width(3.5)
+        .height('100%')
+        .backgroundColor('rgba(0, 0, 0, 0.15)')
+        .borderRadius({ topLeft: 10, bottomLeft: 10 })
 
-      if (course.roomName) {
-        Text(`@${course.roomName}`)
-          .fontSize(11)
-          .fontColor(ThemeManager.getTextSecondaryColor())
-          .margin({ top: 6 })
-          .maxLines(1)
+      Column() {
+        Text(this.extractCourseName(course.name))
+          .fontSize(course.time.duration >= 3 ? 14 : 13)
+          .fontWeight(FontWeight.Bold)
+          .fontColor(ThemeManager.getTextPrimaryColor())
+          .maxLines(this.getTitleMaxLines(course.time.duration))
           .textOverflow({ overflow: TextOverflow.Ellipsis })
-          .lineHeight(14)
           .width('100%')
-      }
+          .textAlign(TextAlign.Start)
+          .lineHeight(course.time.duration >= 3 ? 18 : 16)
 
-      if (course.teacherName) {
-        Text(course.teacherName)
-          .fontSize(11)
-          .fontColor(ThemeManager.getTextTertiaryColor())
+        if (course.roomName) {
+          Row({ space: 2 }) {
+            Text('📍')
+              .fontSize(9)
+            Text(course.roomName)
+              .fontSize(11)
+              .fontColor(ThemeManager.getTextSecondaryColor())
+              .maxLines(1)
+              .textOverflow({ overflow: TextOverflow.Ellipsis })
+              .lineHeight(14)
+              .layoutWeight(1)
+          }
           .margin({ top: 4 })
-          .maxLines(1)
-          .textOverflow({ overflow: TextOverflow.Ellipsis })
-          .lineHeight(14)
           .width('100%')
+        }
+
+        if (course.teacherName) {
+          Text(course.teacherName)
+            .fontSize(10)
+            .fontColor(ThemeManager.getTextTertiaryColor())
+            .margin({ top: 2 })
+            .maxLines(1)
+            .textOverflow({ overflow: TextOverflow.Ellipsis })
+            .lineHeight(13)
+            .width('100%')
+        }
       }
+      .width('100%')
+      .height('100%')
+      .padding({ left: 9, right: 6, top: 7, bottom: 7 })
+      .justifyContent(FlexAlign.Start)
+      .alignItems(HorizontalAlign.Start)
     }
     .width(this.getScaledDayColumnWidth() - this.CARD_HORIZONTAL_MARGIN * 2)
     .height(course.time.duration * this.getScaledSectionHeight() - 8)
-    .padding({ left: 8, right: 8, top: 8, bottom: 8 })
     .backgroundColor(COURSE_COLORS[course.colorIndex % COURSE_COLORS.length])
     .borderRadius(10)
-    .justifyContent(FlexAlign.Start)
-    .alignItems(HorizontalAlign.Start)
+    .shadow({ radius: 4, color: 'rgba(0, 0, 0, 0.06)', offsetX: 0, offsetY: 1 })
     .position({
       x: this.CARD_HORIZONTAL_MARGIN,
       y: (course.time.startSection - 1) * this.getScaledSectionHeight() + 4

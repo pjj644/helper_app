@@ -108,63 +108,130 @@ struct GradePage {
   build() {
     Column() {
       Row() {
+        Button() {
+          Text('‹')
+            .fontSize(24)
+            .fontColor(ThemeManager.getTextPrimaryColor())
+        }
+        .width(36)
+        .height(36)
+        .backgroundColor(Color.Transparent)
+        .onClick(() => {
+          router.back();
+        })
+
         Text('成绩查询')
-          .fontSize(22)
+          .fontSize(20)
           .fontWeight(FontWeight.Bold)
-          .fontColor(ThemeManager.getTextPrimaryColor());
+          .fontColor(ThemeManager.getTextPrimaryColor())
+          .margin({ left: 4 })
+
         Blank();
+
         Button('在线导入')
           .fontSize(13)
+          .fontWeight(FontWeight.Medium)
           .fontColor(ThemeManager.getAccentColor())
           .backgroundColor(ThemeManager.getAccentBgColor())
-          .borderRadius(8)
+          .borderRadius(16)
+          .height(32)
+          .padding({ left: 12, right: 12 })
           .onClick(() => {
             this.openGradeImport();
           });
       }
       .width('100%')
-      .padding({ left: 16, right: 16, top: 12 });
+      .padding({ left: 12, right: 16, top: 12, bottom: 6 })
+      .alignItems(VerticalAlign.Center);
 
       if (this.isLoading) {
         LoadingProgress().margin(40);
         Blank();
       } else {
-        Column() {
+        // 🏆 GPA 综合概览 Hero 卡片
+        Column({ space: 12 }) {
           Row() {
-            Text(`GPA ${this.gpa.toFixed(2)}`)
-              .fontSize(36)
-              .fontWeight(FontWeight.Bold)
-              .fontColor(this.gpa >= 3.5 ? '#4CAF50' : (this.gpa >= 2.5 ? '#FF9800' : '#F44336'));
-            Blank();
-            Column() {
-              Text(`${this.courseCount} 门课程`).fontSize(12).fontColor('#9E9E9E');
-              Text(`已修 ${this.totalCredits} 学分`).fontSize(12).fontColor('#9E9E9E');
+            Column({ space: 4 }) {
+              Text('当前学期 GPA')
+                .fontSize(12)
+                .fontColor(ThemeManager.getTextSecondaryColor());
+
+              Row({ space: 8 }) {
+                Text(this.gpa > 0 ? this.gpa.toFixed(2) : '--')
+                  .fontSize(38)
+                  .fontWeight(FontWeight.Bold)
+                  .fontColor(this.gpa >= 3.5 ? '#10B981' : (this.gpa >= 2.5 ? '#F59E0B' : '#EF4444'));
+
+                if (this.gpa > 0) {
+                  Text(this.gpa >= 3.7 ? '优秀' : (this.gpa >= 2.7 ? '良好' : '及格'))
+                    .fontSize(11)
+                    .fontWeight(FontWeight.Medium)
+                    .fontColor(Color.White)
+                    .padding({ left: 8, right: 8, top: 3, bottom: 3 })
+                    .borderRadius(10)
+                    .backgroundColor(this.gpa >= 3.5 ? '#10B981' : (this.gpa >= 2.5 ? '#F59E0B' : '#EF4444'));
+                }
+              }
+              .alignItems(VerticalAlign.Center);
+            }
+            .alignItems(HorizontalAlign.Start)
+            .layoutWeight(1);
+
+            Row({ space: 8 }) {
+              Column({ space: 2 }) {
+                Text('已修学分')
+                  .fontSize(11)
+                  .fontColor(ThemeManager.getTextTertiaryColor());
+                Text(`${this.totalCredits}`)
+                  .fontSize(16)
+                  .fontWeight(FontWeight.Bold)
+                  .fontColor(ThemeManager.getTextPrimaryColor());
+              }
+              .padding({ left: 10, right: 10, top: 6, bottom: 6 })
+              .backgroundColor(this.isDarkMode ? '#1E293B' : '#F1F5F9')
+              .borderRadius(8);
+
+              Column({ space: 2 }) {
+                Text('课程总数')
+                  .fontSize(11)
+                  .fontColor(ThemeManager.getTextTertiaryColor());
+                Text(`${this.courseCount}`)
+                  .fontSize(16)
+                  .fontWeight(FontWeight.Bold)
+                  .fontColor(ThemeManager.getTextPrimaryColor());
+              }
+              .padding({ left: 10, right: 10, top: 6, bottom: 6 })
+              .backgroundColor(this.isDarkMode ? '#1E293B' : '#F1F5F9')
+              .borderRadius(8);
             }
           }
-          .width('100%');
+          .width('100%')
+          .alignItems(VerticalAlign.Center);
         }
         .width('92%')
         .padding(16)
-        .borderRadius(12)
-        .backgroundColor(ThemeManager.getAccentBgColor())
-        .margin({ top: 12, bottom: 8 });
+        .borderRadius(16)
+        .backgroundColor(ThemeManager.getCardColor())
+        .shadow({ radius: 6, color: 'rgba(0, 0, 0, 0.04)', offsetX: 0, offsetY: 2 })
+        .margin({ top: 8, bottom: 8 });
 
         Row() {
           Text('学期筛选')
-            .fontSize(14)
+            .fontSize(13)
+            .fontWeight(FontWeight.Medium)
             .fontColor(ThemeManager.getTextSecondaryColor());
           Blank();
           Select(this.getSelectOptions())
             .selected(this.selectedSemesterIndex)
-            .value(String(this.getSelectOptions()[this.selectedSemesterIndex].value))
+            .value(String(this.getSelectOptions()[this.selectedSemesterIndex]?.value || '所有学期'))
             .onSelect((index: number) => {
               this.selectedSemesterIndex = index;
               this.applyFilter();
             })
-            .width(180);
+            .width(160);
         }
         .width('92%')
-        .margin({ top: 8, bottom: 8 });
+        .margin({ top: 4, bottom: 8 });
 
         if (this.filteredGrades.length === 0) {
           Column() {
@@ -182,68 +249,88 @@ struct GradePage {
           List({ space: 8 }) {
             ForEach(this.filteredGrades, (item: GradeItem) => {
               ListItem() {
-                Row() {
-                  Column() {
-                    Text(item.courseName)
-                      .fontSize(15)
-                      .fontWeight(FontWeight.Medium)
-                      .fontColor(ThemeManager.getTextPrimaryColor())
-                      .maxLines(1)
-                      .textOverflow({ overflow: TextOverflow.Ellipsis });
-                    Row({ space: 6 }) {
-                      Text(`${item.credit}学分`)
-                        .fontSize(11)
-                        .fontColor('#9E9E9E');
-                      if (item.courseCategory) {
-                        Text(item.courseCategory)
+                Stack({ alignContent: Alignment.TopStart }) {
+                  Column()
+                    .width(4)
+                    .height('100%')
+                    .backgroundColor(GradeUtils.getGpaColor(item.gradePoint))
+                    .borderRadius({ topLeft: 12, bottomLeft: 12 });
+
+                  Row() {
+                    Column({ space: 4 }) {
+                      Text(item.courseName)
+                        .fontSize(15)
+                        .fontWeight(FontWeight.Medium)
+                        .fontColor(ThemeManager.getTextPrimaryColor())
+                        .maxLines(1)
+                        .textOverflow({ overflow: TextOverflow.Ellipsis });
+
+                      Row({ space: 6 }) {
+                        Text(`${item.credit} 学分`)
                           .fontSize(11)
-                          .fontColor('#BDBDBD');
+                          .fontColor(ThemeManager.getAccentColor())
+                          .padding({ left: 6, right: 6, top: 1, bottom: 1 })
+                          .backgroundColor(ThemeManager.getAccentBgColor())
+                          .borderRadius(4);
+
+                        if (item.courseCategory) {
+                          Text(item.courseCategory)
+                            .fontSize(11)
+                            .fontColor(ThemeManager.getTextTertiaryColor())
+                            .padding({ left: 6, right: 6, top: 1, bottom: 1 })
+                            .backgroundColor(this.isDarkMode ? '#1E293B' : '#F1F5F9')
+                            .borderRadius(4);
+                        }
+                      }
+                      .margin({ top: 2 });
+                    }
+                    .alignItems(HorizontalAlign.Start)
+                    .layoutWeight(1);
+
+                    Column({ space: 2 }) {
+                      if (item.totalScore && item.totalScore !== '--') {
+                        Text(item.totalScore)
+                          .fontSize(20)
+                          .fontWeight(FontWeight.Bold)
+                          .fontColor(ThemeManager.getTextPrimaryColor());
+                        Text('总评')
+                          .fontSize(10)
+                          .fontColor(ThemeManager.getTextTertiaryColor());
+                      } else if (item.finalScore && item.finalScore !== '--') {
+                        Text(item.finalScore)
+                          .fontSize(20)
+                          .fontWeight(FontWeight.Bold)
+                          .fontColor(ThemeManager.getTextPrimaryColor());
+                        Text('最终')
+                          .fontSize(10)
+                          .fontColor(ThemeManager.getTextTertiaryColor());
+                      } else {
+                        Text('--')
+                          .fontSize(20)
+                          .fontWeight(FontWeight.Bold)
+                          .fontColor(ThemeManager.getTextTertiaryColor());
                       }
                     }
-                    .margin({ top: 2 });
-                  }
-                  .alignItems(HorizontalAlign.Start)
-                  .layoutWeight(1);
+                    .margin({ left: 8, right: 12 })
+                    .alignItems(HorizontalAlign.Center);
 
-                  Column() {
-                    if (item.totalScore && item.totalScore !== '--') {
-                      Text(item.totalScore)
-                        .fontSize(20)
-                        .fontWeight(FontWeight.Bold)
-                        .fontColor(ThemeManager.getTextPrimaryColor());
-                      Text('总评')
-                        .fontSize(10)
-                        .fontColor('#9E9E9E');
-                    } else if (item.finalScore && item.finalScore !== '--') {
-                      Text(item.finalScore)
-                        .fontSize(20)
-                        .fontWeight(FontWeight.Bold)
-                        .fontColor(ThemeManager.getTextPrimaryColor());
-                      Text('最终')
-                        .fontSize(10)
-                        .fontColor('#9E9E9E');
-                    } else {
-                      Text('--')
-                        .fontSize(20)
-                        .fontWeight(FontWeight.Bold)
-                        .fontColor('#9E9E9E');
-                    }
+                    Text(GradeUtils.getGpaLabel(item.gradePoint))
+                      .fontSize(11)
+                      .fontWeight(FontWeight.Medium)
+                      .fontColor(Color.White)
+                      .padding({ left: 8, right: 8, top: 4, bottom: 4 })
+                      .borderRadius(10)
+                      .backgroundColor(GradeUtils.getGpaColor(item.gradePoint));
                   }
-                  .margin({ left: 8, right: 12 })
-                  .alignItems(HorizontalAlign.Center);
-
-                  Text(GradeUtils.getGpaLabel(item.gradePoint))
-                    .fontSize(11)
-                    .fontColor(Color.White)
-                    .padding({ left: 8, right: 8, top: 3, bottom: 3 })
-                    .borderRadius(10)
-                    .backgroundColor(GradeUtils.getGpaColor(item.gradePoint));
+                  .width('100%')
+                  .padding({ left: 14, right: 12, top: 12, bottom: 12 })
+                  .alignItems(VerticalAlign.Center);
                 }
                 .width('100%')
-                .padding(12);
+                .borderRadius(12)
+                .backgroundColor(ThemeManager.getCardColor())
+                .shadow({ radius: 3, color: 'rgba(0, 0, 0, 0.03)', offsetX: 0, offsetY: 1 });
               }
-              .borderRadius(10)
-              .backgroundColor(ThemeManager.isDarkMode() ? '#2D2D2D' : '#FFFFFF');
             });
           }
           .width('92%')
