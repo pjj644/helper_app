@@ -14,6 +14,7 @@ import { router } from '@kit.ArkUI'
 import { common } from '@kit.AbilityKit'
 import { http } from '@kit.NetworkKit'
 import { SettingsRepository } from '../../repository/SettingsRepository'
+import { ScheduleRepository } from '../../repository/ScheduleRepository'
 import { DataQueryEngine, QueryFilter } from './DataQueryEngine'
 import { PageContextTracker } from './PageContextTracker'
 import { UIActionDispatcher } from './UIActionDispatcher'
@@ -351,6 +352,12 @@ export class ToolExecutor {
           return { success: false, data: '缺少 calendarEventId' }
         }
         const ok: boolean = await CalendarKitReminderService.deleteEvent(this.context, calId)
+        // 双向联动：同步从 App 本地数据库中清理绑定此日历事件的日程
+        const allSchedules: ScheduleEvent[] = await ScheduleRepository.loadSchedules(this.context)
+        const filtered: ScheduleEvent[] = allSchedules.filter((s: ScheduleEvent) => s.calendarEventId !== calId)
+        if (filtered.length !== allSchedules.length) {
+          await ScheduleRepository.saveSchedules(this.context, filtered)
+        }
         return { success: ok, data: JSON.stringify({ message: ok ? '日历事件已删除' : '删除失败', calendarEventId: calId }) }
       }
     } else if (domain === 'reminder_setting') {

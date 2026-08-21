@@ -76,10 +76,11 @@ export class ReminderService {
       }
 
       await ReminderService.clearAgentReminders();
-      await CalendarKitReminderService.clearAllEvents(context);
 
-      const allEvents: ScheduleEvent[] = await ScheduleRepository.loadSchedules(context);
-      console.info(`[ReminderDebug] loaded ${allEvents.length} events from repository`);
+      // 先加载并与系统日历双向对齐（若用户在系统日历中已删除，在此步自动完成本地清理）
+      const rawEvents: ScheduleEvent[] = await ScheduleRepository.loadSchedules(context);
+      const allEvents: ScheduleEvent[] = await ScheduleService.syncAndPruneSchedulesWithCalendar(context, rawEvents);
+      console.info(`[ReminderDebug] loaded and aligned ${allEvents.length} events from repository`);
 
       if (allEvents.length === 0) {
         console.info('[ReminderDebug] no events, skipping');
@@ -178,7 +179,8 @@ export class ReminderService {
           }
         }
 
-        if (!published && event.addToCalendar === true) {
+        // 系统日历写入与防重复同步
+        if (event.addToCalendar === true) {
           try {
             const uiContext = context as common.UIAbilityContext;
             const hasCalendarPerm = await CalendarKitReminderService.checkCalendarPermission(uiContext);
@@ -187,13 +189,24 @@ export class ReminderService {
               await CalendarKitReminderService.requestCalendarPermission(uiContext);
             }
 
-            const calEventId = await CalendarKitReminderService.addEventReminder(context, event, remindMinutes);
-            if (calEventId >= 0) {
-              console.info(`[ReminderDebug]   SUCCESS: Calendar Kit reminder added, calEventId=${calEventId}`);
-              event.calendarEventId = calEventId;
+            // 若已有有效的 calendarEventId 且在系统日历中真实存在，直接复用，杜绝重复插入
+            let existsInCal = false;
+            if (event.calendarEventId && event.calendarEventId > 0) {
+              existsInCal = await CalendarKitReminderService.checkEventExists(context, event.calendarEventId);
+            }
+
+            if (existsInCal) {
+              console.info(`[ReminderDebug]   calendar event already uniquely exists (id=${event.calendarEventId}), skipping duplicate insert`);
               published = true;
             } else {
-              console.error(`[ReminderDebug]   FAILED: Calendar Kit reminder returned -1`);
+              const calEventId = await CalendarKitReminderService.addEventReminder(context, event, remindMinutes);
+              if (calEventId >= 0) {
+                console.info(`[ReminderDebug]   SUCCESS: Calendar Kit reminder added, calEventId=${calEventId}`);
+                event.calendarEventId = calEventId;
+                published = true;
+              } else {
+                console.error(`[ReminderDebug]   FAILED: Calendar Kit reminder returned -1`);
+              }
             }
           } catch (calErr) {
             console.error(`[ReminderDebug]   FAILED: Calendar Kit error:`, JSON.stringify(calErr));
@@ -205,8 +218,7 @@ export class ReminderService {
         }
       }
 
-      console.info(`[ReminderDebug] total reminders published: ${createdCount}`);
-
+      console.info(`[ReminderDebug] total reminders processed: ${createdCount}`);
       await ScheduleRepository.saveSchedules(context, allEvents);
       console.info(`[ReminderDebug] saved calendarEventId mappings to repository`);
     } catch (error) {

@@ -7,12 +7,53 @@ import { ExamItem } from '../model/classTableModel/ExamModel';
 import { CalendarKitReminderService } from './CalendarKitReminderService';
 
 export class ScheduleService {
-  static async loadCustomSchedules(context: Context): Promise<ScheduleEvent[]> {
+  static async loadCustomSchedules(context: Context, syncWithCalendar: boolean = true): Promise<ScheduleEvent[]> {
     try {
-      return await ScheduleRepository.loadSchedules(context);
+      const rawEvents: ScheduleEvent[] = await ScheduleRepository.loadSchedules(context);
+      if (!syncWithCalendar || rawEvents.length === 0) {
+        return rawEvents;
+      }
+      return await ScheduleService.syncAndPruneSchedulesWithCalendar(context, rawEvents);
     } catch (error) {
       console.error('ScheduleService loadCustomSchedules error:', JSON.stringify(error));
       return [];
+    }
+  }
+
+  /**
+   * 与系统日历双向对齐：若用户在系统日历中删除了某个绑定日历的日程，自动从本地移除
+   */
+  static async syncAndPruneSchedulesWithCalendar(context: Context, events: ScheduleEvent[]): Promise<ScheduleEvent[]> {
+    try {
+      const hasPerm = await CalendarKitReminderService.checkCalendarPermission(context);
+      if (!hasPerm) {
+        return events;
+      }
+
+      const validEvents: ScheduleEvent[] = [];
+      let hasPruned: boolean = false;
+
+      for (let i = 0; i < events.length; i++) {
+        const evt = events[i];
+        // 仅针对标记为写入系统日历且有 calendarEventId 的自定义日程进行存活性探测
+        if ((evt.type === 'custom' || evt.type === 'assignment') && evt.addToCalendar === true && evt.calendarEventId && evt.calendarEventId > 0) {
+          const exists = await CalendarKitReminderService.checkEventExists(context, evt.calendarEventId);
+          if (!exists) {
+            console.info(`[ScheduleService] schedule id=${evt.id} (${evt.title}) was deleted in system calendar, pruning from app repository`);
+            hasPruned = true;
+            continue;
+          }
+        }
+        validEvents.push(evt);
+      }
+
+      if (hasPruned) {
+        await ScheduleRepository.saveSchedules(context, validEvents);
+      }
+      return validEvents;
+    } catch (error) {
+      console.warn('[ScheduleService] syncAndPruneSchedulesWithCalendar error:', JSON.stringify(error));
+      return events;
     }
   }
 
@@ -23,7 +64,19 @@ export class ScheduleService {
       }
       event.createdAt = event.createdAt || Date.now();
       event.color = event.color || ScheduleUtils.getTypeColor(event.type);
-      console.info(`[ReminderDebug] ScheduleService.saveSchedule: id=${event.id}, title=${event.title}, date=${event.date}, startTime=${event.startTime}, endTime=${event.endTime}, timeRange=${event.timeRange}, remindMinutes=${event.remindMinutes}, type=${event.type}`);
+
+      // 若需要同步写入系统日历且尚未分配 calendarEventId，主动调用 CalendarKit 写入
+      if (event.addToCalendar === true && (!event.calendarEventId || event.calendarEventId <= 0)) {
+        const hasPerm = await CalendarKitReminderService.checkCalendarPermission(context);
+        if (hasPerm) {
+          const calId = await CalendarKitReminderService.addEventReminder(context, event, event.remindMinutes || 30);
+          if (calId >= 0) {
+            event.calendarEventId = calId;
+          }
+        }
+      }
+
+      console.info(`[ReminderDebug] ScheduleService.saveSchedule: id=${event.id}, title=${event.title}, date=${event.date}, startTime=${event.startTime}, endTime=${event.endTime}, timeRange=${event.timeRange}, remindMinutes=${event.remindMinutes}, type=${event.type}, calId=${event.calendarEventId}`);
       await ScheduleRepository.addSchedule(context, event);
       console.info(`[ReminderDebug] ScheduleService.saveSchedule: saved successfully`);
     } catch (error) {
@@ -33,6 +86,18 @@ export class ScheduleService {
 
   static async updateSchedule(context: Context, event: ScheduleEvent): Promise<void> {
     try {
+      if (event.addToCalendar === true) {
+        const hasPerm = await CalendarKitReminderService.checkCalendarPermission(context);
+        if (hasPerm) {
+          const calId = await CalendarKitReminderService.upsertEventReminder(context, event, event.remindMinutes || 30);
+          if (calId >= 0) {
+            event.calendarEventId = calId;
+          }
+        }
+      } else if (event.addToCalendar === false && event.calendarEventId && event.calendarEventId > 0) {
+        await CalendarKitReminderService.deleteEvent(context, event.calendarEventId);
+        event.calendarEventId = 0;
+      }
       await ScheduleRepository.updateSchedule(context, event);
     } catch (error) {
       console.error('ScheduleService updateSchedule error:', JSON.stringify(error));
@@ -43,9 +108,9 @@ export class ScheduleService {
     try {
       const events: ScheduleEvent[] = await ScheduleRepository.loadSchedules(context);
       const target: ScheduleEvent | undefined = events.find((e: ScheduleEvent) => e.id === eventId);
-      if (target && target.calendarEventId && target.calendarEventId > 0) {
-        await CalendarKitReminderService.deleteEvent(context, target.calendarEventId);
-        console.info(`[ScheduleService] deleted calendar event id=${target.calendarEventId} for schedule=${eventId}`);
+      if (target) {
+        await CalendarKitReminderService.deleteEventBySchedule(context, target);
+        console.info(`[ScheduleService] deleted calendar event for schedule=${eventId}`);
       }
       await ScheduleRepository.deleteSchedule(context, eventId);
     } catch (error) {

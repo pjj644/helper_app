@@ -61,6 +61,7 @@ export class CalendarKitReminderService {
 
       const hasPerm = await CalendarKitReminderService.checkCalendarPermission(context);
       if (!hasPerm) {
+        console.warn('[CalendarKit] ensureCalendar: no calendar permission');
         return null;
       }
 
@@ -74,34 +75,48 @@ export class CalendarKitReminderService {
         displayName: CALENDAR_DISPLAY_NAME,
       };
 
+      // 1. 先检索已存在的所有日历账户
+      try {
+        const calendars: calendarManager.Calendar[] = await CalendarKitReminderService.calendarMgr.getAllCalendars();
+        for (let i = 0; i < calendars.length; i++) {
+          const cal = calendars[i];
+          const account = cal.getAccount();
+          if (account && account.name === CALENDAR_ACCOUNT_NAME) {
+            CalendarKitReminderService.calendar = cal;
+            console.info('[CalendarKit] found existing calendar account by name match');
+            return CalendarKitReminderService.calendar;
+          }
+        }
+      } catch (getErr) {
+        console.warn('[CalendarKit] getAllCalendars warning:', JSON.stringify(getErr));
+      }
+
+      // 2. 若不存在则尝试创建
       try {
         CalendarKitReminderService.calendar = await CalendarKitReminderService.calendarMgr.createCalendar(calendarAccount);
         const config: calendarManager.CalendarConfig = {
           enableReminder: true,
-          color: '#FF6200EE',
+          color: '#FF4F46E5',
         };
         await CalendarKitReminderService.calendar.setConfig(config);
         console.info('[CalendarKit] created new calendar account');
+        return CalendarKitReminderService.calendar;
       } catch (createErr) {
-        const err = createErr as BusinessError;
-        if (err.code === 401) {
-          const calendars: calendarManager.Calendar[] = await CalendarKitReminderService.calendarMgr.getAllCalendars();
-          for (let i = 0; i < calendars.length; i++) {
-            const cal = calendars[i];
-            const account = cal.getAccount();
-            if (account && account.name === CALENDAR_ACCOUNT_NAME) {
-              CalendarKitReminderService.calendar = cal;
-              console.info('[CalendarKit] found existing calendar account by name match');
-              break;
-            }
-          }
-          if (!CalendarKitReminderService.calendar && calendars.length > 0) {
-            CalendarKitReminderService.calendar = calendars[0];
-            console.info('[CalendarKit] fallback to first available calendar');
-          }
-        } else {
-          console.error('[CalendarKit] createCalendar error:', JSON.stringify(createErr));
+        console.warn('[CalendarKit] createCalendar warning:', JSON.stringify(createErr));
+      }
+
+      // 3. 回退策略：再次尝试获取任意可用日历或系统默认日历
+      try {
+        const calendars: calendarManager.Calendar[] = await CalendarKitReminderService.calendarMgr.getAllCalendars();
+        if (calendars.length > 0) {
+          CalendarKitReminderService.calendar = calendars[0];
+          console.info('[CalendarKit] fallback to first available calendar');
+          return CalendarKitReminderService.calendar;
         }
+        CalendarKitReminderService.calendar = await CalendarKitReminderService.calendarMgr.getCalendar();
+        console.info('[CalendarKit] fallback to default calendar');
+      } catch (fallbackErr) {
+        console.error('[CalendarKit] fallback getCalendar error:', JSON.stringify(fallbackErr));
       }
 
       return CalendarKitReminderService.calendar;
@@ -133,26 +148,59 @@ export class CalendarKitReminderService {
     return new Date(startDate.getTime() + 60 * 60 * 1000);
   }
 
-  private static async findExistingEventId(cal: calendarManager.Calendar, event: ScheduleEvent, startDate: Date, endDate: Date): Promise<number> {
-    if (event.calendarEventId && event.calendarEventId > 0) {
-      return event.calendarEventId;
+  /**
+   * 清理日历中与指定日程匹配的所有历史/重复事件，保证唯一性
+   */
+  private static async deleteExistingDuplicates(
+    cal: calendarManager.Calendar,
+    event: ScheduleEvent,
+    startDate: Date,
+    endDate: Date,
+    excludeId?: number
+  ): Promise<void> {
+    // 1. 若已有 calendarEventId，直接先删
+    if (event.calendarEventId && event.calendarEventId > 0 && event.calendarEventId !== excludeId) {
+      try {
+        await cal.deleteEvent(event.calendarEventId);
+        console.info(`[CalendarKit] deleteExistingDuplicates: deleted by calendarEventId=${event.calendarEventId}`);
+      } catch (_e) {
+        // ignore if already deleted
+      }
     }
+
+    // 2. 按时间窗口和标题模糊检索并清理同名同时间段残留
     try {
-      const toleranceMs: number = 10 * 60 * 1000;
-      const filter = calendarManager.EventFilter.filterByTime(startDate.getTime() - toleranceMs, endDate.getTime() + toleranceMs);
+      const toleranceMs = 24 * 60 * 60 * 1000;
+      const filter = calendarManager.EventFilter.filterByTime(
+        startDate.getTime() - toleranceMs,
+        endDate.getTime() + toleranceMs
+      );
       const events = await cal.getEvents(filter);
       for (let i = 0; i < events.length; i++) {
         const e = events[i];
-        if ((e.title || '') === event.title && Math.abs((e.startTime || 0) - startDate.getTime()) <= toleranceMs) {
-          return e.id || 0;
+        if (excludeId && e.id === excludeId) {
+          continue;
+        }
+        if ((e.title || '') === event.title) {
+          const diff = Math.abs((e.startTime || 0) - startDate.getTime());
+          if (diff <= 15 * 60 * 1000) {
+            try {
+              await cal.deleteEvent(e.id);
+              console.info(`[CalendarKit] deleteExistingDuplicates: purged duplicate event id=${e.id}, title=${e.title}`);
+            } catch (_err) {
+              // ignore
+            }
+          }
         }
       }
     } catch (error) {
-      console.error('[CalendarKit] findExistingEventId error:', JSON.stringify(error));
+      console.warn('[CalendarKit] deleteExistingDuplicates query warning:', JSON.stringify(error));
     }
-    return 0;
   }
 
+  /**
+   * 写入系统日历并确保单一日程在日历中的唯一性
+   */
   static async addEventReminder(context: Context, event: ScheduleEvent, remindMinutes: number): Promise<number> {
     try {
       const cal = await CalendarKitReminderService.ensureCalendar(context);
@@ -168,16 +216,8 @@ export class CalendarKitReminderService {
       const startDate = new Date(dateParts[0], dateParts[1] - 1, dateParts[2], startHour, startMinute);
       const endDate = CalendarKitReminderService.calculateEndTime(event, startDate);
 
-      const existingId: number = await CalendarKitReminderService.findExistingEventId(cal, event, startDate, endDate);
-      if (existingId > 0) {
-        try {
-          await cal.deleteEvent(existingId);
-          console.info(`[CalendarKit] addEventReminder: removed existing duplicate event id=${existingId}, title=${event.title}`);
-        } catch (err) {
-          const be = err as BusinessError;
-          console.warn(`[CalendarKit] addEventReminder: failed to delete existing event id=${existingId}, code=${be.code}`);
-        }
-      }
+      // 写入前强力去重
+      await CalendarKitReminderService.deleteExistingDuplicates(cal, event, startDate, endDate);
 
       const eventConfig: calendarManager.Event = {
         title: event.title,
@@ -193,7 +233,7 @@ export class CalendarKitReminderService {
       }
 
       const eventId = await cal.addEvent(eventConfig);
-      console.info(`[CalendarKit] addEventReminder: eventId=${eventId}, title=${event.title}, remindMinutes=${remindMinutes}`);
+      console.info(`[CalendarKit] addEventReminder: success new eventId=${eventId}, title=${event.title}, remindMinutes=${remindMinutes}`);
       return eventId;
     } catch (error) {
       const err = error as BusinessError;
@@ -203,17 +243,41 @@ export class CalendarKitReminderService {
   }
 
   static async upsertEventReminder(context: Context, event: ScheduleEvent, remindMinutes: number): Promise<number> {
-    if (event.calendarEventId && event.calendarEventId > 0) {
-      try {
-        await CalendarKitReminderService.deleteEvent(context, event.calendarEventId);
-        console.info(`[CalendarKit] upsertEventReminder: deleted old eventId=${event.calendarEventId}`);
-      } catch (_err) {
-        console.warn(`[CalendarKit] upsertEventReminder: failed to delete old eventId=${event.calendarEventId}`);
-      }
-    }
     return await CalendarKitReminderService.addEventReminder(context, event, remindMinutes);
   }
 
+  /**
+   * 检查指定 calendarEventId 是否在系统日历中仍然存在
+   */
+  static async checkEventExists(context: Context, eventId: number): Promise<boolean> {
+    if (!eventId || eventId <= 0) {
+      return false;
+    }
+    try {
+      const cal = await CalendarKitReminderService.ensureCalendar(context);
+      if (!cal) {
+        return false;
+      }
+      const now = Date.now();
+      const past = now - 90 * 24 * 60 * 60 * 1000;
+      const future = now + 365 * 24 * 60 * 60 * 1000;
+      const filter = calendarManager.EventFilter.filterByTime(past, future);
+      const events = await cal.getEvents(filter);
+      for (let i = 0; i < events.length; i++) {
+        if (events[i].id === eventId) {
+          return true;
+        }
+      }
+      return false;
+    } catch (error) {
+      console.warn('[CalendarKit] checkEventExists error:', JSON.stringify(error));
+      return false;
+    }
+  }
+
+  /**
+   * 删除指定 ID 的日历事件
+   */
   static async deleteEvent(context: Context, eventId: number): Promise<boolean> {
     try {
       const cal = await CalendarKitReminderService.ensureCalendar(context);
@@ -224,8 +288,38 @@ export class CalendarKitReminderService {
       console.info(`[CalendarKit] deleteEvent: eventId=${eventId}`);
       return true;
     } catch (error) {
-      console.error('[CalendarKit] deleteEvent error:', JSON.stringify(error));
+      console.warn('[CalendarKit] deleteEvent warning:', JSON.stringify(error));
       return false;
+    }
+  }
+
+  /**
+   * 根据日程对象彻底清理系统日历中的所有对应事件（包括 ID 及特征匹配）
+   */
+  static async deleteEventBySchedule(context: Context, event: ScheduleEvent): Promise<void> {
+    try {
+      const cal = await CalendarKitReminderService.ensureCalendar(context);
+      if (!cal) {
+        return;
+      }
+      if (event.calendarEventId && event.calendarEventId > 0) {
+        try {
+          await cal.deleteEvent(event.calendarEventId);
+          console.info(`[CalendarKit] deleteEventBySchedule: deleted eventId=${event.calendarEventId}`);
+        } catch (_err) {
+          // ignore
+        }
+      }
+      if (event.date && event.title) {
+        const dateParts = event.date.split('-').map(Number);
+        const startHour = event.startTime ? parseInt(event.startTime.split(':')[0]) : 9;
+        const startMinute = event.startTime ? parseInt(event.startTime.split(':')[1]) : 0;
+        const startDate = new Date(dateParts[0], dateParts[1] - 1, dateParts[2], startHour, startMinute);
+        const endDate = CalendarKitReminderService.calculateEndTime(event, startDate);
+        await CalendarKitReminderService.deleteExistingDuplicates(cal, event, startDate, endDate);
+      }
+    } catch (error) {
+      console.warn('[CalendarKit] deleteEventBySchedule error:', JSON.stringify(error));
     }
   }
 
@@ -236,8 +330,9 @@ export class CalendarKitReminderService {
         return;
       }
       const now = Date.now();
+      const past = now - 30 * 24 * 60 * 60 * 1000;
       const farFuture = now + 365 * 24 * 60 * 60 * 1000;
-      const filter = calendarManager.EventFilter.filterByTime(now, farFuture);
+      const filter = calendarManager.EventFilter.filterByTime(past, farFuture);
       const events = await cal.getEvents(filter);
       for (let i = 0; i < events.length; i++) {
         try {
@@ -288,3 +383,4 @@ export class CalendarKitReminderService {
     CalendarKitReminderService.calendarMgr = null;
   }
 }
+
