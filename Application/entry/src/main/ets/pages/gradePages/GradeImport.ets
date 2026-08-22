@@ -549,14 +549,18 @@ struct GradeImport {
           }
           if (statusCode === 500 && this.http500RetryCount < this.MAX_HTTP_500_RETRY) {
             this.http500RetryCount++;
-            this.message = `教务系统会话就绪中，正在重试(${this.http500RetryCount}/${this.MAX_HTTP_500_RETRY})...`;
-            Logger.info(TAG, `Grade HTTP 500, retrying in 1.5s (attempt ${this.http500RetryCount})`);
+            this.hasNavigatedToGrade = false;
+            this.message = `教务会话初始化中，正在通过主页激活(${this.http500RetryCount}/${this.MAX_HTTP_500_RETRY})...`;
+            Logger.info(TAG, `Grade HTTP 500, navigating to home.action to restore session (attempt ${this.http500RetryCount})`);
+            const homeUrl: string = this.isVpnMode ?
+              VpnEncoder.buildVpnHomeUrl() :
+              'https://eams.uestc.edu.cn/eams/home.action';
             setTimeout(() => {
               if (this.destroyed) {
                 return;
               }
-              this.navigateToGradePage();
-            }, 1500);
+              this.controller.loadUrl(homeUrl);
+            }, 1000);
             return;
           }
         })

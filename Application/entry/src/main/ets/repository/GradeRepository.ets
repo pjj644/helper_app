@@ -13,7 +13,7 @@ export class GradeRepository {
       const parsed: GradeItem[] = JSON.parse(jsonStr) as GradeItem[];
       return parsed;
     } catch (error) {
-      console.error('GradeRepository loadGrades error:', JSON.stringify(error));
+      console.error('[GradeRepository] loadGrades error:', JSON.stringify(error));
       return [];
     }
   }
@@ -24,7 +24,7 @@ export class GradeRepository {
       pref.putSync(AppConstants.GRADE_DATA_KEY, JSON.stringify(grades));
       pref.flushSync();
     } catch (error) {
-      console.error('GradeRepository saveGrades error:', JSON.stringify(error));
+      console.error('[GradeRepository] saveGrades error:', JSON.stringify(error));
     }
   }
 
@@ -34,7 +34,7 @@ export class GradeRepository {
       pref.putSync(AppConstants.GRADE_DATA_KEY, '[]');
       pref.flushSync();
     } catch (error) {
-      console.error('GradeRepository clearGrades error:', JSON.stringify(error));
+      console.error('[GradeRepository] clearGrades error:', JSON.stringify(error));
     }
   }
 }

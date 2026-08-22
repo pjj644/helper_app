@@ -13,7 +13,7 @@ export class ScheduleRepository {
       const parsed: ScheduleEvent[] = JSON.parse(jsonStr) as ScheduleEvent[];
       return parsed;
     } catch (error) {
-      console.error('ScheduleRepository loadSchedules error:', JSON.stringify(error));
+      console.error('[ScheduleRepository] loadSchedules error:', JSON.stringify(error));
       return [];
     }
   }
@@ -24,7 +24,7 @@ export class ScheduleRepository {
       pref.putSync(AppConstants.SCHEDULE_DATA_KEY, JSON.stringify(events));
       pref.flushSync();
     } catch (error) {
-      console.error('ScheduleRepository saveSchedules error:', JSON.stringify(error));
+      console.error('[ScheduleRepository] saveSchedules error:', JSON.stringify(error));
     }
   }
 
@@ -60,7 +60,7 @@ export class ScheduleRepository {
       pref.putSync(AppConstants.SCHEDULE_DATA_KEY, '[]');
       pref.flushSync();
     } catch (error) {
-      console.error('ScheduleRepository clearSchedules error:', JSON.stringify(error));
+      console.error('[ScheduleRepository] clearSchedules error:', JSON.stringify(error));
     }
   }
 }

@@ -105,8 +105,8 @@ common/         -> 共享基础设施
 ## 抓取模式与教务状态机 (Web Scraping)
 
 通过 `webview.WebviewController` 加载 EAMS 教务系统，注入 `WebScrapeService.ets` 构建的 IIFE JavaScript 抓取脚本。
-- **登录状态机**：智能识别输入凭据阶段（暂停跳转）、多设备重复登录提示（原生 `loadUrl` 自动放行）。
-- **容错重试**：全链路具备 HTTP 500 指数退避重试，保障弱网与教务高峰期导入稳定性。
+- **登录状态机**：优先识别统一身份认证（CAS / IDAS）输入凭据阶段，未完成登录前暂停自动跳转，等待用户认证通过。
+- **500 与会话恢复机制**：全面识别多设备登录踢出、会话失效以及包含 `[点击此处](http://eams.uestc.edu.cn/eams/home.action)` 或返回 HTTP 500 状态码的异常。收到 500 时先自动导航至 `home.action` 激活教务系统主 Session，待主站确立登录态后再平滑跳转至课表（`courseTableForStd.action`）、考试或成绩页面进行数据提取，避免二级子页面连续 500 死循环。
 - **非 Headless 约束**：抓取依赖真实 WebView 渲染，AI 助手导入操作通过 `app_control` (`navigate`) 跳转到对应导入页完成。
 
 ## 学期 / 周次 计算

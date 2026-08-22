@@ -52,7 +52,7 @@ struct CourseManage {
       });
       this.courses = allCourses;
     } catch (error) {
-      console.error('加载本地课程失败:', error);
+      console.error('[CourseManage] 加载本地课程失败:', error);
       this.courses = [];
     }
   }

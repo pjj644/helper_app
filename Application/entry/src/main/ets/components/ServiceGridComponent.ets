@@ -100,7 +100,7 @@ export struct ServiceGridComponent {
   private handleItemClick(item: ServiceItem): void {
     if (item.route) {
       router.pushUrl({ url: item.route }).catch((error: Error) => {
-        console.error('跳转失败:', error);
+        console.error('[ServiceGridComponent] 跳转失败:', error);
       });
     }
   }

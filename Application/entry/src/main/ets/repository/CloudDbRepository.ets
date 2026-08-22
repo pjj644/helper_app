@@ -19,7 +19,7 @@ export class CloudDbRepository {
           }
         });
       } catch (authInitErr) {
-        console.error('带 authProvider 初始化失败:', JSON.stringify(authInitErr));
+        console.error('[CloudDbRepository] 带 authProvider 初始化失败:', JSON.stringify(authInitErr));
         cloudCommon.init({
           region: cloudCommon.CloudRegion.CHINA,
           databaseOptions: {

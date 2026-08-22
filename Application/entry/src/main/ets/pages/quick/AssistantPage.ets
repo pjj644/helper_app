@@ -92,20 +92,20 @@ export struct AssistantPage {
   }
 
   private loadSessions(): void {
-    console.info('[AI Debug] loadSessions start');
+    console.info('[AssistantPage] loadSessions start');
     try {
       const context = getContext(this);
       this.sessions = ChatSessionRepository.getSessions(context);
     } catch (error) {
-      console.error('[AI Debug] loadSessions error:', JSON.stringify(error));
+      console.error('[AssistantPage] loadSessions error:', JSON.stringify(error));
       this.sessions = [];
     }
-    console.info('[AI Debug] sessions count:', this.sessions.length);
+    console.info('[AssistantPage] sessions count:', this.sessions.length);
     if (this.sessions.length > 0) {
       this.currentSessionId = this.sessions[0].id;
       this.messages = this.sessions[0].messages;
       this.displayMessages = this.sessions[0].displayMessages;
-      console.info('[AI Debug] restored session:', this.sessions[0].id, 'title:', this.sessions[0].title);
+      console.info('[AssistantPage] restored session:', this.sessions[0].id, 'title:', this.sessions[0].title);
     } else {
       this.messages = [];
       this.displayMessages = [];
@@ -127,7 +127,7 @@ export struct AssistantPage {
       }
       ChatSessionRepository.saveSessions(context, this.sessions);
     } catch (error) {
-      console.error('saveSessions error:', JSON.stringify(error));
+      console.error('[AssistantPage] saveSessions error:', JSON.stringify(error));
     }
   }
 
@@ -749,9 +749,9 @@ export struct AssistantPage {
       .backgroundColor(ThemeManager.getCardColor())
       .justifyContent(FlexAlign.Center)
       .onClick(() => {
-        console.info('[AI Debug] side panel open clicked, sessions count:', this.sessions.length);
+        console.info('[AssistantPage] side panel open clicked, sessions count:', this.sessions.length);
         this.syncCurrentSession();
-        console.info('[AI Debug] after sync, showSidePanel will be true');
+        console.info('[AssistantPage] after sync, showSidePanel will be true');
         this.showSidePanel = true;
       })
 
@@ -1116,7 +1116,7 @@ export struct AssistantPage {
         .backgroundColor(ThemeManager.getCardColor())
         .justifyContent(FlexAlign.Center)
         .onClick(() => {
-          console.info('[AI Debug] close side panel clicked');
+          console.info('[AssistantPage] close side panel clicked');
           this.showSidePanel = false;
         })
       }
@@ -1134,7 +1134,7 @@ export struct AssistantPage {
         .borderRadius(12)
         .margin({ bottom: 12 })
         .onClick(() => {
-          console.info('[AI Debug] create new chat from side panel');
+          console.info('[AssistantPage] create new chat from side panel');
           this.createNewChat();
           this.showSidePanel = false;
         })
@@ -1181,7 +1181,7 @@ export struct AssistantPage {
                 .borderRadius(16)
                 .justifyContent(FlexAlign.Center)
                 .onClick(() => {
-                  console.info('[AI Debug] delete session clicked:', session.id);
+                  console.info('[AssistantPage] delete session clicked:', session.id);
                   this.pendingDeleteSessionId = session.id;
                   this.showDeleteDialog = true;
                 })
@@ -1193,7 +1193,7 @@ export struct AssistantPage {
                 ? (this.isDarkMode ? '#1A3A6B' : '#EBF5FF')
                 : ThemeManager.getCardColor())
               .onClick(() => {
-                console.info('[AI Debug] switch to session:', session.id);
+                console.info('[AssistantPage] switch to session:', session.id);
                 this.switchToSession(session.id);
               })
             }
@@ -1404,7 +1404,7 @@ export struct AssistantPage {
       showClose: false,
       dragBar: false,
       onDisappear: () => {
-        console.info('[AI Debug] side sheet onDisappear');
+        console.info('[AssistantPage] side sheet onDisappear');
         this.showSidePanel = false;
       }
     })
@@ -1412,7 +1412,7 @@ export struct AssistantPage {
       modalTransition: ModalTransition.NONE,
       backgroundColor: Color.Transparent,
       onDisappear: () => {
-        console.info('[AI Debug] delete dialog onDisappear');
+        console.info('[AssistantPage] delete dialog onDisappear');
         this.showDeleteDialog = false;
         this.pendingDeleteSessionId = '';
       }

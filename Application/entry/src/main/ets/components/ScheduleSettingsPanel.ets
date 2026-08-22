@@ -56,7 +56,7 @@ export struct ScheduleSettingsPanel {
       this.customMinutesIndex = this.minutesToIndex(this.customMinutes);
       this.assignmentMinutesIndex = this.minutesToIndex(this.assignmentMinutes);
     } catch (e) {
-      console.error('ScheduleSettingsPanel loadSettings error:', JSON.stringify(e));
+      console.error('[ScheduleSettingsPanel] loadSettings error:', JSON.stringify(e));
     }
   }
 

@@ -56,6 +56,9 @@ DevEco 安装在 `D:\deveco\DevEco Studio\`（路径含空格）。**严禁直�
 - **学期与周次计算**：
   - `CourseModel.getCurrentWeek()` / `getWeekForDate(date)`：锚定到含行课首日的周一（当前学期：`2026-08-31`，2026-2027 第一学期）；
   - `ExamAccessRules.calculateSemesterId()`：按 base 503（2025-2026 第二学期）步长 20 计算学期 ID，**禁止硬编码学期号**。
+- **教务抓取与会话恢复**：
+  - 登录判定优先检测统一身份认证（CAS / IDAS），输入阶段等待用户登录；
+  - 遇 HTTP 500 报错、多端踢出或「点击此处」页面时，**禁止直接重试二级子页面**，必须先跳转 `home.action`（`VpnEncoder.buildVpnHomeUrl()`）激活主 Session 会话，待登录态确立后再平滑跳转至课表/考试/成绩页面解析数据。
 
 ## 5. AI 助手开发（加工具必须三处同步）
 

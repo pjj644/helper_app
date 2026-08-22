@@ -22,7 +22,7 @@ struct AccountManage {
         }
       }
     } catch (e) {
-      console.error('AccountManage load error:', JSON.stringify(e));
+      console.error('[AccountManage] load error:', JSON.stringify(e));
     }
   }
 
@@ -59,7 +59,7 @@ struct AccountManage {
         }
       });
     } catch (e) {
-      console.error('deleteAccount dialog error:', JSON.stringify(e));
+      console.error('[AccountManage] deleteAccount dialog error:', JSON.stringify(e));
     }
   }
 

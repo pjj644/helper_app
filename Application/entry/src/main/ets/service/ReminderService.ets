@@ -253,7 +253,7 @@ export class ReminderService {
       pref.putSync(AppConstants.SETTING_SCHEDULE_REMINDER_MASTER_KEY, enabled);
       pref.flushSync();
     } catch (e) {
-      console.error('ReminderService saveGlobalScheduleReminderEnabled error:', JSON.stringify(e));
+      console.error('[ReminderService] saveGlobalScheduleReminderEnabled error:', JSON.stringify(e));
     }
   }
 
@@ -296,7 +296,7 @@ export class ReminderService {
       pref.putSync(key, enabled);
       pref.flushSync();
     } catch (e) {
-      console.error('ReminderService saveCategoryReminderEnabled error:', JSON.stringify(e));
+      console.error('[ReminderService] saveCategoryReminderEnabled error:', JSON.stringify(e));
     }
   }
 
@@ -339,7 +339,7 @@ export class ReminderService {
       pref.putSync(key, minutes);
       pref.flushSync();
     } catch (e) {
-      console.error('ReminderService saveCategoryRemindMinutes error:', JSON.stringify(e));
+      console.error('[ReminderService] saveCategoryRemindMinutes error:', JSON.stringify(e));
     }
   }
 
@@ -359,7 +359,7 @@ export class ReminderService {
       pref.putSync(AppConstants.SETTING_AUTO_SYNC_SCHEDULE_KEY, enabled);
       pref.flushSync();
     } catch (e) {
-      console.error('ReminderService saveAutoSyncScheduleEnabled error:', JSON.stringify(e));
+      console.error('[ReminderService] saveAutoSyncScheduleEnabled error:', JSON.stringify(e));
     }
   }
 

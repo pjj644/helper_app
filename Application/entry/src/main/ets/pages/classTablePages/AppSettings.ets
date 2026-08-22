@@ -101,7 +101,7 @@ struct AppSettings {
         }
       });
     } catch (e) {
-      console.error('deleteAccount dialog error:', JSON.stringify(e));
+      console.error('[AppSettings] deleteAccount dialog error:', JSON.stringify(e));
     }
   }
 
@@ -126,7 +126,7 @@ struct AppSettings {
       this.settings = await CourseTableStorage.loadSettings(context);
       this.autoSyncSchedule = await ReminderService.getAutoSyncScheduleEnabled(context);
     } catch (error) {
-      console.error(`加载设置失败: ${JSON.stringify(error)}`);
+      console.error(`[AppSettings] 加载设置失败: ${JSON.stringify(error)}`);
     }
   }
 
@@ -220,19 +220,19 @@ struct AppSettings {
       this.getUIContext().getPromptAction().showToast({ message: '设置已保存' });
       router.back();
     } catch (error) {
-      console.error(`保存设置失败: ${JSON.stringify(error)}`);
+      console.error(`[AppSettings] 保存设置失败: ${JSON.stringify(error)}`);
       this.getUIContext().getPromptAction().showToast({ message: '保存失败' });
     }
   }
 
   private login(): void {
     router.pushUrl({ url: RouterConstants.PAGE_LOGIN })
-      .catch((error: Error) => console.error('跳转登录页面失败:', error));
+      .catch((error: Error) => console.error('[AppSettings] 跳转登录页面失败:', error));
   }
 
   private accountManage(): void {
     router.pushUrl({ url: RouterConstants.PAGE_ACCOUNT_MANAGE })
-      .catch((error: Error) => console.error('跳转账号管理失败:', error));
+      .catch((error: Error) => console.error('[AppSettings] 跳转账号管理失败:', error));
   }
 
   private async syncLocalDataToCloud(): Promise<void> {
@@ -306,7 +306,7 @@ struct AppSettings {
         this.appSettings.customBackgroundImage = imageUri;
       }
     } catch (error) {
-      console.error(`选择图片失败: ${JSON.stringify(error)}`);
+      console.error(`[AppSettings] 选择图片失败: ${JSON.stringify(error)}`);
     }
   }
 

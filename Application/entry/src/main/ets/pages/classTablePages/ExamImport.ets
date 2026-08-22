@@ -70,8 +70,8 @@ struct ExamImport {
     this.selectedSemesterId = normalizeSemesterId(params ? params['semesterId'] : undefined);
     this.examUrl = buildExamTableUrl(this.selectedSemesterId, this.selectedExamTypeId);
     this.message = `请登录后等待自动抓取${getSemesterLabelById(this.selectedSemesterId)} ${getExamTypeLabelById(this.selectedExamTypeId)}信息`;
-    console.info(`testTag ExamImport aboutToAppear returnHome=${this.returnHome}`);
-    console.info(`testTag ExamImport params examTypeId=${this.selectedExamTypeId} semesterId=${this.selectedSemesterId}`);
+    console.info(`[ExamImport] aboutToAppear returnHome=${this.returnHome}`);
+    console.info(`[ExamImport] params examTypeId=${this.selectedExamTypeId} semesterId=${this.selectedSemesterId}`);
     this.initVpnMode();
   }
 
@@ -87,7 +87,7 @@ struct ExamImport {
     const targetUrl = useVpn ?
       VpnEncoder.buildVpnExamTableUrl(this.selectedSemesterId, this.selectedExamTypeId) :
       this.examUrl;
-    console.info(`testTag ExamImport navigateToExamPage useVpn=${useVpn} target=${targetUrl}`);
+    console.info(`[ExamImport] navigateToExamPage useVpn=${useVpn} target=${targetUrl}`);
     this.controller.loadUrl(targetUrl);
   }
 
@@ -103,7 +103,7 @@ struct ExamImport {
 
   private async saveAndReturn(exams: ExamItem[]): Promise<void> {
     const mergedExams: ExamItem[] = await this.mergeWithLocalExams(exams);
-    console.info(`testTag ExamImport saveAndReturn imported=${exams.length} merged=${mergedExams.length}`);
+    console.info(`[ExamImport] saveAndReturn imported=${exams.length} merged=${mergedExams.length}`);
     await ExamService.saveExams(getContext(this), mergedExams);
     this.getUIContext().getPromptAction().showToast({ message: `考试导入成功，本次${exams.length}条` });
     router.back();
@@ -112,75 +112,75 @@ struct ExamImport {
   private retryParseWithDelay(reason: string): void {
     if (this.parseRetryCount >= this.MAX_PARSE_RETRY) {
       if (!this.isVpnMode && !this.vpnAutoDetected) {
-        console.info(`testTag ExamImport retry exhausted, switching to VPN mode`);
+        console.info(`[ExamImport] retry exhausted, switching to VPN mode`);
         this.switchToVpnMode();
         return;
       }
       this.message = '解析失败：页面数据未就绪，请停留考试页后手动重试';
       this.isProcessing = false;
-      console.error(`testTag ExamImport retry exhausted reason=${reason}`);
+      console.error(`[ExamImport] retry exhausted reason=${reason}`);
       return;
     }
     this.parseRetryCount++;
     this.message = `数据尚未就绪，正在重试(${this.parseRetryCount}/${this.MAX_PARSE_RETRY})`;
-    console.info(`testTag ExamImport retryParse reason=${reason} retry=${this.parseRetryCount}`);
+    console.info(`[ExamImport] retryParse reason=${reason} retry=${this.parseRetryCount}`);
     setTimeout(() => this.parseExamRows(), 1200);
   }
 
   private parseExamRows(): void {
     if (this.autoDone) {
-      console.info('testTag ExamImport parseExamRows skipped autoDone=true');
+      console.info('[ExamImport] parseExamRows skipped autoDone=true');
       return;
     }
 
     const currentUrl = this.controller.getUrl();
-    console.info(`testTag ExamImport parseExamRows start url=${currentUrl}`);
+    console.info(`[ExamImport] parseExamRows start url=${currentUrl}`);
 
     const jsCode: string = WebScrapeService.buildExamScrapeScript();
 
     this.controller.runJavaScript(jsCode, async (error: Error | null, result: string) => {
       if (error) {
-        console.error(`testTag ExamImport runJavaScript error=${JSON.stringify(error)}`);
+        console.error(`[ExamImport] runJavaScript error=${JSON.stringify(error)}`);
         this.message = '抓取失败，请手动停留在考试列表后重试';
         this.retryParseWithDelay('runJavaScript error');
         return;
       }
 
-      console.info(`testTag ExamImport runJavaScript rawResultLength=${result ? result.length : 0}`);
+      console.info(`[ExamImport] runJavaScript rawResultLength=${result ? result.length : 0}`);
 
       try {
         let parsed: Object | string = JSON.parse(result) as Object | string;
         if (typeof parsed === 'string') {
-          console.info('testTag ExamImport detected double-json result, parsing second time');
+          console.info('[ExamImport] detected double-json result, parsing second time');
           parsed = JSON.parse(parsed) as Object;
         }
 
         const payload = parsed as ParsePayload | ParseError;
         if ((payload as ParseError).error && !(payload as ParsePayload).exams) {
           const err = payload as ParseError;
-          console.error(`testTag ExamImport parse payload error=${err.error}`);
+          console.error(`[ExamImport] parse payload error=${err.error}`);
           this.retryParseWithDelay(`payload error ${err.error}`);
           return;
         }
 
         const structured = payload as ParsePayload;
         if (!structured || !Array.isArray(structured.exams)) {
-          console.error(`testTag ExamImport payload invalid type=${typeof parsed}`);
+          console.error(`[ExamImport] payload invalid type=${typeof parsed}`);
           this.message = '解析失败，请手动检查页面';
           return;
         }
 
         if (structured.error) {
-          console.error(`testTag ExamImport js catch error=${structured.error}`);
+          console.error(`[ExamImport] js catch error=${structured.error}`);
           this.retryParseWithDelay(`js catch ${structured.error}`);
           return;
         }
 
         const diagnostics = structured.diagnostics;
         if (diagnostics) {
-          console.info(`testTag ExamImport diagnostics url=${diagnostics.currentUrl}`);
-          console.info(`testTag ExamImport diagnostics rows form=${diagnostics.formTableRowCount} exams=${diagnostics.examsTableRowCount} candidates=${diagnostics.totalCandidateRows} parsed=${diagnostics.parsedExamCount}`);
-          console.info(`testTag ExamImport diagnostics inputs semester=${diagnostics.hasSemesterInput} examType=${diagnostics.hasExamTypeInput} sampleCell=${diagnostics.sampleCellText}`);
+          console.info(`[ExamImport] diagnostics url=${diagnostics.currentUrl}`);
+          console.info(`[ExamImport] diagnostics rows form=${diagnostics.formTableRowCount} exams=${diagnostics.examsTableRowCount} candidates=${diagnostics.totalCandidateRows} parsed=${diagnostics.parsedExamCount}`);
+          console.info(`[ExamImport] diagnostics inputs semester=${diagnostics.hasSemesterInput} examType=${diagnostics.hasExamTypeInput} sampleCell=${diagnostics.sampleCellText}`);
         }
 
         const rows = structured.exams;
@@ -197,7 +197,7 @@ struct ExamImport {
         if (sorted.length === 0) {
           this.message = '未抓取到考试信息，请先切换到有数据的考试类型后重试';
           this.isProcessing = false;
-          console.info('testTag ExamImport sorted empty after normalization');
+          console.info('[ExamImport] sorted empty after normalization');
           return;
         }
 
@@ -205,10 +205,10 @@ struct ExamImport {
         this.autoDone = true;
         this.isProcessing = false;
         this.message = `抓取完成，正在保存${getSemesterLabelById(this.selectedSemesterId)} ${getExamTypeLabelById(this.selectedExamTypeId)} ${sorted.length} 条数据`;
-        console.info(`testTag ExamImport parse success count=${sorted.length}`);
+        console.info(`[ExamImport] parse success count=${sorted.length}`);
         await this.saveAndReturn(sorted);
       } catch (e) {
-        console.error(`testTag ExamImport parse exception=${JSON.stringify(e)}`);
+        console.error(`[ExamImport] parse exception=${JSON.stringify(e)}`);
         this.message = '数据解析异常，请重试';
         this.retryParseWithDelay('parse exception');
       }
@@ -217,10 +217,10 @@ struct ExamImport {
 
   private switchToVpnMode(): void {
     if (this.vpnAutoDetected) {
-      console.info('testTag ExamImport VPN mode already switched, skip');
+      console.info('[ExamImport] VPN mode already switched, skip');
       return;
     }
-    console.info('testTag ExamImport检测到非校园网环境，自动切换VPN模式');
+    console.info('[ExamImport] 检测到非校园网环境，自动切换VPN模式');
     this.vpnAutoDetected = true;
     this.isVpnMode = true;
     this.hasJumpedToExam = false;
@@ -240,7 +240,7 @@ struct ExamImport {
           onScrape: () => {
             this.parseRetryCount = 0;
             const url = this.controller.getUrl();
-            console.info(`testTag ExamImport manual scrape url=${url}`);
+            console.info(`[ExamImport] manual scrape url=${url}`);
             this.parseExamRows();
           },
           onRefresh: () => {
@@ -277,14 +277,14 @@ struct ExamImport {
         .onPageEnd(() => {
           const url = this.controller.getUrl();
           this.showRefreshBtn = false;
-          console.info(`testTag ExamImport onPageEnd url=${url}`);
+          console.info(`[ExamImport] onPageEnd url=${url}`);
 
           if (VpnEncoder.isLoginPage(url) || url.includes('authserver/login')) {
             this.message = this.isVpnMode ? 'VPN模式：请先完成统一身份认证登录' : '请先登录统一身份认证，登录后会自动跳转考试页';
             this.isProcessing = false;
             this.hasJumpedToExam = false;
             this.vpnPortalNavigated = false;
-            console.info('testTag ExamImport on login page, waiting for auth');
+            console.info('[ExamImport] on login page, waiting for auth');
             return;
           }
 
@@ -292,7 +292,7 @@ struct ExamImport {
             if (!this.vpnPortalNavigated) {
               this.vpnPortalNavigated = true;
               this.message = 'VPN登录成功，正在跳转教务系统...';
-              console.info('testTag ExamImport VPN portal detected, navigating to EAMS');
+              console.info('[ExamImport] VPN portal detected, navigating to EAMS');
               setTimeout(() => {
                 this.controller.loadUrl(VpnEncoder.buildVpnExamMenuUrl());
               }, 1000);
@@ -302,7 +302,7 @@ struct ExamImport {
 
           if (url.includes('stdExamTable!examTable.action')) {
             this.message = '已进入考试页面，正在抓取';
-            console.info('testTag ExamImport entered exam page, schedule parse');
+            console.info('[ExamImport] entered exam page, schedule parse');
             setTimeout(() => this.parseExamRows(), 1200);
             return;
           }
@@ -311,7 +311,7 @@ struct ExamImport {
           const checkLoginJs = WebScrapeService.buildLoginCheckScript();
           this.controller.runJavaScript(checkLoginJs, (error: Error | null, result: string) => {
             if (error) {
-              console.error(`testTag ExamImport checkLogin error:`, error);
+              console.error(`[ExamImport] checkLogin error:`, error);
               return;
             }
             try {
@@ -323,16 +323,16 @@ struct ExamImport {
                 }
               }
               const loginStatus = JSON.parse(loginResult) as Record<string, string>;
-              console.info(`testTag ExamImport loginStatus:`, loginStatus);
+              console.info(`[ExamImport] loginStatus:`, loginStatus);
 
               if (loginStatus.status === 'repeat_login_prompt') {
-                console.info('testTag ExamImport 检测到重复登录提示，执行自动确认');
+                console.info('[ExamImport] 检测到重复登录提示，执行自动确认');
                 this.message = '检测到多设备登录提示，正在自动确认...';
                 const confirmUrl: string = (loginStatus.href && loginStatus.href.length > 0) ?
                   loginStatus.href :
                   (this.isVpnMode ? VpnEncoder.buildVpnHomeUrl() : 'https://eams.uestc.edu.cn/eams/home.action');
                 setTimeout(() => {
-                  console.info('testTag ExamImport loadUrl confirm repeat login:', confirmUrl);
+                  console.info('[ExamImport] loadUrl confirm repeat login:', confirmUrl);
                   this.controller.loadUrl(confirmUrl);
                 }, 300);
                 return;
@@ -342,40 +342,44 @@ struct ExamImport {
                 if (!this.hasJumpedToExam) {
                   this.hasJumpedToExam = true;
                   this.message = '已登录，正在跳转考试页面...';
-                  console.info('testTag ExamImport logged_in confirmed, jumping to exam page');
+                  console.info('[ExamImport] logged_in confirmed, jumping to exam page');
                   setTimeout(() => this.navigateToExamPage(), 800);
                 }
               } else if (loginStatus.status === 'not_logged_in') {
-                console.info('testTag ExamImport not_logged_in, waiting for credentials');
+                console.info('[ExamImport] not_logged_in, waiting for credentials');
                 this.isProcessing = false;
                 this.message = '请完成统一身份认证登录';
               }
             } catch (e) {
-              console.error('testTag ExamImport parse loginStatus error:', e);
+              console.error('[ExamImport] parse loginStatus error:', e);
             }
           });
         })
         .onHttpErrorReceive((event) => {
           const statusCode = event.response.getResponseCode();
-          console.error(`testTag ExamImport HTTP error status=${statusCode}`);
+          console.error(`[ExamImport] HTTP error status=${statusCode}`);
           if (!this.vpnAutoDetected && statusCode === 403) {
-            console.info('testTag ExamImport detected 403, switching to VPN mode');
+            console.info('[ExamImport] detected 403, switching to VPN mode');
             this.switchToVpnMode();
             return;
           }
           if (statusCode === 500 && this.http500RetryCount < this.MAX_HTTP_500_RETRY) {
             this.http500RetryCount++;
-            this.message = `教务系统会话就绪中，正在重试(${this.http500RetryCount}/${this.MAX_HTTP_500_RETRY})...`;
-            console.info(`testTag ExamImport HTTP 500, retrying in 1.5s (attempt ${this.http500RetryCount})`);
+            this.hasJumpedToExam = false;
+            this.message = `教务会话初始化中，正在通过主页激活(${this.http500RetryCount}/${this.MAX_HTTP_500_RETRY})...`;
+            console.info(`[ExamImport] HTTP 500, navigating to home.action to restore session (attempt ${this.http500RetryCount})`);
+            const homeUrl: string = this.isVpnMode ?
+              VpnEncoder.buildVpnHomeUrl() :
+              'https://eams.uestc.edu.cn/eams/home.action';
             setTimeout(() => {
-              this.navigateToExamPage();
-            }, 1500);
+              this.controller.loadUrl(homeUrl);
+            }, 1000);
             return;
           }
         })
         .onErrorReceive((event) => {
           const err = event.error.getErrorInfo();
-          console.error(`testTag ExamImport web error=${err}`);
+          console.error(`[ExamImport] web error=${err}`);
           if (!this.isVpnMode && !this.vpnAutoDetected &&
               (err.includes('net::ERR_CONNECTION') ||
                err.includes('net::ERR_NAME_NOT_RESOLVED'))) {

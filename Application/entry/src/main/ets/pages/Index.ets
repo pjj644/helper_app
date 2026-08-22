@@ -319,7 +319,7 @@ struct MainPage {
       }
       this.todayEventCount = count;
     } catch (error) {
-      console.error('loadQuickInfo error:', JSON.stringify(error));
+      console.error('[Index] loadQuickInfo error:', JSON.stringify(error));
     }
   }
 
@@ -348,13 +348,13 @@ struct MainPage {
         semesterId: String(calculateSemesterId())
       }
     }).catch((error: Error) => {
-      console.error('跳转导入页面失败:', error);
+      console.error('[Index] 跳转导入页面失败:', error);
     });
   }
 
   private openTable(): void {
     router.pushUrl({ url: RouterConstants.PAGE_TABLE_UI }).catch((error: Error) => {
-      console.error('跳转课表页面失败:', error);
+      console.error('[Index] 跳转课表页面失败:', error);
     });
   }
 
@@ -366,19 +366,19 @@ struct MainPage {
         semesterId: String(this.selectedSemesterId)
       }
     }).catch((error: Error) => {
-      console.error('跳转考试页面失败:', error);
+      console.error('[Index] 跳转考试页面失败:', error);
     });
   }
 
   private openSchedule(): void {
     router.pushUrl({ url: RouterConstants.PAGE_CALENDAR }).catch((error: Error) => {
-      console.error('跳转日程页面失败:', error);
+      console.error('[Index] 跳转日程页面失败:', error);
     });
   }
 
   private openSettings(): void {
     router.pushUrl({ url: RouterConstants.PAGE_SETTINGS }).catch((error: Error) => {
-      console.error('跳转设置页面失败:', error);
+      console.error('[Index] 跳转设置页面失败:', error);
     });
   }
 
@@ -441,13 +441,13 @@ struct MainPage {
   private onToolClick(tool: HomeToolItem): void {
     if (tool.route) {
       router.pushUrl({ url: tool.route }, router.RouterMode.Standard)
-        .catch((error: Error) => console.error(`跳转 ${tool.title} 页面失败:`, error));
+        .catch((error: Error) => console.error(`[Index] 跳转 ${tool.title} 页面失败:`, error));
     } else if (tool.url) {
       router.pushUrl({
         url: RouterConstants.PAGE_WEB,
         params: { title: tool.title, url: tool.url }
       }, router.RouterMode.Standard)
-        .catch((error: Error) => console.error(`打开 ${tool.title} 网页失败:`, error));
+        .catch((error: Error) => console.error(`[Index] 打开 ${tool.title} 网页失败:`, error));
     } else {
       this.showToast(`${tool.title} 功能开发中`);
     }
@@ -474,7 +474,7 @@ struct MainPage {
         this.copyToClipboard('pjj644@users.noreply.github.com');
       }
     }).catch((error: Error) => {
-      console.error('意见反馈弹窗失败', error);
+      console.error('[Index] 意见反馈弹窗失败', error);
     });
   }
 
@@ -486,7 +486,7 @@ struct MainPage {
         { text: '知道了', color: '#007AFF', primary: true }
       ]
     }).catch((error: Error) => {
-      console.error('关于应用弹窗失败', error);
+      console.error('[Index] 关于应用弹窗失败', error);
     });
   }
 
@@ -496,11 +496,11 @@ struct MainPage {
       pasteboard.getSystemPasteboard().setData(data).then(() => {
         this.showToast('邮箱已复制到剪贴板');
       }).catch((error: Error) => {
-        console.error('写入剪贴板失败', error);
+        console.error('[Index] 写入剪贴板失败', error);
         this.showToast('复制失败');
       });
     } catch (error) {
-      console.error('复制邮箱异常', JSON.stringify(error));
+      console.error('[Index] 复制邮箱异常', JSON.stringify(error));
       this.showToast('复制失败');
     }
   }
@@ -761,11 +761,11 @@ struct MainPage {
           .onClick(() => {
             if (!this.isLoggedIn) {
               router.pushUrl({ url: RouterConstants.PAGE_LOGIN }).catch((error: Error) => {
-                console.error('跳转登录页面失败:', error);
+                console.error('[Index] 跳转登录页面失败:', error);
               });
             } else {
               router.pushUrl({ url: RouterConstants.PAGE_ACCOUNT_MANAGE }).catch((error: Error) => {
-                console.error('跳转账号管理失败:', error);
+                console.error('[Index] 跳转账号管理失败:', error);
               });
             }
           });
@@ -777,7 +777,7 @@ struct MainPage {
           });
           this.MineMenuItem('账号设置', $r('app.media.settings_icon'), () => {
             router.pushUrl({ url: RouterConstants.PAGE_ACCOUNT_MANAGE }).catch((error: Error) => {
-              console.error('跳转账号管理失败:', error);
+              console.error('[Index] 跳转账号管理失败:', error);
             });
           });
           this.MineMenuItem('应用设置', $r('app.media.set'), () => {

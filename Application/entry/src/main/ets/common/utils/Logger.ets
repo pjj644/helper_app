@@ -5,21 +5,28 @@ export class Logger {
     Logger.debugEnabled = enabled;
   }
 
+  private static formatTag(tag: string): string {
+    if (tag.startsWith('[') && tag.endsWith(']')) {
+      return tag;
+    }
+    return `[${tag}]`;
+  }
+
   static debug(tag: string, message: string): void {
     if (Logger.debugEnabled) {
-      console.info(tag, message);
+      console.info(Logger.formatTag(tag), message);
     }
   }
 
   static info(tag: string, message: string): void {
-    console.info(tag, message);
+    console.info(Logger.formatTag(tag), message);
   }
 
   static warn(tag: string, message: string): void {
-    console.warn(tag, message);
+    console.warn(Logger.formatTag(tag), message);
   }
 
   static error(tag: string, message: string): void {
-    console.error(tag, message);
+    console.error(Logger.formatTag(tag), message);
   }
 }

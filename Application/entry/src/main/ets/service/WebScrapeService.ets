@@ -156,9 +156,14 @@ export class WebScrapeService {
           var bodyText = document.body ? (document.body.innerText || '') : '';
           var htmlText = document.documentElement ? (document.documentElement.innerHTML || '') : '';
 
-          // 2. 检查是否为多账号/重复登录踢出确认页 (home.action)
-          if (htmlText.includes('重复登录') || htmlText.includes('已将之前的登录踢出') ||
-              (currentUrl.includes('home.action') && (bodyText.includes('点击此处') || htmlText.includes('点击此处')))) {
+          // 2. 检查是否为多账号/重复登录踢出确认页/会话未激活/500异常页含"点击此处"或 home.action
+          var hasHomeActionLink = !!document.querySelector('a[href*="home.action"]');
+          var hasClickHere = bodyText.includes('点击此处') || htmlText.includes('点击此处');
+          var hasRepeatText = htmlText.includes('重复登录') || htmlText.includes('已将之前的登录踢出') ||
+                              htmlText.includes('会话已失效') || htmlText.includes('会话超时') || htmlText.includes('重新登录');
+
+          if (hasRepeatText || (hasClickHere && (hasHomeActionLink || currentUrl.includes('action'))) ||
+              (currentUrl.includes('home.action') && hasClickHere)) {
             var links = document.querySelectorAll('a');
             var targetHref = 'https://eams.uestc.edu.cn/eams/home.action';
             for (var i = 0; i < links.length; i++) {

@@ -77,7 +77,7 @@ struct LoginIndexPage {
 
 			this.jumpBack();
 		} catch (error) {
-			console.error('读取登录状态失败:', error);
+			console.error('[LoginIndex] 读取登录状态失败:', error);
 		}
 	}
 
@@ -130,7 +130,7 @@ struct LoginIndexPage {
 			this.hintText = '验证码已发送，请检查邮箱';
 			this.getUIContext().getPromptAction().showToast({ message: '验证码已发送' });
 		}).catch((error: BusinessError) => {
-			console.error('发送验证码失败:', JSON.stringify(error));
+			console.error('[LoginIndex] 发送验证码失败:', JSON.stringify(error));
 			this.countdown = 0;
 			this.clearTimer();
 			this.getUIContext().getPromptAction().showToast({ message: `发送失败：${error.message}` });
@@ -173,7 +173,7 @@ struct LoginIndexPage {
 			this.jumpBack();
 		} catch (error) {
 			const businessError = error as BusinessError;
-			console.error('登录失败:', JSON.stringify(businessError));
+			console.error('[LoginIndex] 登录失败:', JSON.stringify(businessError));
 			this.getUIContext().getPromptAction().showToast({ message: `登录失败：${businessError.message}` });
 		} finally {
 			this.isLoading = false;

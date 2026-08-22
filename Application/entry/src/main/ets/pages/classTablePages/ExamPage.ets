@@ -107,7 +107,7 @@ struct ExamPage {
       this.allExams = await ExamService.loadExams(context);
       this.applyFilters();
     } catch (error) {
-      console.error('加载考试数据失败:', error);
+      console.error('[ExamPage] 加载考试数据失败:', error);
       this.allExams = [];
       this.exams = [];
     }
@@ -159,7 +159,7 @@ struct ExamPage {
     const examTypeId: number = ExamService.getExamTypeIdByIndex(this.selectedExamTypeIndex);
     const semesterId: number = this.getSelectedSemesterId();
     ExamService.saveSelectionPreference(getContext(this), examTypeId, semesterId).catch((error: Error) => {
-      console.error('保存考试筛选偏好失败:', error);
+      console.error('[ExamPage] 保存考试筛选偏好失败:', error);
     });
   }
 

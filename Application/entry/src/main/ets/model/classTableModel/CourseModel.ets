@@ -291,7 +291,7 @@ export class CourseTableModel {
       const rawData = JSON.parse(jsonString) as RawCourseTableData;
       this.parseRawData(rawData);
     } catch (e) {
-      console.error('解析课表数据失败:', e);
+      console.error('[CourseModel] 解析课表数据失败:', e);
       this.clear();
     }
   }

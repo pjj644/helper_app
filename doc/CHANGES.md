@@ -4,6 +4,18 @@
 
 ---
 
+## 2026-08: 教务系统登录态判定与 500 会话恢复流转优化
+
+- **登录态与 500 异常拦截脚本增强 (`WebScrapeService.ets`)**：
+  - 增强 `buildLoginCheckScript()` 注入检测，全面识别「重复登录」、「已将之前的登录踢出」、「会话已失效/超时」、「点击此处」以及指向 `home.action` 的 500 错误与踢出确认页；
+  - 统一识别 `repeat_login_prompt` 状态，自动清洗并升格为 HTTPS 安全主站链接。
+- **500 会话失效恢复机制重构 (`Index.ets`, `ExamImport.ets`, `GradeImport.ets`)**：
+  - 彻底废除 500 报错时直接重试二级子页面的死循环缺陷；
+  - 遇到 HTTP 500 错误时，先导航至教务系统主页 `home.action`（VPN 模式下为 `VpnEncoder.buildVpnHomeUrl()`）激活主 Session 会话；
+  - 待主页加载完成确立登录态（`logged_in`）后，再平滑流转跳转至课表（`courseTableForStd.action`）、考试（`stdExamTable!examTable.action`）或成绩（`person!search.action`）页面执行数据提取。
+
+---
+
 ## 2026-08: 华为应用市场上架合规与端云体验 8 大核心优化
 
 - **1. 首次启动隐私授权弹窗与 SDK 延迟初始化 (`PrivacyDialogComponent.ets`, `AuthService.ets`, `EntryAbility.ets`)**：

@@ -257,9 +257,9 @@ export class UISettings {
       }
 
       this.context.getApplicationContext().setColorMode(colorMode);
-      console.log(`深色模式已应用: ${this._darkModeType}, 颜色模式: ${colorMode}`);
+      console.log(`[UISettings] 深色模式已应用: ${this._darkModeType}, 颜色模式: ${colorMode}`);
     } catch (error) {
-      console.error(`应用深色模式失败: ${JSON.stringify(error)}`);
+      console.error(`[UISettings] 应用深色模式失败: ${JSON.stringify(error)}`);
     }
   }
 

@@ -123,7 +123,7 @@ export class SyncService {
       };
       return result;
     } catch (error) {
-      console.error('同步课表到云端失败:', error);
+      console.error('[SyncService] 同步课表到云端失败:', error);
       const result: SyncResult = {
         success: false,
         error: String(error)
@@ -177,7 +177,7 @@ export class SyncService {
       };
       return result;
     } catch (error) {
-      console.error('从云端下载课表失败:', error);
+      console.error('[SyncService] 从云端下载课表失败:', error);
       const result: DownloadResult = {
         success: false,
         error: String(error)
@@ -248,7 +248,7 @@ export class SyncService {
       };
       return result;
     } catch (error) {
-      console.error('同步考试到云端失败:', error);
+      console.error('[SyncService] 同步考试到云端失败:', error);
       const result: SyncResult = {
         success: false,
         error: String(error)
@@ -297,7 +297,7 @@ export class SyncService {
       };
       return result;
     } catch (error) {
-      console.error('从云端下载考试失败:', error);
+      console.error('[SyncService] 从云端下载考试失败:', error);
       const result: DownloadResult = {
         success: false,
         error: String(error)
@@ -364,7 +364,7 @@ export class SyncService {
         const errorStr = String(error);
         if (errorStr.includes('1004007') && attempt < maxRetries) {
           const delayMs = baseDelay * Math.pow(2, attempt);
-          console.warn(`请求被限流，${delayMs}ms后重试 (${attempt + 1}/${maxRetries})`);
+          console.warn(`[SyncService] 请求被限流，${delayMs}ms后重试 (${attempt + 1}/${maxRetries})`);
           await SyncService.delay(delayMs);
         } else {
           throw new Error(String(error));

@@ -215,7 +215,7 @@ struct TableUI {
       this.dataVersion++;
       this.hasCourseDataForSemester = false;
     } catch (error) {
-      console.error('加载课表本地数据失败:', error);
+      console.error('[TableUI] 加载课表本地数据失败:', error);
       this.hasCourseDataForSemester = false;
     } finally {
       this.isInitializing = false;
@@ -239,7 +239,7 @@ struct TableUI {
       const context = getContext(this);
       await CourseRepository.saveCourseDataBySemester(context, this.selectedSemesterId, courseData);
     } catch (error) {
-      console.error('保存课表本地数据失败:', error);
+      console.error('[TableUI] 保存课表本地数据失败:', error);
     }
   }
 
@@ -254,7 +254,7 @@ struct TableUI {
         semesterId: String(this.selectedSemesterId)
       }
     }).catch((error: Error) => {
-      console.error('跳转网页抓取页失败:', error);
+      console.error('[TableUI] 跳转网页抓取页失败:', error);
     });
   }
 
@@ -289,7 +289,7 @@ struct TableUI {
         semesterId: String(this.selectedSemesterId)
       }
     }).catch((error: Error) => {
-      console.error('跳转网页刷新页失败:', error);
+      console.error('[TableUI] 跳转网页刷新页失败:', error);
     });
   }
 
@@ -304,7 +304,7 @@ struct TableUI {
       });
       this.courses = allCourses;
     } catch (error) {
-      console.error('加载本地课程失败:', error);
+      console.error('[TableUI] 加载本地课程失败:', error);
       this.courses = [];
     }
   }

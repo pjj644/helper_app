@@ -48,7 +48,7 @@ struct GradePage {
       this.semesterOptions = GradeService.getSemesterList(this.grades);
       this.applyFilter();
     } catch (error) {
-      console.error('GradePage loadGrades error:', JSON.stringify(error));
+      console.error('[GradePage] loadGrades error:', JSON.stringify(error));
       this.grades = [];
     } finally {
       this.isLoading = false;

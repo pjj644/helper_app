@@ -84,7 +84,7 @@ export struct CalendarPage {
       this.calculateAllConflicts();
       this.renderVersion++;
     } catch (error) {
-      console.error('CalendarPage loadAllEvents error:', JSON.stringify(error));
+      console.error('[CalendarPage] loadAllEvents error:', JSON.stringify(error));
       this.loadingError = '加载日程失败';
     } finally {
       this.isLoading = false;
@@ -141,7 +141,7 @@ export struct CalendarPage {
         current.setDate(current.getDate() + 1);
       }
     } catch (error) {
-      console.error('CalendarPage buildCourseEventsForView error:', JSON.stringify(error));
+      console.error('[CalendarPage] buildCourseEventsForView error:', JSON.stringify(error));
     }
     return events;
   }
@@ -180,7 +180,7 @@ export struct CalendarPage {
         events.push(evt);
       }
     } catch (error) {
-      console.error('CalendarPage buildExamEventsForView error:', JSON.stringify(error));
+      console.error('[CalendarPage] buildExamEventsForView error:', JSON.stringify(error));
     }
     return events;
   }
@@ -197,7 +197,7 @@ export struct CalendarPage {
       }
       return filtered;
     } catch (error) {
-      console.error('CalendarPage loadCustomEvents error:', JSON.stringify(error));
+      console.error('[CalendarPage] loadCustomEvents error:', JSON.stringify(error));
       return [];
     }
   }
@@ -421,7 +421,7 @@ export struct CalendarPage {
       console.info('[ReminderDebug] CalendarPage.performSaveSchedule: reminders refreshed');
       await this.loadAllEvents();
     } catch (error) {
-      console.error('CalendarPage performSaveSchedule error:', JSON.stringify(error));
+      console.error('[CalendarPage] performSaveSchedule error:', JSON.stringify(error));
     }
   }
 
@@ -436,7 +436,7 @@ export struct CalendarPage {
       await ScheduleService.deleteSchedule(context, eventId);
       await this.loadAllEvents();
     } catch (error) {
-      console.error('CalendarPage performDeleteSchedule error:', JSON.stringify(error));
+      console.error('[CalendarPage] performDeleteSchedule error:', JSON.stringify(error));
     }
   }
 

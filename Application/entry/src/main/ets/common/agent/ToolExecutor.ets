@@ -105,7 +105,7 @@ export class ToolExecutor {
       }
       return await CalendarKitReminderService.requestCalendarPermission(uiContext)
     } catch (e) {
-      console.error('ToolExecutor ensureCalendarPermission error:', JSON.stringify(e))
+      console.error('[ToolExecutor] ensureCalendarPermission error:', JSON.stringify(e))
       return false
     }
   }
@@ -519,7 +519,7 @@ export class ToolExecutor {
       return { success: false, data: `未知页面: ${page}` }
     }
     router.pushUrl({ url: url }).catch((err: Error) => {
-      console.error(`ToolExecutor navigate error: ${String(err)}`)
+      console.error(`[ToolExecutor] navigate error: ${String(err)}`)
     })
     return { success: true, data: JSON.stringify({ message: `已导航到 ${page} 页面` }) }
   }

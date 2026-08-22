@@ -161,10 +161,10 @@ struct Index {
         .darkMode(WebDarkMode.Auto)
         .forceDarkAccess(true)
         .onPageBegin(() => {
-          console.info('testTag页面开始加载');
+          console.info('[ClassTableScrape] 页面开始加载');
         })
         .onPageEnd(() => {
-          console.info('testTag页面加载完成');
+          console.info('[ClassTableScrape] 页面加载完成');
           this.pageRetryCount = 0;
           this.hasRefreshedAfterLoadFail = false;
           this.showRefreshBtn = false;
@@ -176,7 +176,7 @@ struct Index {
           }
 
           const url: string = this.controller.getUrl();
-          console.info('testTag页面加载完成:', url);
+          console.info('[ClassTableScrape] 页面加载完成:', url);
 
           if (VpnEncoder.isLoginPage(url) || url.includes(this.loginUrlPattern)) {
             return;
@@ -188,11 +188,11 @@ struct Index {
 
           if (url.includes('courseTableForStd') && !this.autoNavigateTriggered) {
             if (this.pendingSemesterSwitchId > 0) {
-              console.info('testTag检测到课表页面，需要切换学期到:', this.pendingSemesterSwitchId);
+              console.info('[ClassTableScrape] 检测到课表页面，需要切换学期到:', this.pendingSemesterSwitchId);
               const getParamsJs: string = WebScrapeService.buildGetFormParamsScript();
               this.controller.runJavaScript(getParamsJs, (paramsError: Error | null, paramsResult: string) => {
                 if (paramsError) {
-                  console.error('testTag获取当前学期参数失败:', paramsError);
+                  console.error('[ClassTableScrape] 获取当前学期参数失败:', paramsError);
                   this.pendingSemesterSwitchId = 0;
                   setTimeout(() => {
                     if (!this.isPageActive) {
@@ -212,7 +212,7 @@ struct Index {
                   }
                   const paramsObj: Record<string, Object> = JSON.parse(paramsInner) as Record<string, Object>;
                   const currentSemesterId: number = (paramsObj['semesterId'] as number) || 0;
-                  console.info('testTag当前学期ID:', currentSemesterId, '目标学期ID:', this.pendingSemesterSwitchId);
+                  console.info('[ClassTableScrape] 当前学期ID:', currentSemesterId, '目标学期ID:', this.pendingSemesterSwitchId);
                   if (currentSemesterId !== this.pendingSemesterSwitchId) {
                     const onCampusForSwitch: boolean = url.includes('eams.uestc.edu.cn');
                     const useVpnForSwitch: boolean = this.isVpnMode && !onCampusForSwitch;
@@ -221,9 +221,9 @@ struct Index {
                         AppConstants.WEBVPN_BASE_URL : 'https://eams.uestc.edu.cn';
                       webview.WebCookieManager.configCookieSync(cookieDomain,
                         'semester.id=' + this.pendingSemesterSwitchId);
-                      console.info('testTag已设置Cookie semester.id=', this.pendingSemesterSwitchId, 'useVpn=', useVpnForSwitch);
+                      console.info('[ClassTableScrape] 已设置Cookie semester.id=', this.pendingSemesterSwitchId, 'useVpn=', useVpnForSwitch);
                     } catch (cookieErr) {
-                      console.error('testTag设置Cookie失败:', cookieErr);
+                      console.error('[ClassTableScrape] 设置Cookie失败:', cookieErr);
                     }
                     const switchJs: string = useVpnForSwitch ?
                       WebScrapeService.buildVpnSemesterSwitchScript(this.pendingSemesterSwitchId,
@@ -232,17 +232,17 @@ struct Index {
                     const executeSemesterSwitch = (): void => {
                       this.controller.runJavaScript(switchJs, (sErr: Error | null, sRes: string) => {
                         if (sErr) {
-                          console.error('testTag切换学期失败:', sErr);
+                          console.error('[ClassTableScrape] 切换学期失败:', sErr);
                         } else {
-                          console.info('testTag切换学期结果:', sRes);
+                          console.info('[ClassTableScrape] 切换学期结果:', sRes);
                           if (sRes && sRes.includes('403') && !this.vpnAutoDetected) {
-                            console.info('testTag学期切换403，切换到VPN模式');
+                            console.info('[ClassTableScrape] 学期切换403，切换到VPN模式');
                             this.switchToVpnMode();
                             return;
                           }
                           if (sRes && sRes.includes('500') && this.semesterSwitchRetryCount < this.MAX_SEMESTER_SWITCH_RETRY) {
                             this.semesterSwitchRetryCount++;
-                            console.info('testTag学期切换HTTP 500，延迟3秒重试，第', this.semesterSwitchRetryCount, '次');
+                            console.info('[ClassTableScrape] 学期切换HTTP 500，延迟3秒重试，第', this.semesterSwitchRetryCount, '次');
                             setTimeout(() => {
                               if (!this.isPageActive) {
                                 return;
@@ -253,7 +253,7 @@ struct Index {
                           }
                         }
                         if (this.semesterSwitchRetryCount >= this.MAX_SEMESTER_SWITCH_RETRY) {
-                          console.info('testTag学期切换重试次数已用尽，刷新课表页面');
+                          console.info('[ClassTableScrape] 学期切换重试次数已用尽，刷新课表页面');
                           this.semesterSwitchRetryCount = 0;
                           this.pendingSemesterSwitchId = 0;
                           const refreshUrl = this.controller.getUrl();
@@ -272,7 +272,7 @@ struct Index {
                     };
                     executeSemesterSwitch();
                   } else {
-                    console.info('testTag当前学期与目标学期一致，无需切换');
+                    console.info('[ClassTableScrape] 当前学期与目标学期一致，无需切换');
                     this.pendingSemesterSwitchId = 0;
                     setTimeout(() => {
                       if (!this.isPageActive) {
@@ -282,7 +282,7 @@ struct Index {
                     }, 2000);
                   }
                 } catch (e) {
-                  console.error('testTag解析学期参数失败:', e);
+                  console.error('[ClassTableScrape] 解析学期参数失败:', e);
                   this.pendingSemesterSwitchId = 0;
                   setTimeout(() => {
                     if (!this.isPageActive) {
@@ -293,20 +293,20 @@ struct Index {
                 }
               });
             } else {
-              console.info('testTag检测到课表页面，延迟2秒等二次跳转稳定后再提取');
+              console.info('[ClassTableScrape] 检测到课表页面，延迟2秒等二次跳转稳定后再提取');
               setTimeout(() => {
                 if (!this.isPageActive) {
-                  console.info('testTag页面已离开，跳过数据提取');
+                  console.info('[ClassTableScrape] 页面已离开，跳过数据提取');
                   return;
                 }
                 try {
                   const currentUrl: string = this.controller.getUrl();
-                  console.info('testTag延迟后当前URL:', currentUrl);
+                  console.info('[ClassTableScrape] 延迟后当前URL:', currentUrl);
                   if (currentUrl.includes('courseTableForStd') && !this.autoNavigateTriggered) {
                     this.extractCourseData();
                   }
                 } catch (e) {
-                  console.error('testTag获取URL失败，页面可能已销毁:', e);
+                  console.error('[ClassTableScrape] 获取URL失败，页面可能已销毁:', e);
                 }
               }, 2000);
             }
@@ -314,28 +314,31 @@ struct Index {
         })
         .onHttpErrorReceive((event) => {
           const statusCode = event.response.getResponseCode();
-          console.error('testTag HTTP错误状态码:', statusCode);
+          console.error('[ClassTableScrape] HTTP错误状态码:', statusCode);
           if (!this.vpnAutoDetected && statusCode === 403) {
-            console.info('testTag检测到HTTP 403，切换到VPN模式');
+            console.info('[ClassTableScrape] 检测到HTTP 403，切换到VPN模式');
             this.switchToVpnMode();
             return;
           }
           if (statusCode === 500 && this.http500RetryCount < this.MAX_HTTP_500_RETRY) {
             this.http500RetryCount++;
-            this.message = `教务系统会话就绪中，正在重试(${this.http500RetryCount}/${this.MAX_HTTP_500_RETRY})...`;
-            console.info(`testTag Index HTTP 500, retrying in 1.5s (attempt ${this.http500RetryCount})`);
+            this.message = `教务会话初始化中，正在通过主页激活(${this.http500RetryCount}/${this.MAX_HTTP_500_RETRY})...`;
+            console.info(`[ClassTableScrape] Index HTTP 500, navigating to home.action to restore session (attempt ${this.http500RetryCount})`);
+            const homeUrl: string = this.isVpnMode ?
+              VpnEncoder.buildVpnHomeUrl() :
+              'https://eams.uestc.edu.cn/eams/home.action';
             setTimeout(() => {
               if (!this.isPageActive) {
                 return;
               }
-              this.navigateToCourseTable();
-            }, 1500);
+              this.controller.loadUrl(homeUrl);
+            }, 1000);
             return;
           }
           this.showRefreshBtn = true;
         })
         .onErrorReceive((error) => {
-          console.error('testTag页面加载错误:', error.error.getErrorInfo());
+          console.error('[ClassTableScrape] 页面加载错误:', error.error.getErrorInfo());
           const errorInfo = error.error.getErrorInfo();
           if (!this.isVpnMode && !this.vpnAutoDetected &&
               (errorInfo.includes('net::ERR_CONNECTION') ||
@@ -378,10 +381,10 @@ struct Index {
 
   private switchToVpnMode(): void {
     if (this.vpnAutoDetected) {
-      console.info('testTag VPN mode already switched, skip');
+      console.info('[ClassTableScrape] VPN mode already switched, skip');
       return;
     }
-    console.info('testTag检测到非校园网环境，自动切换VPN模式');
+    console.info('[ClassTableScrape] 检测到非校园网环境，自动切换VPN模式');
     this.vpnAutoDetected = true;
     this.isVpnMode = true;
     this.pageRetryCount = 0;
@@ -394,7 +397,7 @@ struct Index {
 
   checkCurrentPage(): void {
     const url: string = this.controller.getUrl();
-    console.info('testTag当前页面URL:', url);
+    console.info('[ClassTableScrape] 当前页面URL:', url);
 
     if (VpnEncoder.isLoginPage(url) || url.includes(this.loginUrlPattern)) {
       this.message = this.isVpnMode ? 'VPN模式：请完成统一身份认证登录' : '请完成统一身份认证登录';
@@ -421,10 +424,10 @@ struct Index {
           return;
         }
         if (this.vpnNavigatedFromPortal) {
-          console.info('testTag VPN模式：已从门户导航过，跳过重复导航');
+          console.info('[ClassTableScrape] VPN模式：已从门户导航过，跳过重复导航');
           return;
         }
-        console.info('testTag VPN模式：检测到WebVPN门户页，等待加载教务系统...');
+        console.info('[ClassTableScrape] VPN模式：检测到WebVPN门户页，等待加载教务系统...');
         this.vpnNavigatedFromPortal = true;
         this.message = 'VPN登录成功，等待加载教务系统...';
         setTimeout(() => {
@@ -441,10 +444,10 @@ struct Index {
     }
 
     const currentUrl: string = this.controller.getUrl();
-    console.info('testTag检查登录状态，当前URL:', currentUrl);
+    console.info('[ClassTableScrape] 检查登录状态，当前URL:', currentUrl);
 
     if (VpnEncoder.isLoginPage(currentUrl) || currentUrl.includes(this.loginUrlPattern)) {
-      console.info('testTag当前在登录页面，需要登录');
+      console.info('[ClassTableScrape] 当前在登录页面，需要登录');
       this.message = this.isVpnMode ? 'VPN模式：请完成统一身份认证登录' : '请完成统一身份认证登录';
       this.isLoggedIn = false;
       this.isProcessing = false;
@@ -452,7 +455,7 @@ struct Index {
     }
 
     if (this.isVpnMode && VpnEncoder.isWebvpnPortal(currentUrl)) {
-      console.info('testTag VPN模式：在WebVPN门户页，导航到EAMS...');
+      console.info('[ClassTableScrape] VPN模式：在WebVPN门户页，导航到EAMS...');
       this.message = 'VPN登录成功，正在跳转教务系统...';
       setTimeout(() => {
         this.controller.loadUrl(VpnEncoder.buildVpnEamsPortalUrl());
@@ -464,7 +467,7 @@ struct Index {
 
     this.controller.runJavaScript(checkLoginJs, (error: Error | null, result: string) => {
       if (error) {
-        console.error('testTag检查登录状态失败:', error);
+        console.error('[ClassTableScrape] 检查登录状态失败:', error);
         return;
       }
 
@@ -474,14 +477,14 @@ struct Index {
           const inner: string = JSON.parse(result);
           if (typeof inner === 'string') {
             loginResult = inner;
-            console.info('testTag登录状态双重JSON编码，取内部字符串');
+            console.info('[ClassTableScrape] 登录状态双重JSON编码，取内部字符串');
           }
         }
         const loginStatus: LoginStatus = JSON.parse(loginResult) as LoginStatus;
-        console.info('testTag登录状态:', loginStatus);
+        console.info('[ClassTableScrape] 登录状态:', loginStatus);
 
         if (loginStatus.status === 'repeat_login_prompt') {
-          console.info('testTag检测到重复登录踢出确认页，执行自动确认');
+          console.info('[ClassTableScrape] 检测到重复登录踢出确认页，执行自动确认');
           this.message = '检测到多设备登录提示，正在自动确认...';
           const confirmUrl: string = (loginStatus.href && loginStatus.href.length > 0) ?
             loginStatus.href :
@@ -490,27 +493,27 @@ struct Index {
             if (!this.isPageActive) {
               return;
             }
-            console.info('testTag loadUrl confirm repeat login:', confirmUrl);
+            console.info('[ClassTableScrape] loadUrl confirm repeat login:', confirmUrl);
             this.controller.loadUrl(confirmUrl);
           }, 300);
           return;
         }
 
         if (loginStatus.status === 'logged_in') {
-          console.info('testTag检测到已登录，原因:', loginStatus.reason || 'unknown');
+          console.info('[ClassTableScrape] 检测到已登录，原因:', loginStatus.reason || 'unknown');
           this.isLoggedIn = true;
           this.message = '已登录，正在跳转课表...';
           setTimeout(() => {
             this.navigateToCourseTable();
           }, 800);
         } else if (loginStatus.status === 'not_logged_in') {
-          console.info('testTag未登录，等待用户输入凭据');
+          console.info('[ClassTableScrape] 未登录，等待用户输入凭据');
           this.isLoggedIn = false;
           this.isProcessing = false;
           this.message = '请完成统一身份认证登录';
         }
       } catch (e) {
-        console.error('testTag解析登录状态失败:', e);
+        console.error('[ClassTableScrape] 解析登录状态失败:', e);
       }
     });
   }
@@ -521,7 +524,7 @@ struct Index {
     }
 
     this.message = '正在查找课表链接...';
-    console.info('testTag开始查找课表链接，延迟2秒确保页面加载完成');
+    console.info('[ClassTableScrape] 开始查找课表链接，延迟2秒确保页面加载完成');
 
     setTimeout(() => {
       this.doNavigateToCourseTable();
@@ -533,12 +536,12 @@ struct Index {
     const onCampusNetwork: boolean = currentUrl.includes('eams.uestc.edu.cn');
 
     if (currentUrl.includes('courseTableForStd')) {
-      console.info('testTag已在课表页面，无需再次导航');
+      console.info('[ClassTableScrape] 已在课表页面，无需再次导航');
       return;
     }
 
     if (this.isVpnMode && !onCampusNetwork) {
-      console.info('testTag VPN模式：直接导航到VPN代理的课表URL');
+      console.info('[ClassTableScrape] VPN模式：直接导航到VPN代理的课表URL');
       this.message = '正在跳转到课表页面...';
       const vpnCourseTableUrl = VpnEncoder.buildVpnCourseTableUrl();
       setTimeout(() => {
@@ -551,20 +554,20 @@ struct Index {
 
     this.controller.runJavaScript(findCourseTableJs, (error: Error | null, result: string) => {
       if (error) {
-        console.error('testTag查找课表链接失败:', error);
+        console.error('[ClassTableScrape] 查找课表链接失败:', error);
         this.message = '查找课表链接失败，请手动点击';
         this.needManualClick = true;
         return;
       }
 
       try {
-        console.info('testTag准备解析result:', result);
+        console.info('[ClassTableScrape] 准备解析result:', result);
         let parsedResult: object | string;
         if (result.trim().startsWith('"')) {
           const inner: string = JSON.parse(result);
           if (typeof inner === 'string' && (inner.trim().startsWith('{') || inner.trim().startsWith('['))) {
             parsedResult = JSON.parse(inner);
-            console.info('testTag双重JSON编码，解析内部JSON');
+            console.info('[ClassTableScrape] 双重JSON编码，解析内部JSON');
           } else {
             parsedResult = inner;
           }
@@ -572,28 +575,28 @@ struct Index {
           parsedResult = JSON.parse(result);
         }
         const linkInfo: LinkInfo = parsedResult as LinkInfo;
-        console.info('testTag查找结果:', JSON.stringify(linkInfo));
+        console.info('[ClassTableScrape] 查找结果:', JSON.stringify(linkInfo));
 
         if (linkInfo && linkInfo.href && linkInfo.href.length > 0) {
           this.message = '正在跳转到课表页面...';
-          console.info('testTag正在导航到:', linkInfo.href);
+          console.info('[ClassTableScrape] 正在导航到:', linkInfo.href);
           const targetUrl: string = linkInfo.href;
           setTimeout(() => {
-            console.info('testTag执行loadUrl:', targetUrl);
+            console.info('[ClassTableScrape] 执行loadUrl:', targetUrl);
             this.controller.loadUrl(targetUrl);
-            console.info('testTagloadUrl已执行');
+            console.info('[ClassTableScrape] loadUrl已执行');
           }, 500);
         } else {
-          console.error('testTag未找到有效的课表链接，linkInfo:', linkInfo);
+          console.error('[ClassTableScrape] 未找到有效的课表链接，linkInfo:', linkInfo);
           const fallbackUrl: string = AppConstants.EAMS_COURSE_TABLE_URL;
-          console.info('testTag使用回退URL导航:', fallbackUrl);
+          console.info('[ClassTableScrape] 使用回退URL导航:', fallbackUrl);
           this.message = '正在跳转到课表页面...';
           setTimeout(() => {
             this.controller.loadUrl(fallbackUrl);
           }, 500);
         }
       } catch (e) {
-        console.error('testTag解析链接信息失败:', e);
+        console.error('[ClassTableScrape] 解析链接信息失败:', e);
         this.message = '解析失败，请手动点击"我的课表"';
         this.needManualClick = true;
       }
@@ -613,23 +616,23 @@ struct Index {
     this.controller.runJavaScript(jsCode, (error: Error | null, result: string) => {
       this.isExtracting = false;
       if (error) {
-        console.error('testTag执行JavaScript失败:', error);
+        console.error('[ClassTableScrape] 执行JavaScript失败:', error);
         this.handleCourseFetchFailure('脚本执行失败');
         return;
       }
 
-      console.info('testTag JavaScript执行结果:', result);
+      console.info('[ClassTableScrape] JavaScript执行结果:', result);
 
       if (result) {
         try {
-          console.info('testTag原始result长度:', result.length);
-          console.info('testTag原始result前200字符:', result.substring(0, 200));
+          console.info('[ClassTableScrape] 原始result长度:', result.length);
+          console.info('[ClassTableScrape] 原始result前200字符:', result.substring(0, 200));
 
           let inner: string = '';
           if (result.trim().startsWith('"')) {
             inner = JSON.parse(result);
-            console.info('testTag JSON.parse后长度:', inner.length);
-            console.info('testTag JSON.parse后前100字符:', inner.substring(0, 100));
+            console.info('[ClassTableScrape] JSON.parse后长度:', inner.length);
+            console.info('[ClassTableScrape] JSON.parse后前100字符:', inner.substring(0, 100));
           } else {
             inner = result;
           }
@@ -638,22 +641,22 @@ struct Index {
 
           if (inner.trim().startsWith('{')) {
             courseData = JSON.parse(inner) as CourseTableData;
-            console.info('testTag direct JSON parse');
+            console.info('[ClassTableScrape] direct JSON parse');
           } else {
             const decodedBuf: buffer.Buffer = buffer.from(inner, 'base64');
             const jsonStr: string = decodedBuf.toString('utf-8');
-            console.info('testTag Base64解码后JSON长度:', jsonStr.length);
-            console.info('testTag Base64解码后JSON前200字符:', jsonStr.substring(0, 200));
+            console.info('[ClassTableScrape] Base64解码后JSON长度:', jsonStr.length);
+            console.info('[ClassTableScrape] Base64解码后JSON前200字符:', jsonStr.substring(0, 200));
             courseData = JSON.parse(jsonStr) as CourseTableData;
-            console.info('testTag Base64 decode and JSON parse OK');
+            console.info('[ClassTableScrape] Base64 decode and JSON parse OK');
           }
 
           if (courseData.error) {
-            console.error('testTag获取数据错误:', courseData.error);
+            console.error('[ClassTableScrape] 获取数据错误:', courseData.error);
             if (courseData.error.includes('未找到table0')) {
               this.table0NotFoundCount++;
               if (this.table0NotFoundCount >= this.MAX_TABLE0_NOT_FOUND) {
-                console.error('testTag未找到table0次数过多，停止自动重试');
+                console.error('[ClassTableScrape] 未找到table0次数过多，停止自动重试');
                 this.enableManualMode('课表数据加载异常，请点击刷新重试');
                 this.showRefreshBtn = true;
                 return;
@@ -666,12 +669,12 @@ struct Index {
           this.table0NotFoundCount = 0;
 
           if (!courseData.activities) {
-            console.error('testTag activities为undefined, courseData:', JSON.stringify(courseData).substring(0, 500));
+            console.error('[ClassTableScrape] activities为undefined, courseData:', JSON.stringify(courseData).substring(0, 500));
             this.handleCourseFetchFailure('数据格式错误');
             return;
           }
 
-          console.info('testTag activities长度:', courseData.activities.length);
+          console.info('[ClassTableScrape] activities长度:', courseData.activities.length);
 
           let hasCourseData: boolean = false;
           for (let i: number = 0; i < courseData.activities.length; i++) {
@@ -698,22 +701,22 @@ struct Index {
               this.persistAndNavigateToTableUI(latestCourseData);
             }
           } else {
-            console.info('testTag未获取到课程数据，页面可能尚未完全加载');
+            console.info('[ClassTableScrape] 未获取到课程数据，页面可能尚未完全加载');
             this.handleCourseFetchFailure('课表数据为空');
           }
         } catch (e) {
-          console.error('testTag 解析课程数据失败:', e);
+          console.error('[ClassTableScrape] 解析课程数据失败:', e);
           this.handleCourseFetchFailure('数据解析失败');
         }
       } else {
-        console.info('testTagJavaScript执行结果为空');
+        console.info('[ClassTableScrape] JavaScript执行结果为空');
         this.handleCourseFetchFailure('执行结果为空');
       }
     });
   }
 
   private handleCourseFetchFailure(reason: string): void {
-    console.info('testTag自动获取失败原因:', reason);
+    console.info('[ClassTableScrape] 自动获取失败原因:', reason);
     if (this.fetchRetryCount < this.MAX_FETCH_RETRY) {
       this.fetchRetryCount++;
       this.message = `获取失败，正在重试(${this.fetchRetryCount}/${this.MAX_FETCH_RETRY})...`;
@@ -734,7 +737,7 @@ struct Index {
     }
 
     if (!this.isVpnMode && !this.vpnAutoDetected) {
-      console.info('testTag Course fetch failed, switching to VPN mode');
+      console.info('[ClassTableScrape] Course fetch failed, switching to VPN mode');
       this.switchToVpnMode();
       return;
     }
@@ -743,7 +746,7 @@ struct Index {
   }
 
   private handlePageLoadFailure(reason: string): void {
-    console.info('testTag页面加载失败:', reason);
+    console.info('[ClassTableScrape] 页面加载失败:', reason);
     if (this.pageRetryCount < this.MAX_PAGE_RETRY) {
       this.pageRetryCount++;
       this.message = `页面加载失败，重试(${this.pageRetryCount}/${this.MAX_PAGE_RETRY})...`;
@@ -785,9 +788,9 @@ struct Index {
   }
 
   parseAndPrintCourses(data: CourseTableData): void {
-    console.info('testTag========== 课表数据 ==========');
-    console.info('testTag总单元数:', data.unitCounts);
-    console.info('testTag=============================');
+    console.info('[ClassTableScrape] ========== 课表数据 ==========');
+    console.info('[ClassTableScrape] 总单元数:', data.unitCounts);
+    console.info('[ClassTableScrape] =============================');
 
     let courseCount: number = 0;
     this.currentActivities = data.activities;
@@ -798,24 +801,24 @@ struct Index {
         for (const activity of slotActivities) {
           if (activity && activity.courseName) {
             courseCount++;
-            console.info('\n【课程 ' + courseCount + '】');
-            console.info('时间段索引:', i);
-            console.info('课程名称:', activity.courseName);
-            console.info('教师:', activity.teacherName || '未知');
-            console.info('教室:', activity.roomName || '未知');
-            console.info('教师ID:', activity.teacherId);
-            console.info('课程ID:', activity.courseId);
-            console.info('教室ID:', activity.roomId);
-            console.info('有效周次:', this.parseValidWeeks(activity.vaildWeeks));
-            console.info('原始周次字符串:', activity.vaildWeeks);
+            console.info('[ClassTableScrape] \n【课程 ' + courseCount + '】');
+            console.info('[ClassTableScrape] 时间段索引:', i);
+            console.info('[ClassTableScrape] 课程名称:', activity.courseName);
+            console.info('[ClassTableScrape] 教师:', activity.teacherName || '未知');
+            console.info('[ClassTableScrape] 教室:', activity.roomName || '未知');
+            console.info('[ClassTableScrape] 教师ID:', activity.teacherId);
+            console.info('[ClassTableScrape] 课程ID:', activity.courseId);
+            console.info('[ClassTableScrape] 教室ID:', activity.roomId);
+            console.info('[ClassTableScrape] 有效周次:', this.parseValidWeeks(activity.vaildWeeks));
+            console.info('[ClassTableScrape] 原始周次字符串:', activity.vaildWeeks);
           }
         }
       }
     }
 
-    console.info('testTag\n=============================');
-    console.info('testTag共找到 ' + courseCount + ' 门课程');
-    console.info('testTag=============================');
+    console.info('[ClassTableScrape] \n=============================');
+    console.info('[ClassTableScrape] 共找到 ' + courseCount + ' 门课程');
+    console.info('[ClassTableScrape] =============================');
   }
 
   parseValidWeeks(weeksStr: string): string {
@@ -863,9 +866,9 @@ struct Index {
       const context = getContext(this);
       await CourseRepository.saveCourseDataBySemester(context, this.courseTableTargetSemesterId, courseData);
       await CourseService.saveRawCourseData(context, JSON.parse(courseData));
-      console.info('courseCache: 抓取成功并已写入本地');
+      console.info('[ClassTableScrape] courseCache: 抓取成功并已写入本地');
     } catch (error) {
-      console.error('courseCache: 保存课表本地数据失败:', error);
+      console.error('[ClassTableScrape] courseCache: 保存课表本地数据失败:', error);
     }
 
     if (this.returnToHome) {

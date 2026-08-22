@@ -7,7 +7,7 @@ export class GradeService {
       const grades: GradeItem[] = await GradeRepository.loadGrades(context);
       return GradeUtils.sortGrades(grades);
     } catch (error) {
-      console.error('GradeService loadGrades error:', JSON.stringify(error));
+      console.error('[GradeService] loadGrades error:', JSON.stringify(error));
       return [];
     }
   }
@@ -17,7 +17,7 @@ export class GradeService {
       const sorted: GradeItem[] = GradeUtils.sortGrades(grades);
       await GradeRepository.saveGrades(context, sorted);
     } catch (error) {
-      console.error('GradeService saveGrades error:', JSON.stringify(error));
+      console.error('[GradeService] saveGrades error:', JSON.stringify(error));
     }
   }
 
