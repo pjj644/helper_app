@@ -34,6 +34,12 @@ export class CourseService {
     CourseService.updateNextCourseCache(context).catch(() => {});
   }
 
+  static async saveCoursesForSemester(context: Object, semesterId: number, courses: Course[]): Promise<void> {
+    const rawData = CourseService.coursesToRawData(courses);
+    await CourseRepository.saveCourseDataBySemester(context, semesterId, JSON.stringify(rawData));
+    CourseService.updateNextCourseCache(context).catch(() => {});
+  }
+
   static async saveRawCourseData(context: Object, rawData: RawCourseTableData): Promise<void> {
     await CourseRepository.saveCourseData(context, JSON.stringify(rawData));
     CourseService.updateNextCourseCache(context).catch(() => {});

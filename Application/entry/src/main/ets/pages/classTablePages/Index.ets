@@ -8,6 +8,7 @@ import { CourseRepository } from '../../repository/CourseRepository';
 import { VpnEncoder } from '../../common/utils/VpnEncoder';
 import { LoadingOverlay } from '../../components/LoadingOverlay';
 import { calculateSemesterId } from '../../model/classTableModel/ExamAccessRules';
+import { WebScrapeTakeoverBar } from '../../components/WebScrapeTakeoverBar';
 
 interface CourseActivity {
   teacherId: string;
@@ -107,17 +108,37 @@ struct Index {
   build() {
     Stack() {
       Column() {
-        Text(this.message)
-          .fontSize(14)
-          .fontColor('#666666')
-          .margin({ top: 8, bottom: 4, left: 12, right: 12 });
-
-        if (this.needManualClick) {
-          Text('自动处理失败，请在当前页面手动操作')
-            .fontSize(13)
-            .fontColor('#D32F2F')
-            .margin({ left: 12, right: 12, bottom: 8 });
-        }
+        WebScrapeTakeoverBar({
+          isManualMode: this.manualMode,
+          promptMessage: this.message,
+          isExtracting: this.isExtracting,
+          onScrape: () => {
+            this.extractCourseData(true);
+          },
+          onRefresh: () => {
+            this.reloadCurrentPage();
+          },
+          onBack: () => {
+            try {
+              if (this.controller.accessBackward()) {
+                this.controller.backward();
+              }
+            } catch (e) {}
+          },
+          onToggleVpn: () => {
+            this.switchToVpnMode();
+          },
+          onToggleManual: () => {
+            this.manualMode = !this.manualMode;
+            if (this.manualMode) {
+              this.isProcessing = false;
+              this.message = '已开启手动接管模式：请在网页中完成登录或跳转，随后点击“立即抓取当前页”';
+            } else {
+              this.isProcessing = true;
+              this.message = '正在自动处理中...';
+            }
+          }
+        })
 
         Web({ src: this.currentUrl, controller: this.controller })
         .width('100%')
@@ -579,8 +600,8 @@ struct Index {
     });
   }
 
-  extractCourseData(): void {
-    if (this.manualMode || this.isExtracting || this.autoNavigateTriggered) {
+  extractCourseData(isManualTrigger: boolean = false): void {
+    if ((this.manualMode && !isManualTrigger) || this.isExtracting || this.autoNavigateTriggered) {
       return;
     }
 

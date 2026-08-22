@@ -1,56 +1,97 @@
-# AGENTS.md
+# agent.md
 
-> 给 AI 编码助手的快速上手指令。详细规格见 [CLAUDE.md](./CLAUDE.md) 与 [doc/](./doc/)（均为中文），本文件只写「不查就会猜错」的关键事实。
+> 给 AI 编码助手（Claude Code / Antigravity / OpenCode / Codex）的统一快速上手指令。
+> 详细架构与技术规格见 [`doc/`](./doc/)（均为中文），本文件汇总「无需猜测、开箱即用」的核心规范、开发指令与架构要点。
 
-## 仓库结构（最反直觉的一点）
+## 1. 仓库结构（核心事实）
 
-- **git 仓库在项目根目录 `D:\harmony\helper_app`**（2026-08 由 `Application/` 内迁移而来，历史保留，路径加了 `Application/` 前缀）。所有项目文件都在这个仓库里。
-- 唯一的例外：AI 助手后端 `C:\Users\28399\Desktop\华为云\后端服务\ai-proxy`（在项目目录之外）是独立仓库。
-- `information/`（EAMS 抓取页面 HTML 存档）体积大且频繁更新，**已 .gitignore 不入库**；`playwright/`、`doc/`、`CLAUDE.md`、`AGENTS.md`、`_*.bat`、`icon/` 均已入库。
-- 提交在根目录：`git add` + `git commit`，消息格式 `type: what & why`（feat/fix/refactor/docs/chore），以 `Co-Authored-By: Claude <noreply@anthropic.com>` 结尾；勿提交 `.env` 或密钥。可用 `devecocli` 无关，git 直接在根目录操作。
+- **Git 仓库在项目根目录 `D:\harmony\helper_app`**（2026-08 由 `Application/` 内迁移而来，历史保留，路径带 `Application/` 前缀）。所有项目文件都在此仓库中统一管理。
+- **唯一独立仓库**：AI 助手后端 `C:\Users\28399\Desktop\华为云\后端服务\ai-proxy`（在项目目录之外，独立 Git 仓库）。
+- **目录布局**：
+  - **`Application/`** — HarmonyOS app（ArkTS / API 6.0.2/22），源码 `entry/src/main/ets/`，入口 `EntryAbility.ets` -> `pages/Index.ets`。
+  - **`CloudProgram/`** — 云端 Node.js（Cloud DB schema、云函数）。
+  - **`doc/`** — 详细技术与架构文档（`ARCHITECTURE.md`, `AI_AGENT.md`, `AI_AGENT_ARCHITECTURE.md`, `BUILD_AND_TEST.md`, `CHANGES.md`）。
+  - **`information/`** — EAMS 抓取 HTML 存档（体积大且频繁更新，已 .gitignore 不入库）。
+- **提交规范**：在根目录执行 `git add` + `git commit -m "type: what & why"`（`feat/fix/refactor/docs/chore`），消息以 `Co-Authored-By: Claude <noreply@anthropic.com>` 结尾；严禁提交 `.env`、密钥或凭据。
 
-## 工具链（DevEco CLI + MCP）
+## 2. 工具链与 MCP
 
-- **DevEco CLI（官方，`@deveco/deveco-cli` v1.2.2）已全局安装**，命令 `devecocli`。自动探测 DevEco Studio（本机 `D:\deveco\DevEco Studio`，也可用环境变量 `DEVECO_CLI_STUDIO_PATH` 显式指定）。
-- **MCP 已配置**：根目录 `.opencode/opencode.json` 中 `deveco-mcp`（`devecocli serve mcp`，stdio 本地服务，`PROJECT_PATH` 环境变量指向 `Application/`；改动后需重启 opencode 生效）。工具：`check`（ArkTS / C++ LSP 静态诊断，**首次调用会先做项目 sync，返回 "Project is syncing，请 10s 后重试" 属正常**）、`restart`（卡死后原地重启 LSP）；可选工具组 `emulator_manager` / `ui_integration_test`（需 `ADDITIONAL_TOOL_GROUPS` 环境变量开启，未启用）。
-- `devecocli` 常用：
-  - `devecocli build [--modules entry@default] [--build-mode debug]` — 构建；`devecocli build clean` — 清产物
-  - `devecocli check lint` — 运行 code-linter.json5 的 lint（**可在 CLI 跑，不再只限于 DevEco**）；`devecocli check compat` — 跨 SDK API 兼容扫描；MCP `check` 工具则是单文件语法诊断
-  - `devecocli device list` / `devecocli emulator list` / `devecocli run` / `devecocli log` / `devecocli ui` — 设备/模拟器/运行/日志/UI 操作
-  - `devecocli docs search <关键词>` / `docs read <id>` — 本地 2000 万字官方文档检索
-  - `devecocli signature generate` — 自动生成调试签名
-- `devecocli skills`：安装鸿蒙官方 Skills 到本机 AI Agent（如 `hmos-arkts-syntax-checker`）；本项目 `arkts-syntax-assistant` skill 仍可用。
+- **DevEco CLI（官方，`@deveco/deveco-cli` v1.2.2）**：已全局安装，命令 `devecocli`。自动探测 DevEco Studio（本机 `D:\deveco\DevEco Studio`，也可用环境变量 `DEVECO_CLI_STUDIO_PATH` 显式指定）。
+- **DevEco MCP 配置**：根目录 `.opencode/opencode.json` 中配置了 `deveco-mcp`（`devecocli serve mcp`，stdio 本地服务，`PROJECT_PATH` 指向 `Application/`；修改后需重启生效）。
+  - `check`：ArkTS / C++ LSP 静态诊断（**首次调用会先做项目 sync，返回 "Project is syncing，请 10s 后重试" 属正常**）。
+  - `restart`：LSP 卡死后原地重启。
+- **Skills 辅助**：可加载 `.agents/skills/arkts-syntax-assistant` 解决 ArkTS 语法与鸿蒙 API 约束。
 
-## 构建（DevEco 路径含空格，不要直接跑 hvigorw）
+## 3. 构建与验证（DevEco 路径含空格）
 
-- DevEco 装在 `D:\deveco\DevEco Studio\`。**首选 `devecocli build`**（自动处理 SDK / JAVA 环境），或根目录批处理：
-  - `_build.bat` — 增量 debug 构建（日常验证用，内部优先 devecocli，回退 hvigorw）
-  - `_clean_build.bat` — 干净构建
-  - `_lint.bat` — CLI 跑 lint（`devecocli check lint`）
-- 调用：PowerShell 用 `& "D:\harmony\helper_app\_build.bat"`（git bash 用 `cmd //c`）。**不要**直接敲 `hvigorw`，会因空格路径或环境变量失败；`.bat` 内不要 `setlocal`（会让 devecocli 找不到工程）.
-- 成功标志：`BUILD SUCCESSFUL`。`@hw-agconnect/auth` 的 `sourceMapsPath` 警告是预先存在的，无关紧要。
-- App 代码**没有自动化测试**；验证手段 = 构建 0 error + DevEco Previewer + 真机 Logcat。Lint 现在有独立 CLI：`devecocli check lint`（或 `_lint.bat`）。
+DevEco 安装在 `D:\deveco\DevEco Studio\`（路径含空格）。**严禁直接敲 `hvigorw`**（会因空格或环境变量解析失败）。
 
-## 架构速记（Application/entry/src/main/ets/）
+### 推荐构建方式：
+1. **官方 CLI**（推荐）：
+   ```bash
+   devecocli build --modules entry@default --build-mode debug   # debug 增量构建
+   devecocli build clean                                        # 清理产物
+   devecocli check lint                                         # 运行 code-linter (0 error)
+   devecocli check compat                                       # 跨 SDK API 兼容扫描
+   ```
+2. **根目录批处理脚本**（内部优先 `devecocli`，自动回退 hvigorw；**脚本内不要 `setlocal`**）：
+   - PowerShell：`& "D:\harmony\helper_app\_build.bat"`
+   - CMD / Git Bash：`cmd //c "D:\harmony\helper_app\_build.bat"`
+   - 全量编译：`_clean_build.bat`
+   - 代码检查：`_lint.bat`
+- **构建成功标志**：`BUILD SUCCESSFUL`。`@hw-agconnect/auth` 的 `sourceMapsPath` 警告为预先存在，无关紧要。
+- **验证手段**：构建 0 error + `devecocli check lint` 0 error + DevEco Previewer / 真机 Logcat。
 
-- 分层 `pages → service → repository → model → common`；数据流 Pages → Service → Repository → Preferences / Cloud DB。
-- **`model/` 是纯 TS，禁止 `@kit.*` 导入**，只做解析/过滤/排序——硬约束，改模型时别引 HarmonyOS API。
-- `common/constants/AppConstants.ets` 是所有偏好键 / URL / 魔法数字的唯一来源，不要新增散落常量。
-- 本地存储：preferences `classtable_login_pref`（鉴权）、`course_table_local_db`（全部应用数据）。
-- 学期/周次：`CourseModel.getCurrentWeek()` 锚定 `2026-08-31` 周一（2026-2027 第一学期）；考试学期 ID 由 `ExamAccessRules.calculateSemesterId()` 按 base 503 步长 20 计算——**不要硬编码学期号**。
+## 4. 架构速记（`Application/entry/src/main/ets/`）
 
-## AI 助手（加工具必须三处同步）
+- **分层模式**：`pages → components → service → repository → model → common`；
+- **数据流向**：`Pages / FloatingWindow → Service → Repository → Preferences / Cloud DB`；
+- **纯 TS Model 约束**：**`model/` 是纯 TS，严禁任何 `@kit.*` 导入**，只做数据接口定义、JSON 解析与排序计算；
+- **常量唯一收归**：`common/constants/AppConstants.ets` 是所有偏好键、URL 路径、路由常量、魔法数字的**唯一来源**，禁止在代码中散落常量；
+- **五 Tab 导航**：`pages/Index.ets` 包含发现（Quick）、AI助手（Assistant）、课程（Class）、日历（Calendar）、我的（Mine）；
+- **本地存储**：基于 `@kit.ArkData` preferences：
+  - `classtable_login_pref`：用户认证鉴权；
+  - `course_table_local_db`：应用核心业务数据（课表、考试、成绩、日程、设置）；
+  - `chat_sessions_db` / `chat_messages_db`：AI 助手统一会话历史（`ChatSessionRepository`）。
+- **学期与周次计算**：
+  - `CourseModel.getCurrentWeek()` / `getWeekForDate(date)`：锚定到含行课首日的周一（当前学期：`2026-08-31`，2026-2027 第一学期）；
+  - `ExamAccessRules.calculateSemesterId()`：按 base 503（2025-2026 第二学期）步长 20 计算学期 ID，**禁止硬编码学期号**。
 
-- 新增/修改工具要同步 3 个文件，工具名必须一致：
-  1. 后端 `src/tools.ts` — schema + `toolMeta`（requiresConfirmation / riskLevel）
-  2. 前端 `ToolExecutor.ets` — switch 分发执行
-  3. 前端 `ToolRegistry.ets` — 定义镜像（确认弹窗读风险等级）
-- 后端开发：`cd "C:\Users\28399\Desktop\华为云\后端服务\ai-proxy" && npm run dev`（端口 3000）。`.env`（`DEEPSEEK_API_KEY` 等）已 gitignore，勿提交。
-- 后端单独验证（不接手机）：`node test/phone-sim.mjs` + `npm run typecheck`。
-- 真机/模拟器连后端用**局域网 IP**（应用设置里填，如 `http://192.168.1.11:3000`），不是 localhost；明文 HTTP 已全局 `allowsCleartext`，勿动 module.json5。
-- 调试日志前缀：`[BackendAgentClient]` / `[CalendarKit]` / `[ReminderDebug]` / `[ExamDebug]` / `[HomeDebug]`。
+## 5. AI 助手开发（加工具必须三处同步）
 
-## 其他
+### 架构模式
+- **后端大脑**：LangGraph 编排 + DeepSeek 推理 + 智谱 GLM-4V 视觉识别 + 成电校园生活指南 RAG 知识库 + 教务处官网实时检索 + SQLite 会话持久化。
+- **端侧统一控制引擎**：`BackendAgentClient`（SSE 长连接客户端）+ `DataQueryEngine`（纯内存多维查询）+ `ToolExecutor`（5 大元工具、流水线批处理、系统日历联动）+ `FloatingWindowManager`（SubWindow 全局伴随悬浮窗）+ `MarkdownBubble`（原生 Markdown 渲染与折叠工具面板）。
 
-- ArkTS 语法/迁移问题可加载 `arkts-syntax-assistant` skill（位于 `.agents/skills/`）。
-- 按需查阅：`doc/ARCHITECTURE.md`（架构）、`doc/AI_AGENT.md`（协议/工具清单）、`doc/BUILD_AND_TEST.md`（构建/联调/提交）、`doc/CHANGES.md`（变更日志）。
+### 加工具的三处同步铁律（名称与参数必须完全一致）
+1. **后端 Schema 与元数据**：`ai-proxy/src/tools.ts`（定义 schema 与 `toolMeta`：`requiresConfirmation` / `riskLevel`）；
+2. **前端执行器**：`ToolExecutor.ets`（`switch(toolName)` 分发执行具体逻辑）；
+3. **前端注册表**：`ToolRegistry.ets`（定义镜像用于端侧动态风险评级与确认弹窗判定）。
+
+### 后端开发与验证
+- **启动后端**：`cd "C:\Users\28399\Desktop\华为云\后端服务\ai-proxy" && npm run dev`（端口 3000）。后端 `.env`（`DEEPSEEK_API_KEY` 等）已 gitignore，勿提交。
+- **单独模拟联调**（不连手机）：`node test/phone-sim.mjs` + `npm run typecheck`。
+- **真机/模拟器联调**：填电脑 **局域网 LAN IP**（如 `http://192.168.1.11:3000`），不要填 `localhost`。
+- **调试日志前缀**：`[BackendAgentClient]` / `[CalendarKit]` / `[ReminderDebug]` / `[ExamDebug]` / `[HomeDebug]` / `[FloatingWindow]`。
+
+## 6. 常用命令速查（Slash Commands）
+
+| 命令 | 对应操作 / 作用 |
+|---|---|
+| `/build` | 构建 HAP 并报告结果（`_build.bat`，增量 debug 构建） |
+| `/clean` | 干净全量构建（`_clean_build.bat`） |
+| `/lint` | 运行代码静态检查（`_lint.bat` / `devecocli check lint`） |
+| `/commit` | 按规范提交改动（`type: what & why` + `Co-Authored-By`） |
+| `/add-tool` | AI 助手加工具三处同步流程（后端 `tools.ts` + 前端 `ToolExecutor.ets` + `ToolRegistry.ets`） |
+| `/dev-backend` | 启动 `ai-proxy` 后端开发服务（端口 3000）并进行健康检查 |
+
+## 7. 按需查阅详细文档
+
+| 需要了解的模块 | 详细文档路径 |
+|---|---|
+| 完整架构 / 分层 / 数据流 / 五 Tab 结构 / 抓取 / 学期计算 | [`doc/ARCHITECTURE.md`](./doc/ARCHITECTURE.md) |
+| AI 助手：协议 / 5大元工具 / 悬浮窗 / Markdown渲染 / 日历联动 | [`doc/AI_AGENT.md`](./doc/AI_AGENT.md) |
+| AI 助手全景技术架构：LangGraph 状态机 / 端侧时序图 / 风险鉴权 | [`doc/AI_AGENT_ARCHITECTURE.md`](./doc/AI_AGENT_ARCHITECTURE.md) |
+| 构建 / 运行 / 联调 / 签名 / 权限 / 完整测试用例清单 | [`doc/BUILD_AND_TEST.md`](./doc/BUILD_AND_TEST.md) |
+| 逐阶段变更日志（功能演进、重构与修复历史） | [`doc/CHANGES.md`](./doc/CHANGES.md) |
+| AI 助手从设备端迁移至后端的设计方案（历史存档） | [`doc/AI_AGENT_PLAN.md`](./doc/AI_AGENT_PLAN.md) |

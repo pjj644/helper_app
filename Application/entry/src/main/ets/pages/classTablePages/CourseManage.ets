@@ -1,7 +1,9 @@
 import { router } from '@kit.ArkUI';
 import { Course } from '../../model/classTableModel/CourseModel';
 import { CourseService } from '../../service/CourseService';
+import { CourseRepository } from '../../repository/CourseRepository';
 import { ThemeManager } from '../../common/utils/ThemeManager';
+import { getSemesterOptions, SemesterOptionSet, getSemesterLabelById, calculateSemesterId } from '../../model/classTableModel/ExamAccessRules';
 
 @Entry
 @Component
@@ -9,6 +11,9 @@ struct CourseManage {
   @State courses: Course[] = [];
   @State showEditor: boolean = false;
   @State editIndex: number = -1;
+  @State selectedSemesterId: number = calculateSemesterId();
+  @State semesterOptions: SelectOption[] = [];
+  @State semesterOptionIds: number[] = [];
 
   @State formId: string = '';
   @State formName: string = '';
@@ -20,12 +25,25 @@ struct CourseManage {
   @State formWeeks: string = '1-20';
 
   aboutToAppear(): void {
+    this.initSemesterOptions();
     this.loadCourseList();
+  }
+
+  private initSemesterOptions(): void {
+    const semesterSet: SemesterOptionSet = getSemesterOptions();
+    const filteredOptions: SelectOption[] = [];
+    const filteredIds: number[] = [];
+    for (let i = 1; i < semesterSet.options.length; i++) {
+      filteredOptions.push(semesterSet.options[i]);
+      filteredIds.push(semesterSet.semesterIds[i]);
+    }
+    this.semesterOptions = filteredOptions;
+    this.semesterOptionIds = filteredIds;
   }
 
   private async loadCourseList(): Promise<void> {
     try {
-      const allCourses: Course[] = await CourseService.loadCourses(getContext(this));
+      const allCourses: Course[] = await CourseService.loadCoursesForSemester(getContext(this), this.selectedSemesterId);
       allCourses.sort((a, b) => {
         if (a.time.dayOfWeek !== b.time.dayOfWeek) {
           return a.time.dayOfWeek - b.time.dayOfWeek;
@@ -171,13 +189,13 @@ struct CourseManage {
     }
 
     this.showEditor = false;
-    await CourseService.saveCourses(getContext(this), CourseService.getAllCourses());
+    await CourseService.saveCoursesForSemester(getContext(this), this.selectedSemesterId, CourseService.getAllCourses());
     await this.loadCourseList();
   }
 
   private async deleteCourse(index: number): Promise<void> {
     CourseService.deleteCourse(index);
-    await CourseService.saveCourses(getContext(this), CourseService.getAllCourses());
+    await CourseService.saveCoursesForSemester(getContext(this), this.selectedSemesterId, CourseService.getAllCourses());
     this.courses = CourseService.getAllCourses().sort((a, b) => {
       if (a.time.dayOfWeek !== b.time.dayOfWeek) {
         return a.time.dayOfWeek - b.time.dayOfWeek;
@@ -299,6 +317,15 @@ struct CourseManage {
       .padding(12);
 
       Row({ space: 8 }) {
+        Select(this.semesterOptions)
+          .selected(this.semesterOptionIds.indexOf(this.selectedSemesterId) >= 0 ? this.semesterOptionIds.indexOf(this.selectedSemesterId) : 0)
+          .value(getSemesterLabelById(this.selectedSemesterId))
+          .onSelect(async (index: number) => {
+            this.selectedSemesterId = this.semesterOptionIds[index];
+            await this.loadCourseList();
+          })
+          .layoutWeight(1);
+
         Button('新增课程')
           .onClick(() => this.openAddEditor());
         Button('刷新')

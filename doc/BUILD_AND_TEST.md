@@ -51,7 +51,7 @@ DevEco 装在 `D:\deveco\DevEco Studio\`（路径含空格），直接在 bash �
 - `_clean_build.bat` - clean + 全量构建
 - `_lint.bat` - `devecocli check lint`
 
-用法：`cmd //c "D:\harmony\helper_app\_build.bat"`。成功标志：`BUILD SUCCESSFUL`。警告通常来自 `@hw-agconnect/auth` 的 `sourceMapsPath`（预先存在，无关）。
+用法：`cmd //c "D:\harmony\helper_app\_build.bat"` 或 PowerShell `& "D:\harmony\helper_app\_build.bat"`。成功标志：`BUILD SUCCESSFUL`。警告通常来自 `@hw-agconnect/auth` 的 `sourceMapsPath`（预先存在，无关）。
 
 ## 模拟器 / 真机
 
@@ -59,26 +59,35 @@ DevEco 装在 `D:\deveco\DevEco Studio\`（路径含空格），直接在 bash �
 2. 签名有效后点 **Run (▶)** 构建/安装/启动。
 3. 模拟器走 NAT，**访问本机后端用真实 LAN IP**，不是 `localhost`。优先用真机联调。
 4. 所需权限：`INTERNET`（抓取/云）、`NOTIFICATION`（提醒）、`READ_CALENDAR` / `WRITE_CALENDAR`（Calendar Kit）。
-5. 调试日志：DevEco Logcat 面板或 `hilog` CLI。关键前缀：`[CalendarKit]` / `[ReminderDebug]` / `[ExamDebug]` / `[HomeDebug]` / `[BackendAgentClient]`。
+5. 调试日志：DevEco Logcat 面板或 `hilog` CLI。关键前缀：`[CalendarKit]` / `[ReminderDebug]` / `[ExamDebug]` / `[HomeDebug]` / `[BackendAgentClient]` / `[FloatingWindow]`。
 
-## AI 助手 E2E 联调
+## AI 助手与系统联调测试用例
 
-前置：后端在本机运行，手机与电脑**同一 WiFi**。
+前置：后端在本机运行，手机与电脑**处于同一局域网 WiFi**。
 
 1. 启动后端：`cd "C:\Users\28399\Desktop\华为云\后端服务\ai-proxy" && npm run dev`。`curl http://localhost:3000/health` 应返回 200。
 2. 查电脑 WLAN IP（`ipconfig`，如 `192.168.1.11`）。防火墙放行 3000 端口。
 3. DevEco 装新 hap 到真机。打开「应用设置 -> 助手后端」填 `http://192.168.1.11:3000`。
-4. 进 AI 助手测试用例：
-   - 查询类：`今天有几节课` / `明天呢` / `我这周课表` / `高数在哪上` / `下次考试什么时候` / `我GPA多少` / `现在第几周`
-   - 写日历（首次会弹日历权限框）：`把下次考试加到日历，提前30分钟提醒` / `把今天的高数加到日历` / `明天 14:00 开会，建个日程并加到日历，提前15分钟提醒`
-   - 日历管理：`我日历里有哪些事` / `把刚才那个考试提醒删了`
-   - 跳转：`打开课表` / `帮我导入成绩`
-5. 日志关注：后端打印 session/batch/工具名/等待/恢复/超时/断开；前端 `[BackendAgentClient]` 与 `[CalendarKit]`。
+4. 核心用例测试：
+   - **基础查询类**：`今天有几节课` / `明天呢` / `我这周课表` / `高数在哪上` / `下次考试什么时候` / `我GPA多少` / `现在第几周`
+   - **校园智搜类**：`清水河去沙河的班车有哪些` / `缓考怎么申请` / `校医院急诊电话` / `教务处有什么新通知`
+   - **日历与提醒联动**：`把下次考试加到日历，提前30分钟提醒` / `明天14:00在学生活动中心开例会，创建日程并同步日历`
+   - **日历去重与双向删除**：`把刚才那个开会日程删了`（验证系统日历中对应事件被同步清除）
+   - **页面控制与感知**：停留在课表页提问 `切到第5周` / `帮我导入成绩` / `给我高亮显示导入按钮`
+   - **全局悬浮球与浮窗**：
+     - 在「设置」或助手侧边栏开启悬浮球；
+     - 拖拽呼吸悬浮球贴边吸附；
+     - 点击展开 Mini 浮窗，输入 `这学期几门课`，验证流式 Markdown 排版与打字机效果；
+     - 点击 Mini 浮窗顶部「➕」重置会话，验证 Toast 提示与历史会话同步；
+     - 进入全屏「AI助手」Tab，验证悬浮球自动避让隐藏；切出后自动恢复。
+   - **多模态提取**：在助手页点击相册选择讲座通知海报，验证 GLM-4V 自动提取时间地点并生成日程卡片。
+   - **桌面万能服务卡片 (Widget)**：在鸿蒙桌面长按应用图标添加 2x2 课表服务卡片，验证倒计时展示与点击直达。
+5. 日志关注：后端打印 session/batch/工具名/等待/恢复/超时/断开；前端关注 `[BackendAgentClient]`、`[CalendarKit]` 与 `[FloatingWindow]`。
 
 ## 后端单独验证（不接手机）
 
 - `test/phone-sim.mjs` - 模拟手机：POST `/api/chat`、解析 SSE、收到 `tool_call` 后 POST `/api/tool-result` 回 mock 数据。覆盖单工具 / 批量工具 / 非工具 / 断开。
-- `npm run typecheck` - `tsc --noEmit`，验证 schema 改动。
+- `npm run typecheck` - `tsc --noEmit`，验证 TypeScript schema 改动。
 
 ## 提交规范
 

@@ -19,6 +19,7 @@ import { ScheduleService } from '../../service/ScheduleService';
 import { LoadingOverlay } from '../../components/LoadingOverlay';
 import { SettingsRepository } from '../../repository/SettingsRepository';
 import { FloatingWindowManager } from '../../common/agent/FloatingWindowManager';
+import { PrivacyDialogComponent } from '../../components/PrivacyDialogComponent';
 
 @Entry
 @Component
@@ -69,6 +70,40 @@ struct AppSettings {
   private featureDetector: FeatureDetector = FeatureDetector.getInstance();
   private animationSettings: AnimationSettings = AnimationSettings.getInstance();
   private materialEffects: MaterialEffects = MaterialEffects.getInstance();
+  private privacyDialogController: CustomDialogController | null = new CustomDialogController({
+    builder: PrivacyDialogComponent(),
+    autoCancel: true,
+    alignment: DialogAlignment.Center,
+    customStyle: true
+  });
+
+  private async deleteAccount(): Promise<void> {
+    try {
+      this.getUIContext().getPromptAction().showDialog({
+        title: '注销账号与清除数据',
+        message: '注销账号将永久删除您的所有本地与云端数据（包括课表、考试、成绩、日程及 AI 记录），该操作不可恢复！是否确认？',
+        buttons: [
+          { text: '取消', color: '#888888' },
+          { text: '确认注销', color: '#D64545' }
+        ]
+      }, async (err, data) => {
+        if (!err && data.index === 1) {
+          const context = getContext(this);
+          const success = await AuthService.deleteAccount(context);
+          if (success) {
+            this.isLoggedIn = false;
+            this.loginEmail = '';
+            this.getUIContext().getPromptAction().showToast({ message: '账号已注销，所有数据已清理' });
+            router.back();
+          } else {
+            this.getUIContext().getPromptAction().showToast({ message: '注销失败，请重试' });
+          }
+        }
+      });
+    } catch (e) {
+      console.error('deleteAccount dialog error:', JSON.stringify(e));
+    }
+  }
 
   aboutToAppear(): void {
     this.loadSettings();
@@ -1643,6 +1678,55 @@ struct AppSettings {
       .width('100%')
       .padding({ top: 12, bottom: 12 })
       .alignItems(HorizontalAlign.Start)
+
+      Divider().color($r('app.color.divider_color'))
+
+      Row() {
+        Column({ space: 4 }) {
+          Text('用户协议与隐私政策')
+            .fontSize(15)
+            .fontColor($r('app.color.text_primary'))
+          Text('查看权限说明、数据存储与隐私保护条款')
+            .fontSize(12)
+            .fontColor($r('app.color.text_secondary'))
+        }
+        .alignItems(HorizontalAlign.Start)
+        .layoutWeight(1)
+
+        Text('查看 >')
+          .fontSize(14)
+          .fontColor($r('app.color.primary_color'))
+      }
+      .width('100%')
+      .padding({ top: 12, bottom: 12 })
+      .onClick(() => {
+        this.privacyDialogController?.open();
+      })
+
+      Divider().color($r('app.color.divider_color'))
+
+      Row() {
+        Column({ space: 4 }) {
+          Text('注销账号与清除全部数据')
+            .fontSize(15)
+            .fontColor('#D64545')
+          Text('彻底注销账号并删除本地全部课表与AI会话')
+            .fontSize(12)
+            .fontColor($r('app.color.text_secondary'))
+        }
+        .alignItems(HorizontalAlign.Start)
+        .layoutWeight(1)
+
+        Button('注销')
+          .fontSize(13)
+          .fontColor('#FFFFFF')
+          .backgroundColor('#D64545')
+          .borderRadius(8)
+          .height(32)
+          .onClick(() => this.deleteAccount())
+      }
+      .width('100%')
+      .padding({ top: 12, bottom: 12 })
     }
     .width('100%')
     .padding(16)

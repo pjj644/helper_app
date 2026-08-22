@@ -108,11 +108,16 @@ export class BackendAgentClient {
       this.finish(false, '')
     })
 
+    const timestampStr: string = Date.now().toString()
+    const nonceStr: string = 'nonce_' + Date.now() + '_' + Math.floor(Math.random() * 100000)
+
     httpRequest.requestInStream(chatUrl, {
       method: http.RequestMethod.POST,
       header: {
         'Content-Type': 'application/json',
         'X-Proxy-Key': AppConstants.AI_AGENT_KEY,
+        'X-Timestamp': timestampStr,
+        'X-Nonce': nonceStr,
         'Accept': 'text/event-stream'
       },
       extraData: JSON.stringify({ session_id: sessionId, message: message }),

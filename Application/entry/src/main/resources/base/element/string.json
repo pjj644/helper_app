@@ -2,15 +2,15 @@
   "string": [
     {
       "name": "module_desc",
-      "value": "module description"
+      "value": "成电课程助手主模块"
     },
     {
       "name": "entryability_desc",
-      "value": "description"
+      "value": "成电课程助手入口"
     },
     {
       "name": "entryability_label",
-      "value": "AGC Demo"
+      "value": "成电助手"
     },
     {
       "name": "cloudDB_label",

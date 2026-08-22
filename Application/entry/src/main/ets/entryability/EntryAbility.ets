@@ -1,12 +1,10 @@
 import { ConfigurationConstant, UIAbility, Configuration } from '@kit.AbilityKit';
 import { hilog } from '@kit.PerformanceAnalysisKit';
 import { window } from '@kit.ArkUI';
-import { buffer } from '@kit.ArkTS';
-import auth from '@hw-agconnect/auth';
 import { ThemeManager } from '../common/utils/ThemeManager';
 import { UISettings } from '../common/UISettings';
 import { PreferencesUtil } from '../common/PreferencesUtil';
-
+import { AuthService } from '../service/AuthService';
 import { FloatingWindowManager } from '../common/agent/FloatingWindowManager';
 
 const HILOG_DOMAIN = 0x0000;
@@ -16,13 +14,17 @@ export default class EntryAbility extends UIAbility {
   onCreate() {
     try {
       this.context.getApplicationContext().setColorMode(ConfigurationConstant.ColorMode.COLOR_MODE_NOT_SET);
-      const file = this.context.resourceManager.getRawFileContentSync('agconnect-services.json');
-      const jsonConfig: string = buffer.from(file.buffer).toString();
-      auth.init(this.context, jsonConfig);
       PreferencesUtil.getInstance().init(this.context);
       UISettings.getInstance().initDarkMode(this.context);
+
+      // 合规要求：仅在用户已授权隐私政策后才初始化 AGC 等第三方/云端 SDK
+      if (PreferencesUtil.getInstance().hasAgreedPrivacy()) {
+        AuthService.initSDK(this.context);
+      } else {
+        hilog.info(HILOG_DOMAIN, TAG, 'Privacy not agreed yet, delaying AGC SDK initialization.');
+      }
     } catch (err) {
-      hilog.error(HILOG_DOMAIN, TAG, 'Failed to set colorMode. Cause: %{public}s', JSON.stringify(err));
+      hilog.error(HILOG_DOMAIN, TAG, 'Failed in onCreate. Cause: %{public}s', JSON.stringify(err));
     }
     hilog.info(HILOG_DOMAIN, TAG, '%{public}s', 'Ability onCreate');
   }

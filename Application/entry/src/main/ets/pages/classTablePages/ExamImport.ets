@@ -16,6 +16,7 @@ import { ExamUtils, RawExamRow } from '../../common/utils/ExamUtils';
 import { VpnEncoder } from '../../common/utils/VpnEncoder';
 import { AppConstants } from '../../common/constants/AppConstants';
 import { LoadingOverlay } from '../../components/LoadingOverlay';
+import { WebScrapeTakeoverBar } from '../../components/WebScrapeTakeoverBar';
 
 interface ParseError {
   error: string;
@@ -46,6 +47,7 @@ struct ExamImport {
   @State isProcessing: boolean = true;
   @State isVpnMode: boolean = false;
   @State showRefreshBtn: boolean = false;
+  @State manualMode: boolean = false;
   controller: webview.WebviewController = new webview.WebviewController();
   @State currentUrl: string = EAMS_EXAM_MENU_URL;
   private returnHome: boolean = false;
@@ -231,30 +233,43 @@ struct ExamImport {
   build() {
     Stack() {
       Column() {
-        Text(this.message)
-          .fontSize(14)
-          .fontColor('#666666')
-          .margin({ top: 8, bottom: 8, left: 12, right: 12 });
-
-      Row({ space: 8 }) {
-        Button('返回')
-          .onClick(() => router.back());
-        Button('手动重试抓取')
-          .onClick(() => {
+        WebScrapeTakeoverBar({
+          isManualMode: this.manualMode,
+          promptMessage: this.message,
+          isExtracting: !this.autoDone && this.isProcessing,
+          onScrape: () => {
             this.parseRetryCount = 0;
             const url = this.controller.getUrl();
-            console.info(`testTag ExamImport manual retry click url=${url}`);
-            if (url.includes('stdExamTable!examTable.action')) {
-              this.parseExamRows();
-              return;
+            console.info(`testTag ExamImport manual scrape url=${url}`);
+            this.parseExamRows();
+          },
+          onRefresh: () => {
+            const url = this.controller.getUrl();
+            this.controller.loadUrl(url || this.currentUrl);
+          },
+          onBack: () => {
+            try {
+              if (this.controller.accessBackward()) {
+                this.controller.backward();
+              }
+            } catch (e) {}
+          },
+          onToggleVpn: () => {
+            this.switchToVpnMode();
+          },
+          onToggleManual: () => {
+            this.manualMode = !this.manualMode;
+            if (this.manualMode) {
+              this.isProcessing = false;
+              this.message = '已开启手动接管：请在网页中完成登录并导航至考试页，随后点击“立即抓取当前页”';
+            } else {
+              this.isProcessing = true;
+              this.message = '正在自动处理中...';
             }
-            this.navigateToExamPage();
-          });
-      }
-      .margin({ left: 12, right: 12, bottom: 8 })
-      .width('100%');
+          }
+        })
 
-      Web({ src: this.currentUrl, controller: this.controller })
+        Web({ src: this.currentUrl, controller: this.controller })
         .width('100%')
         .height('100%')
         .domStorageAccess(true)

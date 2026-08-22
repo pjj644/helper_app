@@ -1,7 +1,7 @@
 {
   "app": {
     "bundleName": "com.example.helper_app",
-    "vendor": "example",
+    "vendor": "uestc_campus",
     "versionCode": 1000000,
     "versionName": "1.0.0",
     "icon": "$media:layered_image",

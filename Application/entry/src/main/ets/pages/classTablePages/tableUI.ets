@@ -131,24 +131,57 @@ struct TableUI {
     );
   }
 
-  private initSemesterOptions(): void {
+  private async initSemesterOptions(): Promise<void> {
     const semesterSet: SemesterOptionSet = getSemesterOptions();
     const filteredOptions: SelectOption[] = [];
     const filteredIds: number[] = [];
-    for (let i = 1; i < semesterSet.options.length; i++) {
-      filteredOptions.push(semesterSet.options[i]);
-      filteredIds.push(semesterSet.semesterIds[i]);
-    }
-    this.semesterOptions = filteredOptions;
-    this.semesterOptionIds = filteredIds;
 
     const params = router.getParams() as Record<string, string>;
     const routeSemesterId: number = params && params['semesterId'] ? Number(params['semesterId']) : 0;
+    const currentSemId = calculateSemesterId();
     if (routeSemesterId > 0) {
       this.selectedSemesterId = routeSemesterId;
     } else {
-      this.selectedSemesterId = calculateSemesterId();
+      this.selectedSemesterId = currentSemId;
     }
+
+    try {
+      const context = getContext(this);
+      const summaries = await CourseRepository.getArchivedSemestersSummary(context);
+      const summaryMap = new Map<number, number>();
+      for (let i = 0; i < summaries.length; i++) {
+        summaryMap.set(summaries[i].semesterId, summaries[i].courseCount);
+      }
+
+      for (let i = 1; i < semesterSet.options.length; i++) {
+        const semId = semesterSet.semesterIds[i];
+        const count = summaryMap.get(semId);
+        let baseLabel = String(semesterSet.options[i].value);
+        if (count !== undefined && count > 0) {
+          if (semId === currentSemId) {
+            baseLabel = `${baseLabel} (当前·已归档${count}门)`;
+          } else {
+            baseLabel = `${baseLabel} (已归档${count}门)`;
+          }
+        } else {
+          if (semId === currentSemId) {
+            baseLabel = `${baseLabel} (当前·未导入)`;
+          } else {
+            baseLabel = `${baseLabel} (未导入)`;
+          }
+        }
+        filteredOptions.push({ value: baseLabel });
+        filteredIds.push(semId);
+      }
+    } catch (e) {
+      for (let i = 1; i < semesterSet.options.length; i++) {
+        filteredOptions.push(semesterSet.options[i]);
+        filteredIds.push(semesterSet.semesterIds[i]);
+      }
+    }
+
+    this.semesterOptions = filteredOptions;
+    this.semesterOptionIds = filteredIds;
   }
 
   private tryLoadPendingCourseData(): void {
@@ -159,6 +192,7 @@ struct TableUI {
       this.hasCourseDataForSemester = true;
       this.pendingCourseData = '';
       this.pendingCourseSemesterId = 0;
+      this.initSemesterOptions();
     }
   }
 
@@ -180,10 +214,9 @@ struct TableUI {
       this.courseModel.clear();
       this.dataVersion++;
       this.hasCourseDataForSemester = false;
-      this.navigateToWebFetchPage();
     } catch (error) {
       console.error('加载课表本地数据失败:', error);
-      this.navigateToWebFetchPage();
+      this.hasCourseDataForSemester = false;
     } finally {
       this.isInitializing = false;
     }
@@ -246,6 +279,7 @@ struct TableUI {
     } else {
       this.hasCourseDataForSemester = false;
     }
+    this.reportPageContext();
   }
 
   private refreshFromWeb(): void {
@@ -806,9 +840,49 @@ struct TableUI {
   }
 
   @Builder
+  EmptySemesterCardBuilder() {
+    Column({ space: 12 }) {
+      Text('📅')
+        .fontSize(44)
+        .margin({ top: 60, bottom: 8 })
+
+      Text(`${this.getSelectedSemesterLabel()} 暂无本地课表`)
+        .fontSize(16)
+        .fontWeight(FontWeight.Bold)
+        .fontColor(ThemeManager.getTextPrimaryColor())
+
+      Text('您可以从教务系统一键导入该学期课表，导入后将永久归档至本地，支持无网离线查看。')
+        .fontSize(13)
+        .fontColor(ThemeManager.getTextSecondaryColor())
+        .textAlign(TextAlign.Center)
+        .padding({ left: 32, right: 32 })
+
+      Button('📥 导入该学期课表')
+        .fontSize(14)
+        .fontWeight(FontWeight.Medium)
+        .fontColor('#FFFFFF')
+        .backgroundColor(ThemeManager.getAccentColor())
+        .borderRadius(12)
+        .height(40)
+        .padding({ left: 24, right: 24 })
+        .margin({ top: 12 })
+        .onClick(() => {
+          this.refreshFromWeb();
+        })
+    }
+    .width('100%')
+    .alignItems(HorizontalAlign.Center)
+    .justifyContent(FlexAlign.Center)
+    .padding({ top: 20, bottom: 40 })
+  }
+
+  @Builder
   CourseTableBuilder() {
-    Scroll(this.verticalScroller) {
-      Row({ space: 0 }) {
+    if (!this.hasCourseDataForSemester) {
+      this.EmptySemesterCardBuilder()
+    } else {
+      Scroll(this.verticalScroller) {
+        Row({ space: 0 }) {
         Column() {
           this.TimeCornerBuilder()
           this.TimeAxisBuilder()
@@ -862,6 +936,7 @@ struct TableUI {
     })
     .width('100%')
     .layoutWeight(1)
+    }
   }
 
   @Builder

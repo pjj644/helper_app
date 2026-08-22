@@ -658,7 +658,14 @@ export struct FloatingSubWindowContent {
           });
         }
         .width('100%')
-        .padding({ left: 14, right: 14, bottom: 14, top: 4 });
+        .padding({ left: 14, right: 14, bottom: 4, top: 4 });
+
+        Text('⚠️ AI生成内容仅供参考，以教务处为准')
+          .fontSize(10)
+          .fontColor(this.isDarkMode ? '#6B7280' : '#9CA3AF')
+          .textAlign(TextAlign.Center)
+          .width('100%')
+          .padding({ bottom: 8 });
       }
       .width('94%')
       .height(440)

@@ -36,6 +36,9 @@ import { NextCourseCardComponent } from '../components/home/NextCourseCardCompon
 import { ExamCountdownCard } from '../components/home/ExamCountdownCard';
 import { QuickLinksGrid, HomeToolItem } from '../components/home/QuickLinksGrid';
 
+import { PreferencesUtil } from '../common/PreferencesUtil';
+import { PrivacyDialogComponent } from '../components/PrivacyDialogComponent';
+
 @Entry
 @Component
 struct MainPage {
@@ -72,6 +75,16 @@ struct MainPage {
   private model: CourseTableModel = courseTableModel;
   private appSettings: UISettings = UISettings.getInstance();
   private lastNoFutureExamKey: string = '';
+  private privacyDialogController: CustomDialogController | null = new CustomDialogController({
+    builder: PrivacyDialogComponent({
+      onAgree: () => {
+        this.checkLoginStatus();
+      }
+    }),
+    autoCancel: false,
+    alignment: DialogAlignment.Center,
+    customStyle: true
+  });
 
   private tools: HomeToolItem[] = [
     { title: 'AI 助手', icon: '🤖', color: '#6366F1', route: 'pages/quick/AssistantPage', iconImage: $r('app.media.ic_ai_assistant') },
@@ -102,6 +115,10 @@ struct MainPage {
     this.loadQuickInfo();
     this.checkLoginStatus();
     this.nowTick = Date.now();
+
+    if (!PreferencesUtil.getInstance().hasAgreedPrivacy()) {
+      this.privacyDialogController?.open();
+    }
 
     BreakpointUtils.registerBreakpoint(getContext(this), (bp: string) => {
       this.currentBreakpoint = bp;

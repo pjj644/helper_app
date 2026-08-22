@@ -1,6 +1,7 @@
 export class AppConstants {
   static readonly LOGIN_PREF_NAME: string = 'classtable_login_pref';
   static readonly LOGIN_SESSION_KEY: string = 'login_session_json';
+  static readonly PREF_PRIVACY_AGREED: string = 'app_privacy_policy_agreed';
 
   static readonly COURSE_TABLE_PREF_NAME: string = 'course_table_local_db';
   static readonly PREF_COURSE_DB_NAME: string = 'course_table_local_db';

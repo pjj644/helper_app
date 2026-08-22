@@ -8,6 +8,7 @@ import { VpnEncoder } from '../../common/utils/VpnEncoder';
 import { Logger } from '../../common/utils/Logger';
 import { LoadingOverlay } from '../../components/LoadingOverlay';
 import { calculateSemesterId, getGradeSemesterOptions, getPreviousSemesterId, GradeSemesterOptionItem } from '../../model/classTableModel/ExamAccessRules';
+import { WebScrapeTakeoverBar } from '../../components/WebScrapeTakeoverBar';
 
 const TAG = 'GradeImport';
 
@@ -19,6 +20,7 @@ struct GradeImport {
   @State isProcessing: boolean = true;
   @State isVpnMode: boolean = false;
   @State showRefreshBtn: boolean = false;
+  @State manualMode: boolean = false;
   @State selectedSemesterIndex: number = 0;
   controller: webview.WebviewController = new webview.WebviewController();
   @State currentUrl: string = AppConstants.EAMS_PORTAL_URL;
@@ -392,42 +394,56 @@ struct GradeImport {
   build() {
     Stack() {
       Column() {
-        Text(this.message)
-          .fontSize(14)
-          .fontColor('#666666')
-          .margin({ top: 8, bottom: 8, left: 12, right: 12 });
-
-      Row({ space: 8 }) {
-        Button('返回')
-          .onClick(() => router.back());
-        Select(this.getSemesterSelectOptions())
-          .selected(this.selectedSemesterIndex)
-          .value(this.semesterOptionList[this.selectedSemesterIndex]?.label || '选择学期')
-          .onSelect((index: number) => {
-            this.onSemesterSelected(index);
-          })
-          .width(130);
-        Button('重新抓取')
-          .onClick(() => {
-            if (this.destroyed) {
-              return;
-            }
+        WebScrapeTakeoverBar({
+          isManualMode: this.manualMode,
+          promptMessage: this.message,
+          isExtracting: !this.autoDone && this.isProcessing,
+          onScrape: () => {
+            if (this.destroyed) return;
             this.parseRetryCount = 0;
             this.autoDone = false;
-            this.message = '正在重新抓取...';
+            this.message = '正在抓取成绩数据...';
+            this.waitForDataLoad();
+          },
+          onRefresh: () => {
             const url = this.controller.getUrl();
-            Logger.info(TAG, `manual retry click url=${url}`);
-            if (url.includes('person!search.action')) {
-              this.waitForDataLoad();
-              return;
+            this.controller.loadUrl(url || this.currentUrl);
+          },
+          onBack: () => {
+            try {
+              if (this.controller.accessBackward()) {
+                this.controller.backward();
+              }
+            } catch (e) {}
+          },
+          onToggleVpn: () => {
+            this.switchToVpnMode();
+          },
+          onToggleManual: () => {
+            this.manualMode = !this.manualMode;
+            if (this.manualMode) {
+              this.isProcessing = false;
+              this.message = '已开启手动接管：请在网页中完成登录并导航至成绩页，随后点击“立即抓取当前页”';
+            } else {
+              this.isProcessing = true;
+              this.message = '正在自动处理中...';
             }
-            this.hasNavigatedToGrade = false;
-            this.navigateToGradePage();
-          });
-      }
-      .margin({ bottom: 8 })
+          }
+        })
 
-      Web({ src: this.currentUrl, controller: this.controller })
+        Row({ space: 8 }) {
+          Select(this.getSemesterSelectOptions())
+            .selected(this.selectedSemesterIndex)
+            .value(this.semesterOptionList[this.selectedSemesterIndex]?.label || '选择学期')
+            .onSelect((index: number) => {
+              this.onSemesterSelected(index);
+            })
+            .layoutWeight(1);
+        }
+        .padding({ left: 12, right: 12, top: 4, bottom: 6 })
+        .width('100%');
+
+        Web({ src: this.currentUrl, controller: this.controller })
         .width('100%')
         .height('100%')
         .domStorageAccess(true)

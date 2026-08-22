@@ -111,6 +111,14 @@ export class PreferencesUtil {
     return this.getValue(key, defaultValue) as number;
   }
 
+  hasAgreedPrivacy(): boolean {
+    return this.getBoolean('app_privacy_policy_agreed', false);
+  }
+
+  setAgreedPrivacy(agreed: boolean): void {
+    this.putBoolean('app_privacy_policy_agreed', agreed);
+  }
+
   delete(key: string): void {
     if (!this.ensureInitialized()) {
       return;

@@ -1071,8 +1071,15 @@ export struct AssistantPage {
         })
       }
       .width('100%')
-      .padding({ left: 12, right: 12, top: 6, bottom: 10 })
-      .alignItems(VerticalAlign.Center)
+      .padding({ left: 12, right: 12, top: 6, bottom: 4 })
+      .alignItems(VerticalAlign.Center);
+
+      Text('⚠️ AI 生成内容仅供参考，课程与考试安排请以教务处官方系统为准')
+        .fontSize(11)
+        .fontColor(ThemeManager.getTextTertiaryColor())
+        .textAlign(TextAlign.Center)
+        .width('100%')
+        .padding({ bottom: 6 });
     }
     .width('100%')
   }

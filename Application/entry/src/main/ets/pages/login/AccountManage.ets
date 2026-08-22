@@ -37,6 +37,32 @@ struct AccountManage {
     }
   }
 
+  private async deleteAccount(): Promise<void> {
+    try {
+      this.getUIContext().getPromptAction().showDialog({
+        title: '注销账号警告',
+        message: '注销账号将永久删除您的所有本地与云端数据（包括课表、考试、成绩、日程及 AI 历史会话），该操作不可恢复！是否确认注销？',
+        buttons: [
+          { text: '取消', color: '#888888' },
+          { text: '确认注销', color: '#D64545' }
+        ]
+      }, async (err, data) => {
+        if (!err && data.index === 1) {
+          const context = getContext(this);
+          const success = await AuthService.deleteAccount(context);
+          if (success) {
+            this.getUIContext().getPromptAction().showToast({ message: '账号已注销，所有数据已清理' });
+            router.back();
+          } else {
+            this.getUIContext().getPromptAction().showToast({ message: '注销失败，请稍后再试' });
+          }
+        }
+      });
+    } catch (e) {
+      console.error('deleteAccount dialog error:', JSON.stringify(e));
+    }
+  }
+
   build() {
     Column() {
       Row() {
@@ -80,10 +106,27 @@ struct AccountManage {
           .height(44)
           .fontSize(15)
           .fontColor('#FFFFFF')
+          .backgroundColor('#F59E0B')
+          .borderRadius(12)
+          .margin({ top: 12 })
+          .onClick(() => this.logout());
+
+        Button('注销账号')
+          .width('100%')
+          .height(44)
+          .fontSize(15)
+          .fontColor('#FFFFFF')
           .backgroundColor('#D64545')
           .borderRadius(12)
-          .margin({ top: 8 })
-          .onClick(() => this.logout());
+          .margin({ top: 4 })
+          .onClick(() => this.deleteAccount());
+
+        Text('注销账号将永久销毁所有本地数据与关联的云端信息')
+          .fontSize(12)
+          .fontColor(ThemeManager.getTextTertiaryColor())
+          .textAlign(TextAlign.Center)
+          .width('100%')
+          .margin({ top: 4 });
       }
       .width('100%')
       .padding(16);
