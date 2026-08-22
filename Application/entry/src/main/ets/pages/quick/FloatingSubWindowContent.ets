@@ -98,16 +98,23 @@ export struct FloatingSubWindowContent {
             content: d.content,
             isError: d.isError
           }));
+        } else {
+          this.messages = [
+            {
+              role: 'assistant',
+              content: '你好！我是你的 AI 伴随助手。我可以感知当前页面内容，指导操作或代你执行指令。'
+            }
+          ];
         }
       } else {
-        this.startNewChat(false);
+        this.startNewChat(false, false);
       }
     } catch (e) {
-      this.startNewChat(false);
+      this.startNewChat(false, false);
     }
   }
 
-  private startNewChat(showToast: boolean = true): void {
+  private startNewChat(showToast: boolean = true, autoSave: boolean = false): void {
     if (this.currentClient) {
       this.currentClient.cancel();
       this.currentClient = null;
@@ -122,11 +129,13 @@ export struct FloatingSubWindowContent {
         content: '你好！我是你的 AI 伴随助手。已开启新对话，我可以感知当前页面内容，指导操作或代你执行指令。'
       }
     ];
-    try {
-      const context = getContext(this);
-      ChatSessionRepository.saveOrUpdateSession(context, newSession);
-    } catch (e) {
-      // ignore
+    if (autoSave) {
+      try {
+        const context = getContext(this);
+        ChatSessionRepository.saveOrUpdateSession(context, newSession);
+      } catch (e) {
+        // ignore
+      }
     }
     if (showToast) {
       promptAction.showToast({ message: '已开启新对话', duration: 1500 });

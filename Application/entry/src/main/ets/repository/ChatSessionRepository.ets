@@ -107,4 +107,17 @@ export class ChatSessionRepository {
     ChatSessionRepository.saveSessions(context, filtered);
     return filtered;
   }
+
+  /**
+   * 清空所有 AI 会话记录
+   */
+  static clearAllSessions(context: Context): void {
+    try {
+      const pref = preferences.getPreferencesSync(context, { name: AppConstants.COURSE_TABLE_PREF_NAME });
+      pref.deleteSync(AppConstants.AI_CHAT_SESSIONS_KEY);
+      pref.flushSync();
+    } catch (error) {
+      console.error('[ChatSessionRepository] clearAllSessions error:', JSON.stringify(error));
+    }
+  }
 }

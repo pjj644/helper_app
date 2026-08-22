@@ -107,6 +107,8 @@ export struct AssistantPage {
       this.displayMessages = this.sessions[0].displayMessages;
       console.info('[AI Debug] restored session:', this.sessions[0].id, 'title:', this.sessions[0].title);
     } else {
+      this.messages = [];
+      this.displayMessages = [];
       this.createNewChat();
     }
   }
@@ -114,6 +116,15 @@ export struct AssistantPage {
   private saveSessions(): void {
     try {
       const context = getContext(this);
+      if (!this.sessions || this.sessions.length === 0) {
+        ChatSessionRepository.clearAllSessions(context);
+        return;
+      }
+      const hasAnyMessage = this.sessions.some(s => (s.messages && s.messages.length > 0) || (s.displayMessages && s.displayMessages.length > 0));
+      if (!hasAnyMessage && this.sessions.length <= 1) {
+        ChatSessionRepository.clearAllSessions(context);
+        return;
+      }
       ChatSessionRepository.saveSessions(context, this.sessions);
     } catch (error) {
       console.error('saveSessions error:', JSON.stringify(error));

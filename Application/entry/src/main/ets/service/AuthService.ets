@@ -4,6 +4,10 @@ import auth from '@hw-agconnect/auth';
 import { ContextUtils } from '../common/utils/ContextUtils';
 import { AppConstants } from '../common/constants/AppConstants';
 import { courseTableModel } from '../model/classTableModel/CourseModel';
+import { ChatSessionRepository } from '../repository/ChatSessionRepository';
+import { ScheduleRepository } from '../repository/ScheduleRepository';
+import { CourseRepository } from '../repository/CourseRepository';
+import { CalendarKitReminderService } from './CalendarKitReminderService';
 
 export interface LoginSession {
   email: string;
@@ -72,12 +76,12 @@ export class AuthService {
   }
 
   static async saveSession(context: Object, email: string): Promise<void> {
-    const abilityContext = ContextUtils.getAbilityContext(context);
-    const pref = await preferences.getPreferences(abilityContext, AppConstants.LOGIN_PREF_NAME);
     const session: LoginSession = {
       email: email,
-      loginAt: Date.now(),
+      loginAt: Date.now()
     };
+    const abilityContext = ContextUtils.getAbilityContext(context);
+    const pref = await preferences.getPreferences(abilityContext, AppConstants.LOGIN_PREF_NAME);
     await pref.put(AppConstants.LOGIN_SESSION_KEY, JSON.stringify(session));
     await pref.flush();
   }
@@ -96,6 +100,10 @@ export class AuthService {
     }
   }
 
+  static async logout(context: Object): Promise<void> {
+    await AuthService.clearSession(context);
+  }
+
   /**
    * 账号注销：清除云端账号并彻底清空本地所有持久化数据库与内存缓存
    */
@@ -111,30 +119,79 @@ export class AuthService {
         }
       }
 
-      // 2. 清理登录凭证
+      // 2. 清空 AI 对话记录
       try {
-        await preferences.deletePreferences(abilityContext, AppConstants.LOGIN_PREF_NAME);
+        ChatSessionRepository.clearAllSessions(abilityContext);
       } catch (e) {
-        console.warn('[AuthService] delete login pref error:', JSON.stringify(e));
+        console.warn('[AuthService] clearAllSessions error:', JSON.stringify(e));
       }
 
-      // 3. 清理课表、考试、成绩、日程等核心本地数据库
+      // 3. 清空日程记录
       try {
+        await ScheduleRepository.clearSchedules(abilityContext);
+      } catch (e) {
+        console.warn('[AuthService] clearSchedules error:', JSON.stringify(e));
+      }
+
+      // 4. 清空多学期课表数据
+      try {
+        await CourseRepository.clearAllCourseData(abilityContext);
+      } catch (e) {
+        console.warn('[AuthService] clearAllCourseData error:', JSON.stringify(e));
+      }
+
+      // 5. 清空系统日历事件
+      try {
+        await CalendarKitReminderService.clearAllEvents(abilityContext);
+      } catch (e) {
+        console.warn('[AuthService] clearAllEvents error:', JSON.stringify(e));
+      }
+
+      // 6. 深度清空核心数据库 Preferences（先清空内存键再持久化删除并清理运行时缓存）
+      try {
+        const coursePref = await preferences.getPreferences(abilityContext, AppConstants.COURSE_TABLE_PREF_NAME);
+        await coursePref.clear();
+        await coursePref.flush();
         await preferences.deletePreferences(abilityContext, AppConstants.COURSE_TABLE_PREF_NAME);
+        try {
+          preferences.removePreferencesFromCache(abilityContext, AppConstants.COURSE_TABLE_PREF_NAME);
+        } catch (_e) {}
       } catch (e) {
         console.warn('[AuthService] delete course table pref error:', JSON.stringify(e));
       }
 
-      // 4. 清理 AI 对话会话与消息数据库
+      // 7. 清理登录凭证
       try {
-        await preferences.deletePreferences(abilityContext, 'chat_sessions_db');
-        await preferences.deletePreferences(abilityContext, 'chat_messages_db');
+        const loginPref = await preferences.getPreferences(abilityContext, AppConstants.LOGIN_PREF_NAME);
+        await loginPref.clear();
+        await loginPref.flush();
+        await preferences.deletePreferences(abilityContext, AppConstants.LOGIN_PREF_NAME);
+        try {
+          preferences.removePreferencesFromCache(abilityContext, AppConstants.LOGIN_PREF_NAME);
+        } catch (_e) {}
       } catch (e) {
-        console.warn('[AuthService] delete chat pref error:', JSON.stringify(e));
+        console.warn('[AuthService] delete login pref error:', JSON.stringify(e));
       }
 
-      // 5. 重置内存运行时数据
+      // 8. 清理其他可能存在的历史数据库
+      const legacyDbs = ['chat_sessions_db', 'chat_messages_db', 'schedule_db', 'exam_db'];
+      for (let i = 0; i < legacyDbs.length; i++) {
+        try {
+          const p = await preferences.getPreferences(abilityContext, legacyDbs[i]);
+          await p.clear();
+          await p.flush();
+          await preferences.deletePreferences(abilityContext, legacyDbs[i]);
+          try {
+            preferences.removePreferencesFromCache(abilityContext, legacyDbs[i]);
+          } catch (_e) {}
+        } catch (_e) {}
+      }
+
+      // 9. 重置内存运行时数据与全局状态
       courseTableModel.clear();
+      AppStorage.delete('pendingCourseData');
+      AppStorage.delete('pendingCourseSemesterId');
+      AppStorage.setOrCreate('account_wipe_timestamp', Date.now());
 
       console.info('[AuthService] deleteAccount success, all local user data wiped.');
       return true;

@@ -118,4 +118,15 @@ export class CourseRepository {
     await pref.delete(AppConstants.COURSE_TABLE_DATA_KEY);
     await pref.flush();
   }
+
+  static async clearAllCourseData(context: Object): Promise<void> {
+    const abilityContext = ContextUtils.getAbilityContext(context);
+    const pref = await preferences.getPreferences(abilityContext, AppConstants.COURSE_TABLE_PREF_NAME);
+    const storedIds = await CourseRepository.getStoredSemesterIds(context);
+    for (let i = 0; i < storedIds.length; i++) {
+      await pref.delete(AppConstants.COURSE_TABLE_DATA_KEY_PREFIX + storedIds[i]);
+    }
+    await pref.delete(AppConstants.COURSE_TABLE_DATA_KEY);
+    await pref.flush();
+  }
 }
