@@ -249,8 +249,15 @@ export class WebScrapeService {
             }
           }
 
+          for (var k = 0; k < links.length; k++) {
+            var text = (links[k].innerText || '').trim();
+            if (text.includes('课表') || text.includes('课程表')) {
+              return JSON.stringify({ type: 'navigate', href: links[k].href });
+            }
+          }
+
           var currentHost = window.location.host;
-          if (currentHost.includes('eams.uestc.edu.cn')) {
+          if (currentHost.includes('eams.uestc.edu.cn') || currentHost.includes('webvpn.uestc.edu.cn')) {
             var courseTableUrl = '${AppConstants.EAMS_COURSE_TABLE_URL}';
             return JSON.stringify({ type: 'navigate', href: courseTableUrl });
           }

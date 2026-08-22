@@ -182,8 +182,10 @@ struct Index {
             return;
           }
 
-          if (!this.isLoggedIn && !url.includes('courseTableForStd')) {
+          if (!url.includes('courseTableForStd')) {
+            console.info('[ClassTableScrape] 当前非课表页面，执行登录检测与导航');
             this.checkLoginStatusAndNavigate();
+            return;
           }
 
           if (url.includes('courseTableForStd') && !this.autoNavigateTriggered) {
@@ -212,8 +214,9 @@ struct Index {
                   }
                   const paramsObj: Record<string, Object> = JSON.parse(paramsInner) as Record<string, Object>;
                   const currentSemesterId: number = (paramsObj['semesterId'] as number) || 0;
-                  console.info('[ClassTableScrape] 当前学期ID:', currentSemesterId, '目标学期ID:', this.pendingSemesterSwitchId);
-                  if (currentSemesterId !== this.pendingSemesterSwitchId) {
+                  const idsValue: string = (paramsObj['ids'] as string) || '';
+                  console.info('[ClassTableScrape] 当前学期ID:', currentSemesterId, 'ids:', idsValue, '目标学期ID:', this.pendingSemesterSwitchId);
+                  if (idsValue && currentSemesterId > 0 && currentSemesterId !== this.pendingSemesterSwitchId) {
                     const onCampusForSwitch: boolean = url.includes('eams.uestc.edu.cn');
                     const useVpnForSwitch: boolean = this.isVpnMode && !onCampusForSwitch;
                     try {
@@ -240,25 +243,6 @@ struct Index {
                             this.switchToVpnMode();
                             return;
                           }
-                          if (sRes && sRes.includes('500') && this.semesterSwitchRetryCount < this.MAX_SEMESTER_SWITCH_RETRY) {
-                            this.semesterSwitchRetryCount++;
-                            console.info('[ClassTableScrape] 学期切换HTTP 500，延迟3秒重试，第', this.semesterSwitchRetryCount, '次');
-                            setTimeout(() => {
-                              if (!this.isPageActive) {
-                                return;
-                              }
-                              executeSemesterSwitch();
-                            }, 3000);
-                            return;
-                          }
-                        }
-                        if (this.semesterSwitchRetryCount >= this.MAX_SEMESTER_SWITCH_RETRY) {
-                          console.info('[ClassTableScrape] 学期切换重试次数已用尽，刷新课表页面');
-                          this.semesterSwitchRetryCount = 0;
-                          this.pendingSemesterSwitchId = 0;
-                          const refreshUrl = this.controller.getUrl();
-                          this.controller.loadUrl(refreshUrl);
-                          return;
                         }
                         this.semesterSwitchRetryCount = 0;
                         this.pendingSemesterSwitchId = 0;
@@ -272,7 +256,7 @@ struct Index {
                     };
                     executeSemesterSwitch();
                   } else {
-                    console.info('[ClassTableScrape] 当前学期与目标学期一致，无需切换');
+                    console.info('[ClassTableScrape] 当前学期与目标学期一致或表单未就绪，直接提取课表');
                     this.pendingSemesterSwitchId = 0;
                     setTimeout(() => {
                       if (!this.isPageActive) {
@@ -524,11 +508,14 @@ struct Index {
     }
 
     this.message = '正在查找课表链接...';
-    console.info('[ClassTableScrape] 开始查找课表链接，延迟2秒确保页面加载完成');
+    console.info('[ClassTableScrape] 开始查找课表链接并准备跳转');
 
     setTimeout(() => {
+      if (!this.isPageActive) {
+        return;
+      }
       this.doNavigateToCourseTable();
-    }, 2000);
+    }, 800);
   }
 
   doNavigateToCourseTable(): void {
