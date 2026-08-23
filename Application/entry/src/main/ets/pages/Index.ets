@@ -87,17 +87,15 @@ struct MainPage {
   });
 
   private tools: HomeToolItem[] = [
-    { title: 'AI 助手', icon: '🤖', color: '#6366F1', route: 'pages/quick/AssistantPage', iconImage: $r('app.media.ic_ai_assistant') },
+    { title: '云中成电', icon: '☁️', color: '#0A59F7', url: AppConstants.ONLINE_URL },
+    { title: '成电班车', icon: '🚌', color: '#10B981', route: RouterConstants.PAGE_BUS_SCHEDULE },
+    { title: 'AI 助手', icon: '🤖', color: '#6366F1', route: RouterConstants.PAGE_ASSISTANT, iconImage: $r('app.media.ic_ai_assistant') },
+    { title: '成绩查询', icon: '📊', color: '#EC4899', route: RouterConstants.PAGE_GRADE },
     { title: '校园地图', icon: '🗺️', color: '#3B82FF', url: AppConstants.GIS_MAP_URL, iconImage: $r('app.media.ic_campus_map') },
-    { title: '图书馆', icon: '📚', color: '#10B981', url: AppConstants.LIB_FULL_URL },
-    { title: '校园卡', icon: '💳', color: '#F59E0B' },
-    { title: '计算器', icon: '🧮', color: '#EF4444' },
-    { title: '天气', icon: '🌤️', color: '#8B5CF6' },
-    { title: '成绩查询', icon: '📊', color: '#EC4899', route: 'pages/gradePages/GradePage' },
-    { title: '空教室', icon: '🏫', color: '#06B6D4' },
-    { title: '校园日历', icon: '📅', color: '#84CC16', route: 'pages/schedulePages/CalendarPage' },
+    { title: '图书馆', icon: '📚', color: '#06B6D4', url: AppConstants.LIB_FULL_URL },
+    { title: '校园日历', icon: '📅', color: '#84CC16', route: RouterConstants.PAGE_CALENDAR },
     { title: '清水河畔', icon: '🌊', color: '#0EA5E9', url: AppConstants.QINGSHUI_RIVER_URL, iconImage: $r('app.media.ic_qingshui_river') },
-    { title: '一卡通余额', icon: '💰', color: '#F97316', url: AppConstants.CARD_BALANCE_URL, iconImage: $r('app.media.ic_card_balance') },
+    { title: '一卡通余额', icon: '💰', color: '#F97316', url: AppConstants.CARD_BALANCE_URL, iconImage: $r('app.media.ic_card_balance') }
   ];
 
   private normalizeExamTypeIndex(index: number): number {

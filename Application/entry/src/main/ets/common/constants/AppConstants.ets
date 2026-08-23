@@ -147,6 +147,7 @@ export class RouterConstants {
   static readonly PAGE_GRADE: string = 'pages/gradePages/GradePage';
   static readonly PAGE_GRADE_IMPORT: string = 'pages/gradePages/GradeImport';
   static readonly PAGE_CALENDAR: string = 'pages/schedulePages/CalendarPage';
+  static readonly PAGE_BUS_SCHEDULE: string = 'pages/schedulePages/BusSchedulePage';
   static readonly PAGE_SETTINGS: string = 'pages/classTablePages/AppSettings';
   static readonly PAGE_LOGIN: string = 'pages/login/loginIndex';
   static readonly PAGE_ACCOUNT_MANAGE: string = 'pages/login/AccountManage';
