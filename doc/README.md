@@ -1,14 +1,12 @@
 # doc/
 
-项目详细技术与设计文档目录。精简上手入口见根目录 [`../agent.md`](../agent.md)（与 [`../AGENTS.md`](../AGENTS.md)）。
+成电校园助手（UESTC Helper）项目核心技术文档集。统一极速上手指令见根目录 [`../AGENTS.md`](../AGENTS.md)。
 
-| 文件 | 内容 |
+| 文档 | 职责与内容摘要 |
 |---|---|
-| [ARCHITECTURE.md](./ARCHITECTURE.md) | 完整架构 / 分层 / 数据流 / 五 Tab 导航 / 悬浮伴随系统 / 存储 / 抓取 / 学期周次计算 |
-| [AI_AGENT.md](./AI_AGENT.md) | AI 助手：后端大脑 + 统一控制元工具、高阶感知工具、协议、悬浮窗、Markdown 渲染、三处同步规范 |
-| [AI_AGENT_ARCHITECTURE.md](./AI_AGENT_ARCHITECTURE.md) | AI 助手端云一体全景技术架构：LangGraph 状态图、端侧执行时序图、模块职责、风险弹窗机制 |
-| [BUILD_AND_TEST.md](./BUILD_AND_TEST.md) | DevEco / devecocli 构建、Windows 脚本、模拟器 / 真机、权限、全场景 E2E 测试用例、提交规范 |
-| [CHANGES.md](./CHANGES.md) | 逐阶段变更日志（包含所有功能演进、重构与 Bugfix 记录） |
-| [AI_AGENT_PLAN.md](./AI_AGENT_PLAN.md) | AI 助手从设备端迁移到后端的设计方案（历史存档） |
+| [ARCHITECTURE.md](./ARCHITECTURE.md) | **整包应用架构**：模块分层 / 数据流 / 五 Tab 导航 / 桌面万能服务卡片 / 班车日历联动 / 数据持久化 / 教务 500 会话恢复 / 学期周次算法 |
+| [AI_AGENT.md](./AI_AGENT.md) | **AI 助手权威规格**：端云一体协同 / LangGraph 状态机 / 5 大核心元工具与 4 大感知工具 / SSE 协议 / 悬浮伴随系统 / 原生 Markdown 渲染 / 三处同步铁律 |
+| [BUILD_AND_TEST.md](./BUILD_AND_TEST.md) | **构建与验证指南**：DevEco CLI / Windows 批处理脚本 / 模拟器与真机调试 / 全场景 E2E 测试用例 / 提交规范 |
+| [CHANGES.md](./CHANGES.md) | **项目演进记录**：逐阶段版本更新日志、架构重构与特性落地历史 |
 
-> 2026-08 起 git 仓库根已迁移到项目根 `D:\harmony\helper_app`，本目录随仓库一起托管在根仓库内。
+> Git 仓库位于项目根目录 `D:\harmony\helper_app`，本目录随仓库统一进行版本管理。

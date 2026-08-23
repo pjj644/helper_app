@@ -1,4 +1,4 @@
-# agent.md
+# AGENTS.md
 
 > 给 AI 编码助手（Claude Code / Antigravity / OpenCode / Codex）的统一快速上手指令。
 > 详细架构与技术规格见 [`doc/`](./doc/)（均为中文），本文件汇总「无需猜测、开箱即用」的核心规范、开发指令与架构要点。
@@ -10,7 +10,7 @@
 - **目录布局**：
   - **`Application/`** — HarmonyOS app（ArkTS / API 6.0.2/22），源码 `entry/src/main/ets/`，入口 `EntryAbility.ets` -> `pages/Index.ets`。
   - **`CloudProgram/`** — 云端 Node.js（Cloud DB schema、云函数）。
-  - **`doc/`** — 详细技术与架构文档（`ARCHITECTURE.md`, `AI_AGENT.md`, `AI_AGENT_ARCHITECTURE.md`, `BUILD_AND_TEST.md`, `CHANGES.md`）。
+  - **`doc/`** — 详细技术与架构文档（`ARCHITECTURE.md`, `AI_AGENT.md`, `BUILD_AND_TEST.md`, `CHANGES.md`）。
   - **`information/`** — EAMS 抓取 HTML 存档（体积大且频繁更新，已 .gitignore 不入库）。
 - **提交规范**：在根目录执行 `git add` + `git commit -m "type: what & why"`（`feat/fix/refactor/docs/chore`），消息以 `Co-Authored-By: Claude <noreply@anthropic.com>` 结尾；严禁提交 `.env`、密钥或凭据。
 
@@ -98,8 +98,6 @@ DevEco 安装在 `D:\deveco\DevEco Studio\`（路径含空格）。**严禁直�
 | 需要了解的模块 | 详细文档路径 |
 |---|---|
 | 完整架构 / 分层 / 数据流 / 五 Tab 结构 / 抓取 / 学期计算 | [`doc/ARCHITECTURE.md`](./doc/ARCHITECTURE.md) |
-| AI 助手：协议 / 5大元工具 / 悬浮窗 / Markdown渲染 / 日历联动 | [`doc/AI_AGENT.md`](./doc/AI_AGENT.md) |
-| AI 助手全景技术架构：LangGraph 状态机 / 端侧时序图 / 风险鉴权 | [`doc/AI_AGENT_ARCHITECTURE.md`](./doc/AI_AGENT_ARCHITECTURE.md) |
+| AI 助手：架构图 / 状态机 / 5大元工具 / 悬浮窗 / Markdown渲染 / 日历联动 | [`doc/AI_AGENT.md`](./doc/AI_AGENT.md) |
 | 构建 / 运行 / 联调 / 签名 / 权限 / 完整测试用例清单 | [`doc/BUILD_AND_TEST.md`](./doc/BUILD_AND_TEST.md) |
 | 逐阶段变更日志（功能演进、重构与修复历史） | [`doc/CHANGES.md`](./doc/CHANGES.md) |
-| AI 助手从设备端迁移至后端的设计方案（历史存档） | [`doc/AI_AGENT_PLAN.md`](./doc/AI_AGENT_PLAN.md) |

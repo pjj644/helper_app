@@ -1,7 +1,7 @@
 # 项目架构 (ARCHITECTURE.md)
 
 > UESTC Helper（成电校园助手）的代码结构、分层设计与数据流。给接手代码的人 / 下一个 AI 快速定位用。
-> AI 助手子系统详细规格见 [AI_AGENT.md](./AI_AGENT.md)；完整系统技术架构见 [AI_AGENT_ARCHITECTURE.md](./AI_AGENT_ARCHITECTURE.md)；构建与测试见 [BUILD_AND_TEST.md](./BUILD_AND_TEST.md)；精简上手入口见根目录 [`../agent.md`](../agent.md)。
+> AI 助手子系统详细规格见 [AI_AGENT.md](./AI_AGENT.md)；构建与测试见 [BUILD_AND_TEST.md](./BUILD_AND_TEST.md)；精简上手入口见根目录 [`../AGENTS.md`](../AGENTS.md)。
 
 ## 总览
 
@@ -12,7 +12,7 @@ HarmonyOS（ArkTS，stage model，API 6.0.2/22）端云一体应用。通过 Web
 - **`Application/`** — HarmonyOS app（ArkTS）。源码在 `entry/src/main/ets/`。
 - **`CloudProgram/`** — 云端 Node.js（Cloud DB schema、云函数）。
 
-**git 仓库在项目根目录 `D:\harmony\helper_app`**（2026-08 由 `Application/` 内迁移而来，历史保留，所有项目文件统一入库；`information/` 抓取存档与 AI 工具配置（`.agents` / `.claude` / `.opencode`）不入库）。根目录包含：`agent.md` 统一上手指南、`doc/` 本文档集、`_build.bat` / `_clean_build.bat` / `_lint.bat` 构建脚本、`icon/` 素材、`playwright/` 测试脚本。
+**git 仓库在项目根目录 `D:\harmony\helper_app`**（2026-08 由 `Application/` 内迁移而来，历史保留，所有项目文件统一入库；`information/` 抓取存档不入库）。根目录包含：`AGENTS.md` 统一上手指南、`doc/` 本文档集、`_build.bat` / `_clean_build.bat` / `_lint.bat` 构建脚本、`icon/` 素材、`playwright/` 测试脚本。
 
 ## 分层（`Application/entry/src/main/ets/`）
 
