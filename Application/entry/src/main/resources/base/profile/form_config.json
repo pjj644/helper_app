@@ -1,9 +1,9 @@
 {
   "forms": [
     {
-      "name": "course_widget_2x2",
-      "displayName": "下节课提醒",
-      "description": "展示当前最近的一节课程及教室",
+      "name": "CourseWidgetCard2x2",
+      "displayName": "下一节课",
+      "description": "展示最近一门课程与上课地点倒计时",
       "src": "./ets/widget/pages/CourseWidgetCard2x2.ets",
       "uiSyntax": "arkts",
       "window": {
@@ -16,7 +16,24 @@
       "scheduledUpdateTime": "08:00",
       "updateDuration": 1,
       "defaultDimension": "2*2",
-      "supportDimensions": ["2*2", "2*4"]
+      "supportDimensions": ["2*2"]
+    },
+    {
+      "name": "CourseWidgetCard2x4",
+      "displayName": "今日课程与日程",
+      "description": "全览今日所有课程排期与进行状态",
+      "src": "./ets/widget/pages/CourseWidgetCard2x4.ets",
+      "uiSyntax": "arkts",
+      "window": {
+        "designWidth": 720,
+        "autoDesignWidth": true
+      },
+      "colorMode": "auto",
+      "isDefault": false,
+      "updateEnabled": true,
+      "updateDuration": 1,
+      "defaultDimension": "2*4",
+      "supportDimensions": ["2*4"]
     }
   ]
 }

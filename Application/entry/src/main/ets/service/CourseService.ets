@@ -142,18 +142,31 @@ export class CourseService {
 
       let targetCourse: Course | null = null;
       let targetTime: string = '--:--';
+      let countdownText: string = '今日已无课';
 
       const currentMinutes: number = today.getHours() * 60 + today.getMinutes();
       for (let i = 0; i < todayCourses.length; i++) {
         const course: Course = todayCourses[i];
         const startSec: number = course.time.startSection;
+        const endSec: number = course.time.startSection + course.time.duration - 1;
         if (startSec >= 1 && startSec <= SECTION_TIMES.length) {
           const secTime = SECTION_TIMES[startSec - 1];
-          const parts: string[] = secTime.startTime.split(':');
-          const courseMinutes: number = parseInt(parts[0]) * 60 + parseInt(parts[1]);
-          if (courseMinutes >= currentMinutes - 45) {
+          const endSecTime = (endSec >= 1 && endSec <= SECTION_TIMES.length) ? SECTION_TIMES[endSec - 1] : secTime;
+          const startParts: string[] = secTime.startTime.split(':');
+          const endParts: string[] = endSecTime.endTime.split(':');
+          const startMin: number = parseInt(startParts[0]) * 60 + parseInt(startParts[1]);
+          const endMin: number = parseInt(endParts[0]) * 60 + parseInt(endParts[1]);
+
+          if (currentMinutes < startMin) {
             targetCourse = course;
             targetTime = secTime.startTime;
+            const diff = startMin - currentMinutes;
+            countdownText = diff <= 60 ? `距上课 ${diff} 分钟` : `今天 ${targetTime} 上课`;
+            break;
+          } else if (currentMinutes >= startMin && currentMinutes <= endMin) {
+            targetCourse = course;
+            targetTime = secTime.startTime;
+            countdownText = `正在上课 (第${startSec}-${endSec}节)`;
             break;
           }
         }
@@ -169,16 +182,56 @@ export class CourseService {
           const startSec: number = targetCourse.time.startSection;
           if (startSec >= 1 && startSec <= SECTION_TIMES.length) {
             targetTime = `明日 ${SECTION_TIMES[startSec - 1].startTime}`;
+            countdownText = `明日第 ${startSec} 节上课`;
           }
         }
       }
 
-      let cacheObj: Record<string, string> = {
+      const dayNames = ['周日', '周一', '周二', '周三', '周四', '周五', '周六'];
+      const dateStr = `${today.getMonth() + 1}月${today.getDate()}日 ${dayNames[today.getDay()]} 第${week}周`;
+
+      let cacheObj: Record<string, Object> = {
         'name': targetCourse ? targetCourse.name : '暂无待上课程',
+        'courseName': targetCourse ? targetCourse.name : '暂无待上课程',
         'location': targetCourse ? (targetCourse.roomName || '教室未定') : '今日已无课',
+        'room': targetCourse ? (targetCourse.roomName || '教室未定') : '',
         'time': targetTime,
-        'room': targetCourse ? targetCourse.roomName : ''
+        'countdownText': countdownText,
+        'hasCourseToday': todayCourses.length > 0,
+        'dateStr': dateStr,
+        'courseCount': todayCourses.length
       };
+
+      for (let idx = 0; idx < 3; idx++) {
+        if (idx < todayCourses.length) {
+          const c = todayCourses[idx];
+          const startSec = c.time.startSection;
+          const endSec = c.time.startSection + c.time.duration - 1;
+          const secTime = (startSec >= 1 && startSec <= SECTION_TIMES.length) ? SECTION_TIMES[startSec - 1] : null;
+          const endSecTime = (endSec >= 1 && endSec <= SECTION_TIMES.length) ? SECTION_TIMES[endSec - 1] : secTime;
+
+          let status = '未开始';
+          if (secTime && endSecTime) {
+            const startMin = parseInt(secTime.startTime.split(':')[0]) * 60 + parseInt(secTime.startTime.split(':')[1]);
+            const endMin = parseInt(endSecTime.endTime.split(':')[0]) * 60 + parseInt(endSecTime.endTime.split(':')[1]);
+            if (currentMinutes >= startMin && currentMinutes <= endMin) {
+              status = '上课中';
+            } else if (currentMinutes > endMin) {
+              status = '已结束';
+            }
+          }
+
+          cacheObj[`course${idx + 1}_name`] = c.name;
+          cacheObj[`course${idx + 1}_time`] = secTime ? secTime.startTime : `第${startSec}节`;
+          cacheObj[`course${idx + 1}_room`] = c.roomName || '教室待定';
+          cacheObj[`course${idx + 1}_status`] = status;
+        } else {
+          cacheObj[`course${idx + 1}_name`] = '';
+          cacheObj[`course${idx + 1}_time`] = '';
+          cacheObj[`course${idx + 1}_room`] = '';
+          cacheObj[`course${idx + 1}_status`] = '';
+        }
+      }
 
       let pref = await dataPreferences.getPreferences(context as Context, AppConstants.PREF_COURSE_DB_NAME);
       await pref.put('next_course_cache', JSON.stringify(cacheObj));

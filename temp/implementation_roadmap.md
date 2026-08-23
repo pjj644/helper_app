@@ -282,7 +282,7 @@ export class BusScheduleModel {
 
 ---
 
-## Step 5: 鸿蒙桌面万能服务卡片（Form Widget）全面动态化
+## Step 5: 鸿蒙桌面万能服务卡片（Form Widget）全面动态化 ✅ **[已完成]**
 
 ### 5.1 目标
 - 改造 `2x2` 卡片：动态展示下一节课倒计时、教室与时间；
