@@ -286,45 +286,99 @@ export class FloatingWindowManager {
     }
   }
 
+  // 拖拽手势起始基准坐标 (px)
+  private dragStartBallPosX: number = 0;
+  private dragStartBallPosY: number = 0;
+
   /**
-   * 更新悬浮球拖拽位置（带边缘吸附）
+   * 开始拖拽手势：记录当前基准坐标
+   */
+  public startDrag(): void {
+    if (!this.subWindow || this.currentMode !== 'BALL') {
+      return;
+    }
+    this.dragStartBallPosX = this.ballPosX;
+    this.dragStartBallPosY = this.ballPosY;
+  }
+
+  /**
+   * 拖拽手势进行中（无边界限制，1:1 精确跟手）
+   * @param offsetXVp PanGesture 的 offsetX (单位: vp)
+   * @param offsetYVp PanGesture 的 offsetY (单位: vp)
+   */
+  public updateDrag(offsetXVp: number, offsetYVp: number): void {
+    if (!this.subWindow || this.currentMode !== 'BALL') {
+      return;
+    }
+    const deltaXPx = offsetXVp * this.density;
+    const deltaYPx = offsetYVp * this.density;
+    const newX = Math.round(this.dragStartBallPosX + deltaXPx);
+    const newY = Math.round(this.dragStartBallPosY + deltaYPx);
+
+    try {
+      this.subWindow.moveWindowTo(newX, newY);
+    } catch (e) {
+      console.error('[FloatingWindowManager] updateDrag moveWindowTo error:', JSON.stringify(e));
+    }
+  }
+
+  /**
+   * 拖拽手势结束（松手吸附最近边缘）
+   * @param offsetXVp PanGesture 的 offsetX (单位: vp)
+   * @param offsetYVp PanGesture 的 offsetY (单位: vp)
+   */
+  public endDrag(offsetXVp: number, offsetYVp: number): void {
+    if (!this.subWindow || this.currentMode !== 'BALL') {
+      return;
+    }
+    const deltaXPx = offsetXVp * this.density;
+    const deltaYPx = offsetYVp * this.density;
+    const currX = this.dragStartBallPosX + deltaXPx;
+    let currY = Math.round(this.dragStartBallPosY + deltaYPx);
+
+    const marginPx = Math.round(10 * this.density);
+    const topLimitPx = Math.round(80 * this.density);
+    const bottomLimitPx = this.screenHeightPx - this.ballSizePx - Math.round(60 * this.density);
+
+    // 垂直方向限制安全边距（不遮挡状态栏和底部导航栏）
+    currY = Math.max(topLimitPx, Math.min(bottomLimitPx, currY));
+
+    // 按松手时球体中心距离屏幕中线的远近，自动吸附到最近边缘
+    const ballCenter = currX + (this.ballSizePx / 2);
+    const screenMid = this.screenWidthPx / 2;
+    if (ballCenter < screenMid) {
+      this.dockSide = 'LEFT';
+      this.ballPosX = marginPx;
+    } else {
+      this.dockSide = 'RIGHT';
+      this.ballPosX = this.screenWidthPx - this.ballSizePx - marginPx;
+    }
+
+    this.ballPosY = currY;
+    this.ballExpandState = 'EXPANDED';
+    AppStorage.setOrCreate('floating_ball_dock_side', this.dockSide);
+    AppStorage.setOrCreate('floating_ball_expand_state', 'EXPANDED');
+    AppStorage.setOrCreate('floating_ball_reset_timer', Date.now());
+
+    try {
+      this.subWindow.moveWindowTo(this.ballPosX, this.ballPosY);
+    } catch (e) {
+      console.error('[FloatingWindowManager] endDrag moveWindowTo error:', JSON.stringify(e));
+    }
+  }
+
+  /**
+   * 兼容更新悬浮球拖拽位置
    */
   public updateBallPosition(deltaXPx: number, deltaYPx: number, isEnding: boolean = false): void {
     if (!this.subWindow || this.currentMode !== 'BALL') {
       return;
     }
 
-    let newX = this.ballPosX + deltaXPx;
-    let newY = this.ballPosY + deltaYPx;
-
-    const marginPx = Math.round(10 * this.density);
-    const topLimitPx = Math.round(80 * this.density);
-    const bottomLimitPx = this.screenHeightPx - this.ballSizePx - Math.round(60 * this.density);
-
-    // 边界限制
-    newY = Math.max(topLimitPx, Math.min(bottomLimitPx, newY));
-
     if (isEnding) {
-      // 松手时贴靠左右两侧
-      const screenMid = this.screenWidthPx / 2;
-      if (newX + (this.ballSizePx / 2) < screenMid) {
-        this.dockSide = 'LEFT';
-        newX = marginPx; // 吸附左侧全显
-      } else {
-        this.dockSide = 'RIGHT';
-        newX = this.screenWidthPx - this.ballSizePx - marginPx; // 吸附右侧全显
-      }
-      this.ballPosX = newX;
-      this.ballPosY = newY;
-      this.ballExpandState = 'EXPANDED';
-      AppStorage.setOrCreate('floating_ball_dock_side', this.dockSide);
-      AppStorage.setOrCreate('floating_ball_expand_state', 'EXPANDED');
-    }
-
-    try {
-      this.subWindow.moveWindowTo(newX, newY);
-    } catch (e) {
-      console.error('[FloatingWindowManager] moveWindowTo error:', JSON.stringify(e));
+      this.endDrag(deltaXPx / this.density, deltaYPx / this.density);
+    } else {
+      this.updateDrag(deltaXPx / this.density, deltaYPx / this.density);
     }
   }
 

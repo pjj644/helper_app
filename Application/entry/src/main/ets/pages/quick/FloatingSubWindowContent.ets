@@ -336,38 +336,37 @@ export struct FloatingSubWindowContent {
   private FloatingBallView(): void {
     Stack({ alignContent: Alignment.Center }) {
       // 外层动态呼吸发光环（仅在全显 EXPANDED 时呼吸）
-      Circle()
+      Stack()
         .width(58)
         .height(58)
-        .fill('#4F46E5')
-        .opacity(this.expandState === 'EXPANDED' ? this.breathOpacity * 0.35 : 0)
+        .borderRadius(29)
+        .backgroundColor('rgba(79, 70, 229, 0.22)')
+        .opacity(this.expandState === 'EXPANDED' ? this.breathOpacity * 0.4 : 0)
         .scale({ x: this.breathScale, y: this.breathScale })
         .animation({ duration: 250 });
 
-      // 核心圆形球体背景
-      Circle()
-        .width(52)
-        .height(52)
-        .fill('#4F46E5')
-        .shadow({
-          radius: 12,
-          color: 'rgba(79, 70, 229, 0.45)',
-          offsetX: 0,
-          offsetY: 4
-        });
-
-      // 居中白色 AI 机器人图标
-      Column() {
+      // 核心圆形球体背景 (纯圆背景 + 居中白色图标 + 圆形阴影)
+      Stack({ alignContent: Alignment.Center }) {
         Image($r('app.media.ic_ai_assistant'))
           .width(26)
           .height(26)
           .fillColor(Color.White);
       }
-      .justifyContent(FlexAlign.Center)
-      .alignItems(HorizontalAlign.Center);
+      .width(52)
+      .height(52)
+      .borderRadius(26)
+      .clip(true)
+      .backgroundColor('#4F46E5')
+      .shadow({
+        radius: 8,
+        color: 'rgba(79, 70, 229, 0.4)',
+        offsetX: 0,
+        offsetY: 3
+      });
     }
     .width(60)
     .height(60)
+    .backgroundColor(Color.Transparent)
     .opacity(this.expandState === 'EXPANDED' ? 1.0 : 0.7)
     .animation({ duration: 250, curve: Curve.EaseOut })
     .gesture(
@@ -377,15 +376,14 @@ export struct FloatingSubWindowContent {
           .onActionStart((event: GestureEvent) => {
             this.clearCollapseTimer();
             this.isDragging = true;
-            this.dragStartX = event.offsetX;
-            this.dragStartY = event.offsetY;
+            FloatingWindowManager.getInstance().startDrag();
           })
           .onActionUpdate((event: GestureEvent) => {
-            FloatingWindowManager.getInstance().updateBallPosition(event.offsetX, event.offsetY, false);
+            FloatingWindowManager.getInstance().updateDrag(event.offsetX, event.offsetY);
           })
           .onActionEnd((event: GestureEvent) => {
             this.isDragging = false;
-            FloatingWindowManager.getInstance().updateBallPosition(event.offsetX, event.offsetY, true);
+            FloatingWindowManager.getInstance().endDrag(event.offsetX, event.offsetY);
             this.startCollapseTimer();
           }),
         TapGesture({ count: 1 })
@@ -742,6 +740,7 @@ export struct FloatingSubWindowContent {
       }
     }
     .width('100%')
-    .height('100%');
+    .height('100%')
+    .backgroundColor(Color.Transparent);
   }
 }

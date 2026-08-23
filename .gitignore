@@ -18,3 +18,5 @@ oh_modules/
 
 # 抓取存档（EAMS HTML 参照，体积大且经常变）
 /information/
+/temp/
+*.env
