@@ -48,10 +48,15 @@ DevEco 安装在 `D:\deveco\DevEco Studio\`（路径含空格）。**严禁直�
 - **数据流向**：`Pages / FloatingWindow → Service → Repository → Preferences / Cloud DB`；
 - **纯 TS Model 约束**：**`model/` 是纯 TS，严禁任何 `@kit.*` 导入**，只做数据接口定义、JSON 解析与排序计算；
 - **常量唯一收归**：`common/constants/AppConstants.ets` 是所有偏好键、URL 路径、路由常量、魔法数字的**唯一来源**，禁止在代码中散落常量；
-- **五 Tab 导航**：`pages/Index.ets` 包含发现（Quick）、AI助手（Assistant）、课程（Class）、日历（Calendar）、我的（Mine）；
+- **五 Tab 导航**：`pages/Index.ets` 包含发现（Quick，含「云中成电」Hero 入口与「成电班车」时刻）、AI助手（Assistant）、课程（Class）、日历（Calendar）、我的（Mine）；
+- **校车时刻与日历联动**：`model/BusScheduleModel.ets`（纯 TS 班车模型）+ `pages/schedulePages/BusSchedulePage.ets`（双校区切换、倒计时卡片）+ `CalendarKitReminderService.createBusReminder`（提前 15 分钟写入日历并强力去重）；
+- **桌面万能服务卡片（Form Widget）**：
+  - `CourseWidgetCard2x2.ets`：下一节课动态倒计时与教室地点；
+  - `CourseWidgetCard2x4.ets`：今日 1-12 节课全天排期与状态时间线；
+  - `EntryFormAbility.ets` + `CourseService.updateNextCourseCache`：全状态动态绑定与静默刷新；
 - **本地存储**：基于 `@kit.ArkData` preferences：
   - `classtable_login_pref`：用户认证鉴权；
-  - `course_table_local_db`：应用核心业务数据（课表、考试、成绩、日程、设置）；
+  - `course_table_local_db`：应用核心业务数据（课表、考试、成绩、日程、设置、桌面卡片缓存）；
   - `chat_sessions_db` / `chat_messages_db`：AI 助手统一会话历史（`ChatSessionRepository`）。
 - **学期与周次计算**：
   - `CourseModel.getCurrentWeek()` / `getWeekForDate(date)`：锚定到含行课首日的周一（当前学期：`2026-08-31`，2026-2027 第一学期）；
@@ -63,8 +68,8 @@ DevEco 安装在 `D:\deveco\DevEco Studio\`（路径含空格）。**严禁直�
 ## 5. AI 助手开发（加工具必须三处同步）
 
 ### 架构模式
-- **后端大脑**：LangGraph 编排 + DeepSeek 推理 + 智谱 GLM-4V 视觉识别 + 成电校园生活指南 RAG 知识库 + 教务处官网实时检索 + SQLite 会话持久化。
-- **端侧统一控制引擎**：`BackendAgentClient`（SSE 长连接客户端）+ `DataQueryEngine`（纯内存多维查询）+ `ToolExecutor`（5 大元工具、流水线批处理、系统日历联动）+ `FloatingWindowManager`（SubWindow 全局伴随悬浮窗）+ `MarkdownBubble`（原生 Markdown 渲染与折叠工具面板）。
+- **后端大脑**：LangGraph 编排 + DeepSeek 推理 + 智谱 GLM-4V 视觉识别 + 成电 80+ 服务直达库与生活指南 RAG 知识库（`campus_services.json`）+ 教务处官网实时检索 + SQLite 会话持久化。
+- **端侧统一控制引擎**：`BackendAgentClient`（SSE 长连接客户端）+ `DataQueryEngine`（纯内存多维查询）+ `ToolExecutor`（5 大元工具、流水线批处理、系统日历联动）+ `FloatingWindowManager`（SubWindow 全局伴随悬浮窗）+ `MarkdownBubble`（原生 Markdown 解析、超链接拦截与内嵌 `WebPage.ets` 浏览器打开）。
 
 ### 加工具的三处同步铁律（名称与参数必须完全一致）
 1. **后端 Schema 与元数据**：`ai-proxy/src/tools.ts`（定义 schema 与 `toolMeta`：`requiresConfirmation` / `riskLevel`）；

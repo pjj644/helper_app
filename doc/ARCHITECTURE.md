@@ -19,24 +19,26 @@ HarmonyOS（ArkTS，stage model，API 6.0.2/22）端云一体应用。通过 Web
 ```
 pages/          -> UI 页面（@Entry / @Component）
                    ├─ Index.ets (主框架：五 Tab 结构)
-                   ├─ classTablePages/ (课表网格 tableUI, 考试 ExamPage, 导入, 设置 AppSettings)
+                   ├─ classTablePages/ (课表网格 tableUI, 考试 ExamPage, 导入, 设置 AppSettings, 内嵌网页 WebPage)
                    ├─ gradePages/ (成绩 GradePage, 导入 GradeImport)
-                   ├─ schedulePages/ (日历 CalendarPage, 新建/编辑日程)
+                   ├─ schedulePages/ (日历 CalendarPage, 班车时刻表 BusSchedulePage, 新建/编辑日程)
                    ├─ quick/ (发现门户 quickIndex, AI 助手全屏页 AssistantPage)
                    └─ login/ (登录与统一身份认证 loginIndex)
 components/     -> 可复用 UI 组件
-                   ├─ home/ (主页解耦子组件：Header, NextCourseCard, ExamCountdownCard, QuickLinks)
+                   ├─ home/ (主页解耦子组件：Header, NextCourseCard, ExamCountdownCard, QuickLinksGrid)
                    ├─ agent/ (原生 Markdown 渲染气泡 MarkdownBubble, 遥测指标卡片, 紧凑折叠工具面板)
                    ├─ PrivacyDialogComponent.ets (首次启动合规隐私授权弹窗)
                    ├─ WebScrapeTakeoverBar.ets (教务抓取全屏手动接管控制条)
                    └─ common/ (主题切换、高亮聚光灯遮罩等)
 entryformability/ -> 鸿蒙桌面万能服务卡片生命周期服务 (EntryFormAbility.ets)
-widget/pages/   -> 鸿蒙桌面卡片 UI 组件 (CourseWidgetCard2x2.ets)
+widget/pages/   -> 鸿蒙桌面卡片 UI 组件
+                   ├─ CourseWidgetCard2x2.ets (2x2 下一节课倒计时与地点卡片)
+                   └─ CourseWidgetCard2x4.ets (2x4 今日全天排期与状态时间线卡片)
 service/        -> 业务逻辑（auth / scrape / sync / reminder / 各数据服务）
                    ├─ AuthService.ets (AGC 认证延迟初始化、账号注销与凭证彻底清空)
                    ├─ CourseService.ets / ExamService.ets / GradeService.ets
                    ├─ ScheduleService.ets (日程管理与系统日历双向联动删除)
-                   ├─ CalendarKitReminderService.ets (HarmonyOS 系统日历写入、去重与事件查询)
+                   ├─ CalendarKitReminderService.ets (HarmonyOS 系统日历写入、班车/考试去重与事件查询)
                    ├─ ReminderService.ets (应用内通知代理与日历兜底)
                    ├─ SyncService.ets (Cloud DB 双向同步)
                    └─ WebScrapeService.ets (EAMS 教务系统 WebView JS 注入抓取)
@@ -48,6 +50,7 @@ repository/     -> 数据持久化（Preferences 键值存储、Cloud DB、会�
                    └─ CloudDbRepository.ets (华为云数据库)
 model/          -> 数据模型 + 纯数据变换（解析/过滤/排序，严禁 `@kit.*` 导入）
                    ├─ classTableModel/ (CourseModel, ExamModel, ExamAccessRules)
+                   ├─ BusScheduleModel.ets (纯 TS 双校区班车时刻与倒计时算法)
                    ├─ GradeModel.ets / ScheduleModel.ets / ReminderModel.ets
                    └─ agent/ (ToolCall, ToolResult, ChatMessage, TelemetryMetrics)
 common/         -> 共享基础设施
@@ -73,13 +76,26 @@ common/         -> 共享基础设施
 ## 导航与五 Tab 结构
 
 应用底部采用现代化五 Tab 架构（`pages/Index.ets`）：
-1. **发现 (Quick)**：校内常用系统门户、办事指南与快捷入口导航。
-2. **AI助手 (Assistant)**：全屏多模态智能体交互界面（集成打字机流式 Markdown 渲染、语音输入、海报提取与快捷场景胶囊）。
+1. **发现 (Quick)**：校内常用系统门户（「云中成电」Hero Banner 推广位、校园地图、清水河畔、图书馆等）与「成电班车」时刻表入口。
+2. **AI助手 (Assistant)**：全屏多模态智能体交互界面（集成打字机流式 Markdown 渲染、超链接拦截内嵌直达、语音输入、海报提取与快捷场景胶囊）。
 3. **课程 (Class / Home)**：课表主仪表盘，包含周网格课表、今日课程卡片（支持点击右上角图标自由切换为考试倒计时卡片）。
 4. **日历 (Calendar)**：统一事件日历，聚合课程、考试与自定义日程，支持月视图、列表视图与日程快速新建。
 5. **我的 (Mine)**：账号登录态、华为云同步、悬浮球设置、助手后端配置、意见反馈（一键复制开发者邮箱 `pjj644@users.noreply.github.com`）与版本关于信息。
 
-页面跳转统一走 `router.pushUrl`，路由常量集中定义在 `AppConstants.RouterConstants`。
+页面跳转统一走 `router.pushUrl`，路由常量集中定义在 `AppConstants.RouterConstants`。对于外部 HTTP 链接统一唤起 `pages/classTablePages/WebPage` 内嵌原生顶栏浏览器打开。
+
+## 鸿蒙桌面万能服务卡片（Form Widget）
+
+应用支持两种规格的桌面服务卡片（`form_config.json`）：
+- **2x2 卡片 (`CourseWidgetCard2x2.ets`)**：展示最近一门待上课程、教室地点以及距上课实时倒计时，已无课状态自动展示友好提示。
+- **2x4 卡片 (`CourseWidgetCard2x4.ets`)**：全天排期时间线卡片，展示今日 1-12 节多时段课程安排与「上课中 / 未开始 / 已结束」实时状态指示。
+- **生命周期与静默刷新**：`EntryFormAbility.ets` 处理卡片添加与周期更新，`CourseService.updateNextCourseCache` 在课表发生任何增删改或导入时计算富状态并持久化至 `next_course_cache`，支持桌面卡片毫秒级无感静默更新。
+
+## 双校区班车时刻与日历联动模块
+
+- **纯 TS 班车算法 (`BusScheduleModel.ets`)**：内嵌清水河与沙河工作日（各 18 班）及周末（各 10 班）全量时刻表，支持动态计算下一班车倒计时与明日首班车预测。
+- **班车页面 (`BusSchedulePage.ets`)**：双向校区一键切换（清水河 ➔ 沙河 / 沙河 ➔ 清水河）、Hero 下一班发车倒计时卡片、时刻表全览与乘车指南。
+- **日历提醒联动 (`CalendarKitReminderService.createBusReminder`)**：支持为任意班次一键设置发车前 15 分钟 HarmonyOS 系统日历提醒，具备同日期同方向同发车点强力去重机制。
 
 ## 全局悬浮伴随助手与页面感知子系统
 
@@ -94,11 +110,11 @@ common/         -> 共享基础设施
 
 - **本地存储**：全部基于 `@kit.ArkData` 的 `preferences`。
   - `classtable_login_pref`：用户认证与凭据；
-  - `course_table_local_db`：应用全量业务数据（课表、考试、成绩、日程、设置等）；
+  - `course_table_local_db`：应用全量业务数据（课表、考试、成绩、日程、设置、桌面卡片缓存等）；
   - `chat_sessions_db` / `chat_messages_db`：AI 对话历史与会话元数据。
 - **系统日历双向同步 (`CalendarKitReminderService`)**：
   - 接入 HarmonyOS `@kit.CalendarKit`；
-  - 写入日程时支持自动查重与唯一性校验，防止重复事件冗余；
+  - 写入日程/班车/考试时支持自动查重与唯一性校验，防止重复事件冗余；
   - 删除日程时自动联动清除系统日历关联事件，维持双向严格一致。
 - **云端存储**：华为 Cloud DB（Zone: `classData`），对象类型 `ClassCourse`、`ClassExam`（继承 `DatabaseObject`），鉴权走 `@hw-agconnect/auth`。
 

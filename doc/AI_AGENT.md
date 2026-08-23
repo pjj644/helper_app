@@ -10,16 +10,17 @@
 ┌──────────────────────────────────────┐     SSE ↓     ┌──────────────────────────────┐
 │ AssistantPage.ets / FloatingWindow   │──────────────▶│ Express + LangGraph.js       │
 │  ├─ 原生 Markdown 渲染 (MarkdownBubble)│               │  ├─ POST /api/chat -> SSE 流  │
-│  ├─ 紧凑折叠工具面板 (Tool Collapse)   │               │  ├─ POST /api/vision/parse.. │
-│  ├─ 遥测指标卡片 (Telemetry Metrics)  │               │  ├─ GET /api/knowledge/se.. │
-│  ├─ 语音输入 (CoreSpeechKit)         │               │  ├─ StateGraph(Messages)      │
-│  ├─ 智谱 GLM-4V 海报/通知日程识别    │               │  │   ├─ agentNode(DeepSeek)   │
-│  ├─ 会话持久化 (ChatSessionRepository)│               │  │   └─ toolsNode(interrupt)  │
-│  ├─ 页面感知 (PageContextTracker)    │               │  ├─ SqliteSaver 检查点持久化  │
-│  ├─ UI动作总线 (UIActionDispatcher)  │               │  ├─ 智谱 GLM-4V (多模态视觉)  │
-│  ├─ 统一确认弹窗 (动态风险鉴权)       │               │  ├─ CampusKnowledgeStore(RAG)│
-│  └─ BackendAgentClient (SSE流式客户端)│    POST ↑     │  ├─ JWC 官网实时爬虫检索     │
-│     ├─ ToolExecutor                  │──────────────▶│  └─ DeepSeek API (推理核心)  │
+│  ├─ 链接拦截与内嵌浏览器 (WebPage)    │               │  ├─ POST /api/vision/parse.. │
+│  ├─ 紧凑折叠工具面板 (Tool Collapse)   │               │  ├─ GET /api/knowledge/se.. │
+│  ├─ 遥测指标卡片 (Telemetry Metrics)  │               │  ├─ StateGraph(Messages)      │
+│  ├─ 语音输入 (CoreSpeechKit)         │               │  │   ├─ agentNode(DeepSeek)   │
+│  ├─ 智谱 GLM-4V 海报/通知日程识别    │               │  │   └─ toolsNode(interrupt)  │
+│  ├─ 会话持久化 (ChatSessionRepository)│               │  ├─ SqliteSaver 检查点持久化  │
+│  ├─ 页面感知 (PageContextTracker)    │               │  ├─ 智谱 GLM-4V (多模态视觉)  │
+│  ├─ UI动作总线 (UIActionDispatcher)  │               │  ├─ CampusKnowledgeStore(RAG)│
+│  ├─ 统一确认弹窗 (动态风险鉴权)       │               │  ├─ JWC 官网实时爬虫检索     │
+│  └─ BackendAgentClient (SSE流式客户端)│    POST ↑     │  └─ DeepSeek API (推理核心)  │
+│     ├─ ToolExecutor                  │──────────────▶│  └─ 80+ 校内直达服务库       │
 │     │   ├─ DataQueryEngine (多维过滤) │               └──────────────────────────────┘
 │     │   ├─ CalendarKit (双向同步去重)│
 │     │   └─ Pipeline 复合批处理器     │
@@ -27,7 +28,7 @@
 └──────────────────────────────────────┘
 ```
 
-- **大脑在后端**：LangGraph 编排、DeepSeek 推理、智谱 GLM-4V 视觉识别、CampusKnowledgeStore RAG 校园生活知识库、教务处官网实时检索、SQLite 持久化会话状态。手机端只发送最新增量消息（`{session_id, message}`），**历史完全由后端检查点管理**。
+- **大脑在后端**：LangGraph 编排、DeepSeek 推理、智谱 GLM-4V 视觉识别、CampusKnowledgeStore RAG 校园生活知识库、80+ 校内服务直达库、教务处官网实时检索、SQLite 持久化会话状态。手机端只发送最新增量消息（`{session_id, message}`），**历史完全由后端检查点管理**。
 - **端侧统一控制引擎**：前端实现 `DataQueryEngine`（纯内存级全域多维过滤）与 `ToolExecutor` 批处理执行器。后端 `tools.ts` 仅需 Bind 核心元工具，执行时走 interrupt 挂起，端侧批量执行并回传结果。
 
 ---
@@ -57,11 +58,16 @@
   - `params`: `{ page?: string, syncScope?: 'all'|'courses'|'exams' }`
 
 ### 4. `campus_search`（统一校园智搜，Low 风险，无需确认）
-- **功能**：统一检索成电校园生活指南（校车时刻/缓考补考/保研/校医院/场馆）及教务处官网实时公告新闻。
+- **功能**：统一检索成电校园生活指南（校车时刻/缓考补考/保研/校医院/场馆/80+ 校内直达服务）及教务处官网实时公告新闻。
+- **知识库构成**：
+  - `campus_services.json`：收录「云中成电」80+ 项高频校内服务（迎新、选课、评教、成绩、充值、场馆预约等），包含精准名称、PC/移动端直达 URL、办理流程与关键词 Tags；
+  - `campus_guide.json`：办事流程、校历、校医院急诊电话、场馆开放时间等常见问答；
+  - `jwc_news`：教务处官网实时爬取公告。
+- **直达链接机制**：大模型识别服务意图时，直接在回复中生成标准 Markdown 链接 `[服务名称](URL)`。
 - **参数**：
   - `query`: 检索问题或关键词
   - `source`: `guide` | `jwc_news` | `auto`
-  - `category`: `bus` | `academic_policy` | `hospital` | `facilities` | `all`
+  - `category`: `bus` | `academic_policy` | `hospital` | `facilities` | `service` | `all`
 
 ### 5. `app_pipeline`（声明式复合流水线批处理，Medium 风险，需端侧确认）
 - **功能**：当遇到多步复合任务时（如“查下周二空闲时间 ➔ 创建自习日程 ➔ 写入日历”），一次性下发有序原子步骤并在端侧顺序批量执行，极大降低网络往返延迟。
@@ -87,7 +93,7 @@
   - 严格生命周期管理：先调用 `setUIContent` 再配置尺寸与位置（规避 `1300002` 异常）。
 - **双形态自由切换**：
   - **球态 (Ball Mode)**：60×60 vp 呼吸发光微型球，支持全屏自由拖拽与贴边吸附物理反馈；
-  - **浮窗态 (Panel Mode)**：覆盖在当前页面的 Mini 助手卡片，右上角配备缩小 `[-]`、新对话 `[+]` 与关闭 `[X]`。
+  - **浮窗态 (Panel Mode)**：覆盖在当前页面之上的 Mini 助手卡片，右上角配备缩小 `[-]`、新对话 `[+]` 与关闭 `[X]`。
 - **统一会话与历史管理 (`ChatSessionRepository.ets`)**：
   - 全屏助手与悬浮 Mini 助手共享同一套本地会话仓库，支持会话实时双向同步与独立新建。
 - **状态同步与避让**：
@@ -100,7 +106,8 @@
 
 - **原生 ArkTS Markdown 渲染引擎 (`MarkdownBubble.ets`)**：
   - 支持多级标题（# ~ ###）、粗体、行内代码、引用块、列表、代码块；
-  - 智能排版：属性字段（`日期:`、`时间:`、`地点:`、`类型:`、`备注:`）自动换行，状态提示单独分段；
+  - **原生超链接拦截与内嵌导航**：支持识别 Markdown 超链接 `[text](url)`，渲染为精致的蓝色链接胶囊按钮，点击自动拦截并推入 `WebPage.ets` 原生顶栏内嵌浏览器打开（保留返回、刷新、标题与线性进度条），不跳出 App；对于内部路由直接跳转本地对应页面。
+  - **智能排版**：属性字段（`日期:`、`时间:`、`地点:`、`类型:`、`备注:`）自动换行，状态提示单独分段；
   - 全屏助手与悬浮 Mini 浮窗统一采用 `MarkdownBubble` 渲染。
 - **紧凑折叠工具面板**：
   - 优雅的折叠行设计，支持状态指示、耗时与工具参数/结果一键展开查看。
@@ -109,48 +116,8 @@
 
 ---
 
-## 协议（SSE 下行 + HTTP POST 上行）
+## 加新工具必须三处同步（铁律）
 
-1. `POST /api/chat` `{session_id, message}` -> 后端开 SSE 流，事件类型：
-   - `text_chunk` - LLM 增量文本
-   - `tool_call` - `{batch_id, tool_calls:[{tool_call_id,name,args,requiresConfirmation}], ...}` 后端挂起等待工具结果
-   - `final` - 正常结束（包含 tokens/latency 等遥测数据）
-   - `error` - 错误
-2. 手机收到 `tool_call`：按 `requiresConfirmation` 决定是否弹确认框；执行 `ToolExecutor.execute(name, args)`；把结果 `POST /api/tool-result` `{session_id, batch_id, results:[{tool_call_id,success,data}]}`。
-3. 后端收到结果 -> `graph.stream(new Command({resume: results}), config)` 唤醒 `toolsNode`，继续推理。
-
----
-
-## 加工具的标准三处同步流程
-
-新增或修改工具必须**同时修改以下 3 处**，工具名称与入参必须保持严格一致：
-
-1. **后端 Schema 与元数据**：`ai-proxy/src/tools.ts`（定义 tool schema 与 `toolMeta`：`requiresConfirmation` / `riskLevel`）。
-2. **前端执行器**：`ToolExecutor.ets`（`switch(toolName)` 分发执行具体逻辑）。
-3. **前端注册表**：`ToolRegistry.ets`（定义镜像用于端侧动态风险评级与确认弹窗判定）。
-
----
-
-## 代码位置与调试
-
-- **后端**（独立 git 仓库）：`C:\Users\28399\Desktop\华为云\后端服务\ai-proxy`
-  - `src/tools.ts` - 核心元工具与高阶工具定义
-  - `src/prompt.ts` - 统一控制引擎提示词与场景示例
-  - `src/graph.ts` - StateGraph（interrupt / resume 调度）
-  - `src/knowledge/store.ts` - 成电校园生活指南 RAG 知识库
-  - `src/jwc.ts` - 教务处官网实时检索
-  - `src/vision.ts` - 智谱 GLM-4V 多模态日程识别接口
-  - `test/phone-sim.mjs` - 端侧元工具与 Pipeline 模拟联调脚本
-- **前端**（根仓库 `D:\harmony\helper_app`）：`entry/src/main/ets/common/agent/`
-  - `BackendAgentClient.ets` - SSE 流式客户端
-  - `DataQueryEngine.ets` - 统一内存数据多维查询引擎
-  - `ToolExecutor.ets` - 元工具分发、数据变更与 Pipeline 执行器
-  - `ToolRegistry.ets` - 工具元数据与动态风险判定
-  - `FloatingWindowManager.ets` - SubWindow 全局悬浮窗管理
-  - `PageContextTracker.ets` - 页面活跃状态与数据感知中心
-  - `UIActionDispatcher.ets` - 页面 UI 动作分发总线
-  - `ChatSessionRepository.ets` - 统一会话存储中心
-  - `VisionScheduleHelper.ets` - 智谱视觉海报提取调用
-  - `components/agent/MarkdownBubble.ets` - 原生 ArkTS Markdown 渲染气泡
-  - `pages/quick/AssistantPage.ets` - 全屏 AI 助手主页面
-- **调试日志前缀**：`[BackendAgentClient]` / `[CalendarKit]` / `[ReminderDebug]` / `[ExamDebug]` / `[HomeDebug]` / `[FloatingWindow]`。
+1. **后端 Schema 与元数据**：`ai-proxy/src/tools.ts`
+2. **前端执行器**：`ToolExecutor.ets`
+3. **前端注册表**：`ToolRegistry.ets`

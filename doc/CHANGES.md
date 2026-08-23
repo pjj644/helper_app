@@ -4,6 +4,32 @@
 
 ---
 
+## 2026-08: 发现页门户升级、80+ 服务直达库、班车日历联动与桌面卡片动态化
+
+- **1. 发现页（Quick）重构与「云中成电」核心入口 (`QuickLinksGrid.ets`, `Index.ets`, `AppConstants.ets`)**：
+  - 移除非必要占位卡片（计算器、天气等），打造「云中成电」Hero Banner 核心推广位与精简响应式 4 列功能网格；
+  - 引入统一外链与路由常量规范，打通校内各系统门户（云中成电、校园地图、清水河畔、图书馆等）。
+- **2. 80+ 校内服务直达知识库与大模型直达链接输出 (`campus_services.json`, `store.ts`, `prompt.ts`)**：
+  - 提取并清洗「云中成电」80 项高频校内服务（迎新、教务、财务、后勤、场馆、党建、科研等）；
+  - 升级 `CampusKnowledgeStore` 支持服务名称/拼音/类别快速匹配；
+  - 大模型 System Prompt 约束产出 Markdown 超链接 `[服务名称](URL)`。
+- **3. Markdown 原生超链接解析与内嵌 WebPage 拦截 (`MarkdownBubble.ets`, `WebPage.ets`)**：
+  - 原生 ArkTS 实现 Markdown `[text](url)` 超链接分词解析与胶囊按钮渲染；
+  - 拦截点击事件在 App 内嵌的原生顶栏浏览器（`WebPage.ets`）中平滑加载，保留返回、刷新与进度指示，不跳出 App。
+- **4. 清水河↔沙河双校区班车时刻与日历联动 (`BusScheduleModel.ets`, `BusSchedulePage.ets`, `CalendarKitReminderService.ets`)**：
+  - 构建纯 TS 班车模型 `BusScheduleModel`，包含双校区工作日/周末全部发车时刻与倒计时算法；
+  - 构建 `BusSchedulePage`：双向校区切换、下一班车 Hero 倒计时、时刻表列表；
+  - 扩展 `CalendarKitReminderService.createBusReminder`：发车前 15 分钟写入 HarmonyOS 系统日历并强力去重。
+- **5. 鸿蒙桌面万能服务卡片（Form Widget）全面动态化 (`form_config.json`, `EntryFormAbility.ets`, `CourseWidgetCard2x2.ets`, `CourseWidgetCard2x4.ets`, `CourseService.ets`)**：
+  - 升级 2x2 动态卡片：最近一门课程、教室地点与发车/上课实时倒计时；
+  - 新建 2x4 全天课表卡片：全览今日 1-12 节课程排期与进行中/已结束状态指示；
+  - `EntryFormAbility` 与 `CourseService.updateNextCourseCache` 实现全状态动态绑定与数据静默更新。
+- **6. 历史冗余代码清理与工程 0-Lint 全量验证**：
+  - 彻底清理 `pages/CloudDb/` 下冗余历史演示文件（`ClassCourse.ts`, `ClassExam.ts`, `DbInsert.ets`, `CloudDb.ets`, `Post.ts`）；
+  - 严格通过 `devecocli check lint`（0 error）与 DevEco 全流程增量编译验证。
+
+---
+
 ## 2026-08: 教务系统登录态判定与 500 会话恢复流转优化
 
 - **登录态与 500 异常拦截脚本增强 (`WebScrapeService.ets`)**：
