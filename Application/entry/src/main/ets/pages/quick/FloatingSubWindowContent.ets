@@ -20,6 +20,9 @@ interface MiniDisplayMessage {
 @Component
 export struct FloatingSubWindowContent {
   @StorageLink('floating_window_mode') windowMode: string = 'BALL';
+  @StorageLink('floating_ball_expand_state') expandState: string = 'HALF_HIDDEN';
+  @StorageLink('floating_ball_dock_side') dockSide: string = 'RIGHT';
+  @StorageLink('floating_ball_reset_timer') @Watch('onResetTimerTriggered') resetTimerTrigger: number = 0;
   @StorageProp(ThemeManager.THEME_STORAGE_KEY) isDarkMode: boolean = false;
 
   @State breathScale: number = 1.0;
@@ -45,6 +48,7 @@ export struct FloatingSubWindowContent {
   private currentClient: BackendAgentClient | null = null;
   private breathTimer: number = -1;
   private recordTimer: number = -1;
+  private collapseTimer: number = -1;
 
   // 拖拽累计偏移
   private dragStartX: number = 0;
@@ -68,6 +72,7 @@ export struct FloatingSubWindowContent {
   }
 
   aboutToDisappear(): void {
+    this.clearCollapseTimer();
     if (this.breathTimer >= 0) {
       clearInterval(this.breathTimer);
       this.breathTimer = -1;
@@ -81,6 +86,28 @@ export struct FloatingSubWindowContent {
       this.currentClient = null;
     }
     this.speechHelper.release();
+  }
+
+  private onResetTimerTriggered(): void {
+    if (this.windowMode === 'BALL' && this.expandState === 'EXPANDED') {
+      this.startCollapseTimer();
+    }
+  }
+
+  private startCollapseTimer(): void {
+    this.clearCollapseTimer();
+    this.collapseTimer = setTimeout(() => {
+      if (this.windowMode === 'BALL' && this.expandState === 'EXPANDED') {
+        FloatingWindowManager.getInstance().dockBall();
+      }
+    }, 3000);
+  }
+
+  private clearCollapseTimer(): void {
+    if (this.collapseTimer >= 0) {
+      clearTimeout(this.collapseTimer);
+      this.collapseTimer = -1;
+    }
   }
 
   // === 会话管理逻辑 ===
@@ -308,15 +335,16 @@ export struct FloatingSubWindowContent {
   @Builder
   private FloatingBallView(): void {
     Stack({ alignContent: Alignment.Center }) {
-      // 外层动态呼吸发光环
+      // 外层动态呼吸发光环（仅在全显 EXPANDED 时呼吸）
       Circle()
-        .width(60)
-        .height(60)
+        .width(58)
+        .height(58)
         .fill('#4F46E5')
-        .opacity(this.breathOpacity * 0.4)
-        .scale({ x: this.breathScale, y: this.breathScale });
+        .opacity(this.expandState === 'EXPANDED' ? this.breathOpacity * 0.35 : 0)
+        .scale({ x: this.breathScale, y: this.breathScale })
+        .animation({ duration: 250 });
 
-      // 核心球体
+      // 核心圆形球体背景
       Circle()
         .width(52)
         .height(52)
@@ -328,11 +356,11 @@ export struct FloatingSubWindowContent {
           offsetY: 4
         });
 
-      // 机器人图标
+      // 居中白色 AI 机器人图标
       Column() {
         Image($r('app.media.ic_ai_assistant'))
-          .width(28)
-          .height(28)
+          .width(26)
+          .height(26)
           .fillColor(Color.White);
       }
       .justifyContent(FlexAlign.Center)
@@ -340,11 +368,14 @@ export struct FloatingSubWindowContent {
     }
     .width(60)
     .height(60)
+    .opacity(this.expandState === 'EXPANDED' ? 1.0 : 0.7)
+    .animation({ duration: 250, curve: Curve.EaseOut })
     .gesture(
       GestureGroup(
         GestureMode.Exclusive,
         PanGesture({ fingers: 1, direction: PanDirection.All })
           .onActionStart((event: GestureEvent) => {
+            this.clearCollapseTimer();
             this.isDragging = true;
             this.dragStartX = event.offsetX;
             this.dragStartY = event.offsetY;
@@ -355,10 +386,20 @@ export struct FloatingSubWindowContent {
           .onActionEnd((event: GestureEvent) => {
             this.isDragging = false;
             FloatingWindowManager.getInstance().updateBallPosition(event.offsetX, event.offsetY, true);
+            this.startCollapseTimer();
           }),
         TapGesture({ count: 1 })
           .onAction(() => {
-            if (!this.isDragging) {
+            if (this.isDragging) {
+              return;
+            }
+            if (this.expandState === 'HALF_HIDDEN') {
+              // 第一次点击：从半隐藏展开至全显，并启动 3 秒倒计时
+              FloatingWindowManager.getInstance().expandBall();
+              this.startCollapseTimer();
+            } else {
+              // 全显状态下在倒计时内再次点击：打开 Mini 助手对话面板
+              this.clearCollapseTimer();
               FloatingWindowManager.getInstance().switchToPanelMode();
             }
           })

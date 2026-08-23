@@ -4,6 +4,8 @@ import { BusinessError } from '@kit.BasicServicesKit';
 import { AppConstants, RouterConstants } from '../constants/AppConstants';
 
 export type FloatingWindowMode = 'BALL' | 'PANEL' | 'HIDDEN';
+export type BallExpandState = 'HALF_HIDDEN' | 'EXPANDED';
+export type DockSide = 'LEFT' | 'RIGHT';
 
 /**
  * 悬浮球与 Mini 助手子窗口管理器 (FloatingWindowManager)
@@ -19,6 +21,8 @@ export class FloatingWindowManager {
   private isEnabled: boolean = true;
   private isAssistantPageActive: boolean = false;
   private currentMode: FloatingWindowMode = 'BALL';
+  private ballExpandState: BallExpandState = 'HALF_HIDDEN';
+  private dockSide: DockSide = 'RIGHT';
 
   // 坐标与尺寸 (px)
   private screenWidthPx: number = 1080;
@@ -55,9 +59,13 @@ export class FloatingWindowManager {
       this.density = disp.densityPixels || 3.0;
       this.ballSizePx = Math.round(this.ballSizeVp * this.density);
 
-      // 默认停靠在右下侧
-      this.ballPosX = this.screenWidthPx - this.ballSizePx - Math.round(16 * this.density);
+      // 默认停靠在右下侧，初始为半隐藏状态（50% 在屏幕外）
+      this.dockSide = 'RIGHT';
+      this.ballExpandState = 'HALF_HIDDEN';
+      this.ballPosX = this.screenWidthPx - Math.round(this.ballSizePx / 2);
       this.ballPosY = Math.round(this.screenHeightPx * 0.65);
+      AppStorage.setOrCreate('floating_ball_dock_side', this.dockSide);
+      AppStorage.setOrCreate('floating_ball_expand_state', this.ballExpandState);
     } catch (e) {
       console.warn('[FloatingWindowManager] get display error:', JSON.stringify(e));
     }
@@ -104,6 +112,14 @@ export class FloatingWindowManager {
 
   public getCurrentMode(): FloatingWindowMode {
     return this.currentMode;
+  }
+
+  public getBallExpandState(): BallExpandState {
+    return this.ballExpandState;
+  }
+
+  public getDockSide(): DockSide {
+    return this.dockSide;
   }
 
   /**
@@ -169,6 +185,8 @@ export class FloatingWindowManager {
             this.subWindow?.showWindow();
             this.currentMode = 'BALL';
             AppStorage.setOrCreate('floating_window_mode', 'BALL');
+            AppStorage.setOrCreate('floating_ball_dock_side', this.dockSide);
+            AppStorage.setOrCreate('floating_ball_expand_state', this.ballExpandState);
           }
         } catch (confErr) {
           console.error('[FloatingWindowManager] configure subWindow error:', JSON.stringify(confErr));
@@ -205,13 +223,66 @@ export class FloatingWindowManager {
     }
     try {
       this.currentMode = 'BALL';
+      this.ballExpandState = 'EXPANDED';
       AppStorage.setOrCreate('floating_window_mode', 'BALL');
+      AppStorage.setOrCreate('floating_ball_expand_state', 'EXPANDED');
+      AppStorage.setOrCreate('floating_ball_reset_timer', Date.now());
+
+      const marginPx = Math.round(10 * this.density);
+      if (this.dockSide === 'LEFT') {
+        this.ballPosX = marginPx;
+      } else {
+        this.ballPosX = this.screenWidthPx - this.ballSizePx - marginPx;
+      }
 
       // 缩回球尺寸并移回原位置
       this.subWindow.resize(this.ballSizePx, this.ballSizePx);
       this.subWindow.moveWindowTo(this.ballPosX, this.ballPosY);
     } catch (e) {
       console.error('[FloatingWindowManager] switchToBallMode error:', JSON.stringify(e));
+    }
+  }
+
+  /**
+   * 将悬浮球从半隐藏滑出至完全显示
+   */
+  public expandBall(): void {
+    if (!this.subWindow || this.currentMode !== 'BALL') {
+      return;
+    }
+    this.ballExpandState = 'EXPANDED';
+    AppStorage.setOrCreate('floating_ball_expand_state', 'EXPANDED');
+    const marginPx = Math.round(10 * this.density);
+    if (this.dockSide === 'LEFT') {
+      this.ballPosX = marginPx;
+    } else {
+      this.ballPosX = this.screenWidthPx - this.ballSizePx - marginPx;
+    }
+    try {
+      this.subWindow.moveWindowTo(this.ballPosX, this.ballPosY);
+    } catch (e) {
+      console.error('[FloatingWindowManager] expandBall error:', JSON.stringify(e));
+    }
+  }
+
+  /**
+   * 将悬浮球缩回边缘半隐藏（50% 移到屏幕外）
+   */
+  public dockBall(): void {
+    if (!this.subWindow || this.currentMode !== 'BALL') {
+      return;
+    }
+    this.ballExpandState = 'HALF_HIDDEN';
+    AppStorage.setOrCreate('floating_ball_expand_state', 'HALF_HIDDEN');
+    if (this.dockSide === 'LEFT') {
+      this.ballPosX = -Math.round(this.ballSizePx / 2);
+    } else {
+      this.ballPosX = this.screenWidthPx - Math.round(this.ballSizePx / 2);
+    }
+    try {
+      this.subWindow.moveWindowTo(this.ballPosX, this.ballPosY);
+    } catch (e) {
+      console.error('[FloatingWindowManager] dockBall error:', JSON.stringify(e));
     }
   }
 
@@ -237,12 +308,17 @@ export class FloatingWindowManager {
       // 松手时贴靠左右两侧
       const screenMid = this.screenWidthPx / 2;
       if (newX + (this.ballSizePx / 2) < screenMid) {
-        newX = marginPx; // 吸附左侧
+        this.dockSide = 'LEFT';
+        newX = marginPx; // 吸附左侧全显
       } else {
-        newX = this.screenWidthPx - this.ballSizePx - marginPx; // 吸附右侧
+        this.dockSide = 'RIGHT';
+        newX = this.screenWidthPx - this.ballSizePx - marginPx; // 吸附右侧全显
       }
       this.ballPosX = newX;
       this.ballPosY = newY;
+      this.ballExpandState = 'EXPANDED';
+      AppStorage.setOrCreate('floating_ball_dock_side', this.dockSide);
+      AppStorage.setOrCreate('floating_ball_expand_state', 'EXPANDED');
     }
 
     try {
