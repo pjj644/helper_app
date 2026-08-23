@@ -51,8 +51,8 @@ export class AppConstants {
   static readonly LIB_URL: string = 'https://www.lib.uestc.edu.cn';
   static readonly QINGSHUI_RIVER_URL: string = 'https://bbs.uestc.edu.cn/new';
   static readonly CARD_BALANCE_URL: string = 'https://mapp.uestc.cn/site/ipasscd/index';
-  static readonly EPORTAL_URL: string = 'https://eportal.uestc.edu.cn';
-  static readonly YJSY_URL: string = 'https://yjsy.uestc.edu.cn';
+  static readonly EPORTAL_URL: string = 'https://online.uestc.edu.cn/';
+  static readonly YJSY_URL: string = 'https://yjsjy.uestc.edu.cn/pyxx/jzsso/login';
   static readonly UESTC_URL: string = 'https://www.uestc.edu.cn';
   static readonly EAMS_PORTAL_URL: string = 'https://eams.uestc.edu.cn/eams/home!childmenus.action?menu.id=844';
 
