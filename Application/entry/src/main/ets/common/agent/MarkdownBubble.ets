@@ -199,7 +199,7 @@ export class MarkdownParser {
         while ((lMatch = linkRegex.exec(trimmed)) !== null) {
           matchedAny = true;
           if (lMatch.index > lastIdx) {
-            const preText = trimmed.substring(lastIdx, lMatch.index).replace(/^[👉->•\-]\s*/, '').trim();
+            const preText = trimmed.substring(lastIdx, lMatch.index).replace(/^[👉>•\-]\s*/, '').trim();
             if (preText.length > 0) {
               blocks.push({
                 id: `p_${blockIdCounter++}`,

@@ -342,7 +342,7 @@ export class BusScheduleModel {
 
 ---
 
-## Step 6: 废弃代码清理与 0-Lint 全量验证
+## Step 6: 废弃代码清理与 0-Lint 全量验证 ✅ **[已完成]**
 
 ### 6.1 代码清理清单
 - 删除 `Application/entry/src/main/ets/pages/CloudDb/` 目录下的死代码文件：

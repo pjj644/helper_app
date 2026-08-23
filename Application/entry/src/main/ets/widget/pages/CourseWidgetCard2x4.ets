@@ -1,6 +1,6 @@
-let storage = new LocalStorage();
+let storage2x4 = new LocalStorage();
 
-@Entry(storage)
+@Entry(storage2x4)
 @Component
 struct CourseWidgetCard2x4 {
   @LocalStorageProp('dateStr') dateStr: string = '今日课表';
