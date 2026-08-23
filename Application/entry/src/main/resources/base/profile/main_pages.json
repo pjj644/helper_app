@@ -15,6 +15,7 @@
     "pages/gradePages/GradePage",
     "pages/gradePages/GradeImport",
     "pages/schedulePages/CalendarPage",
+    "pages/schedulePages/BusSchedulePage",
     "pages/quick/FloatingSubWindowContent"
   ]
 }

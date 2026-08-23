@@ -378,6 +378,79 @@ export class CalendarKitReminderService {
     return result;
   }
 
+  /**
+   * 写入班车发车提醒到系统日历（提前 15 分钟），按发车点与时间强力去重
+   */
+  static async createBusReminder(
+    context: Context,
+    departureName: string,
+    destinationName: string,
+    busTime: string,
+    targetDate?: Date
+  ): Promise<number> {
+    try {
+      const cal = await CalendarKitReminderService.ensureCalendar(context);
+      if (!cal) {
+        console.error('[CalendarKit] createBusReminder: calendar not available');
+        return -1;
+      }
+
+      const now = targetDate || new Date();
+      const timeParts = busTime.split(':').map(Number);
+      const startHour = timeParts[0] || 0;
+      const startMinute = timeParts[1] || 0;
+
+      const startDate = new Date(now.getFullYear(), now.getMonth(), now.getDate(), startHour, startMinute);
+      if (!targetDate && startDate.getTime() < Date.now() - 10 * 60 * 1000) {
+        startDate.setDate(startDate.getDate() + 1);
+      }
+
+      const endDate = new Date(startDate.getTime() + 45 * 60 * 1000);
+      const title = `成电班车：${departureName} ➔ ${destinationName}`;
+      const location = `${departureName}主楼班车站`;
+      const description = `发车时间：${busTime}，请提前到达上车站台。`;
+
+      try {
+        const toleranceMs = 12 * 60 * 60 * 1000;
+        const filter = calendarManager.EventFilter.filterByTime(
+          startDate.getTime() - toleranceMs,
+          endDate.getTime() + toleranceMs
+        );
+        const events = await cal.getEvents(filter);
+        for (let i = 0; i < events.length; i++) {
+          const e = events[i];
+          if ((e.title || '').includes('成电班车') && Math.abs((e.startTime || 0) - startDate.getTime()) < 10 * 60 * 1000) {
+            try {
+              await cal.deleteEvent(e.id);
+              console.info(`[CalendarKit] createBusReminder: purged duplicate bus event id=${e.id}`);
+            } catch (_err) {
+              // ignore
+            }
+          }
+        }
+      } catch (err) {
+        console.warn('[CalendarKit] createBusReminder purge warning:', JSON.stringify(err));
+      }
+
+      const eventConfig: calendarManager.Event = {
+        title: title,
+        type: calendarManager.EventType.NORMAL,
+        startTime: startDate.getTime(),
+        endTime: endDate.getTime(),
+        reminderTime: [15],
+        description: description,
+        location: { location: location },
+      };
+
+      const eventId = await cal.addEvent(eventConfig);
+      console.info(`[CalendarKit] createBusReminder: success eventId=${eventId}, title=${title}`);
+      return eventId;
+    } catch (error) {
+      console.error('[CalendarKit] createBusReminder error:', JSON.stringify(error));
+      return -1;
+    }
+  }
+
   static resetInstance(): void {
     CalendarKitReminderService.calendar = null;
     CalendarKitReminderService.calendarMgr = null;
