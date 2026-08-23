@@ -170,7 +170,7 @@ export class CampusKnowledgeStore {
 
 ---
 
-## Step 3: 端侧 MarkdownBubble 原生链接拦截与内嵌 WebPage 跳转
+## Step 3: 端侧 MarkdownBubble 原生链接拦截与内嵌 WebPage 跳转 ✅ **[已完成]**
 
 ### 3.1 目标
 - 让 `MarkdownBubble.ets` 能够解析 Markdown 格式的超链接 `[链接文本](URL)`；

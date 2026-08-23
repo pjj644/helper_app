@@ -1,4 +1,6 @@
+import { router } from '@kit.ArkUI';
 import { ThemeManager } from '../utils/ThemeManager';
+import { RouterConstants } from '../constants/AppConstants';
 
 export interface InlineSpanItem {
   text: string;
@@ -13,7 +15,7 @@ export interface KeyValueItem {
 
 export interface MarkdownBlockItem {
   id: string;
-  type: 'paragraph' | 'heading' | 'list_item' | 'quote' | 'table' | 'code' | 'card';
+  type: 'paragraph' | 'heading' | 'list_item' | 'quote' | 'table' | 'code' | 'card' | 'link';
   level?: number;
   spans: InlineSpanItem[];
   listPrefix?: string;
@@ -22,6 +24,8 @@ export interface MarkdownBlockItem {
   codeContent?: string;
   cardTitle?: string;
   cardFields?: KeyValueItem[];
+  linkText?: string;
+  linkUrl?: string;
 }
 
 /**
@@ -182,6 +186,52 @@ export class MarkdownParser {
       if (trimmed.length === 0) {
         i++;
         continue;
+      }
+
+      // 2.5 链接检测 [text](url)
+      const linkRegex = /\[(.*?)\]\(((?:https?:\/\/|\/pages\/|pages\/)[^\s\)]+)\)/g;
+      if (linkRegex.test(trimmed)) {
+        linkRegex.lastIndex = 0;
+        let lastIdx = 0;
+        let lMatch: RegExpExecArray | null = null;
+        let matchedAny = false;
+
+        while ((lMatch = linkRegex.exec(trimmed)) !== null) {
+          matchedAny = true;
+          if (lMatch.index > lastIdx) {
+            const preText = trimmed.substring(lastIdx, lMatch.index).replace(/^[👉->•\-]\s*/, '').trim();
+            if (preText.length > 0) {
+              blocks.push({
+                id: `p_${blockIdCounter++}`,
+                type: 'paragraph',
+                spans: MarkdownParser.parseInlineSpans(preText),
+              });
+            }
+          }
+          blocks.push({
+            id: `link_${blockIdCounter++}`,
+            type: 'link',
+            linkText: lMatch[1] || '打开链接',
+            linkUrl: lMatch[2],
+            spans: [],
+          });
+          lastIdx = linkRegex.lastIndex;
+        }
+
+        if (matchedAny) {
+          if (lastIdx < trimmed.length) {
+            const postText = trimmed.substring(lastIdx).trim();
+            if (postText.length > 0) {
+              blocks.push({
+                id: `p_${blockIdCounter++}`,
+                type: 'paragraph',
+                spans: MarkdownParser.parseInlineSpans(postText),
+              });
+            }
+          }
+          i++;
+          continue;
+        }
       }
 
       // 3. 结构化卡片块识别（如 ### 课程名 / ### 会议 紧随 - 属性：值）
@@ -533,6 +583,8 @@ export struct MarkdownBubble {
           .border({ width: 0.5, color: this.isDarkMode ? '#2E3440' : '#E2E8F0' })
           .alignItems(HorizontalAlign.Start)
           .margin({ top: 4, bottom: 4 })
+        } else if (block.type === 'link') {
+          this.renderLink(block.linkText || '打开链接', block.linkUrl || '')
         } else {
           // 普通段落
           Text() {
@@ -555,5 +607,49 @@ export struct MarkdownBubble {
     }
     .width('100%')
     .alignItems(HorizontalAlign.Start)
+  }
+
+  @Builder
+  private renderLink(text: string, url: string) {
+    Row({ space: 6 }) {
+      Image($r('app.media.ic_campus_map'))
+        .width(16)
+        .height(16)
+
+      Text(text)
+        .fontSize(14)
+        .fontWeight(FontWeight.Medium)
+        .fontColor('#007AFF')
+        .decoration({ type: TextDecorationType.Underline, color: '#007AFF' })
+
+      Text('›')
+        .fontSize(16)
+        .fontWeight(FontWeight.Bold)
+        .fontColor('#007AFF')
+    }
+    .padding({ left: 10, right: 10, top: 6, bottom: 6 })
+    .backgroundColor(this.isDarkMode ? '#1E293B' : '#EFF6FF')
+    .borderRadius(8)
+    .border({ width: 0.5, color: this.isDarkMode ? '#3B82F6' : '#BFDBFE' })
+    .margin({ top: 4, bottom: 4 })
+    .onClick(() => {
+      this.handleLinkClick(text, url);
+    })
+  }
+
+  private handleLinkClick(title: string, url: string): void {
+    if (url.startsWith('pages/') || url.startsWith('/pages/')) {
+      const targetUrl = url.startsWith('/') ? url.substring(1) : url;
+      router.pushUrl({ url: targetUrl }).catch((e: Error) => {
+        console.error('[MarkdownBubble] 跳转页面失败', e);
+      });
+    } else if (url.startsWith('http://') || url.startsWith('https://')) {
+      router.pushUrl({
+        url: RouterConstants.PAGE_WEB,
+        params: { title: title, url: url }
+      }).catch((e: Error) => {
+        console.error('[MarkdownBubble] 打开网页失败', e);
+      });
+    }
   }
 }
