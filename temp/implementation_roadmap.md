@@ -67,7 +67,7 @@ private tools: HomeToolItem[] = [
 
 ---
 
-## Step 2: AI 知识库构建（80+ 校内服务直达库 + 成电百事通）
+## Step 2: AI 知识库构建（80+ 校内服务直达库 + 成电百事通） ✅ **[已完成]**
 
 ### 2.1 目标
 - 全量提炼 `D:\harmony\helper_app\temp\云中成电.html` 中的 80+ 项服务，结构化为 JSON 知识库；
