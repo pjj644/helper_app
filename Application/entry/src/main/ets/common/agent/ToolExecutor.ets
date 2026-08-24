@@ -14,6 +14,7 @@ import { router } from '@kit.ArkUI'
 import { common } from '@kit.AbilityKit'
 import { http } from '@kit.NetworkKit'
 import { AgentEndpointConfig, AgentEndpoint } from './AgentEndpointConfig'
+import { ToolRegistry, LEGACY_TOOL_NAMES } from './ToolRegistry'
 import { ScheduleRepository } from '../../repository/ScheduleRepository'
 import { DataQueryEngine, QueryFilter } from './DataQueryEngine'
 import { PageContextTracker } from './PageContextTracker'
@@ -25,6 +26,7 @@ export interface ToolResult {
 }
 
 interface GuideItem {
+  id?: string
   title: string
   category: string
   content: string
@@ -36,6 +38,20 @@ interface GuideResultData {
   keyword: string
   count: number
   guides: GuideItem[]
+  /** 数据生成时间：后端下发 generatedAt 或内置兜底集标注的生成日期 */
+  generatedAt?: string
+  /** 数据来源：backend=后端知识库 / cache=进程内缓存 / fallback=内置离线兜底 */
+  source?: string
+}
+
+/** 后端 GET /api/v1/knowledge/guides 的响应形状（T6a），data 即 GuideItem 形态 */
+interface BackendGuideResponse {
+  ok: boolean
+  category?: string
+  keyword?: string
+  count?: number
+  generatedAt?: string
+  data?: GuideItem[]
 }
 
 interface UpcomingExamStudyItem {
@@ -68,9 +84,118 @@ export class ToolExecutor {
   private context: Context
   private queryEngine: DataQueryEngine
 
+  /** 执行器全部分发分支名（与 execute() 的 switch 一一对应），供启动自检与注册表键集 diff */
+  private static readonly EXECUTOR_TOOL_NAMES: string[] = [
+    // === 5 大核心元工具 ===
+    'app_data_query',
+    'app_data_mutate',
+    'app_control',
+    'campus_search',
+    'app_pipeline',
+    // === 智能高阶辅助工具 ===
+    'generate_study_plan',
+    'get_current_page_context',
+    'execute_page_action',
+    // === 向后兼容旧工具分发 ===
+    'query_today_courses',
+    'query_tomorrow_courses',
+    'query_week_courses',
+    'query_current_week',
+    'get_current_datetime',
+    'query_courses_by_date',
+    'query_course_by_name',
+    'query_next_exam',
+    'query_all_exams',
+    'query_grades',
+    'query_gpa',
+    'query_schedule',
+    'list_calendar_events',
+    'query_reminder_settings',
+    'check_login_status',
+    'has_course_data',
+    'create_schedule',
+    'delete_schedule',
+    'update_schedule',
+    'sync_courses_to_cloud',
+    'sync_exams_to_cloud',
+    'sync_all_to_cloud',
+    'download_all_from_cloud',
+    'set_reminder_enabled',
+    'set_remind_minutes',
+    'refresh_reminders',
+    'navigate_to_page',
+    'query_campus_guide',
+    'search_jwc_news'
+  ]
+
+  /** 校园指南进程内缓存：key = `${category}|${keyword}`，仅保留最近成功结果；持久化缓存见阻塞表 B-03 */
+  private static readonly guideCache: Map<string, GuideResultData> = new Map<string, GuideResultData>()
+  /** 缓存条目上限，超出后整体清空（查询基数低，简化处理即可） */
+  private static readonly GUIDE_CACHE_MAX_ENTRIES: number = 32
+  /** 内置离线兜底集的生成日期标注 */
+  private static readonly BUILTIN_GUIDES_GENERATED_AT: string = '2026-08-24'
+  /** 内置最小离线兜底集（校车+缓考）：离线兜底，完整数据由后端知识库下发 */
+  private static readonly builtinGuides: GuideItem[] = [
+    {
+      title: '清水河 ⇋ 沙河 校车时刻表',
+      category: 'bus',
+      content: '工作日班次：07:00, 08:30, 10:00, 12:00, 13:30, 15:00, 16:30, 18:00, 21:00。周末与节假日班次有所减少。',
+      details: '清水河上车点：主楼东侧班车站；沙河上车点：东门班车站。乘车请出示校园卡或成电码。'
+    },
+    {
+      title: '期末缓考与补考规定',
+      category: 'academic_policy',
+      content: '必修课期末不及格通常在开学前一周安排补考；因病等不可抗力无法应考须在考试前在教务系统提交缓考申请及医院证明。',
+      details: '缓考成绩按正常考试计分；缺考或作弊者取消补考资格。'
+    }
+  ]
+
+  /** 启动自检只执行一次的标记 */
+  private static selfCheckDone: boolean = false
+
   constructor(context: Context) {
     this.context = context
     this.queryEngine = new DataQueryEngine(context)
+    ToolExecutor.checkRegistrySync()
+  }
+
+  /**
+   * T2 启动自检：比对执行器分发分支名与 ToolRegistry 注册键集，
+   * 任一侧存在对方没有的工具名（含 LEGACY_TOOL_NAMES 漂移）即 console.warn 列出差异，
+   * 防止再次出现「执行器可执行但注册表未登记」的确认弹窗旁路缺口。
+   * 仅在发现漂移时告警，正常情况下零日志噪音。
+   */
+  private static checkRegistrySync(): void {
+    if (ToolExecutor.selfCheckDone) {
+      return
+    }
+    ToolExecutor.selfCheckDone = true
+    const executorNames: string[] = ToolExecutor.EXECUTOR_TOOL_NAMES
+    const registryNames: string[] = ToolRegistry.getRegisteredToolNames()
+
+    const missingInRegistry: string[] = []
+    for (let i = 0; i < executorNames.length; i++) {
+      if (registryNames.indexOf(executorNames[i]) < 0) {
+        missingInRegistry.push(executorNames[i])
+      }
+    }
+    const unknownToExecutor: string[] = []
+    for (let i = 0; i < registryNames.length; i++) {
+      if (executorNames.indexOf(registryNames[i]) < 0) {
+        unknownToExecutor.push(registryNames[i])
+      }
+    }
+    // LEGACY_TOOL_NAMES 与执行器分支的双向一致性（常量被两侧共用的漂移防线）
+    const staleLegacyNames: string[] = []
+    for (let i = 0; i < LEGACY_TOOL_NAMES.length; i++) {
+      if (executorNames.indexOf(LEGACY_TOOL_NAMES[i]) < 0) {
+        staleLegacyNames.push(LEGACY_TOOL_NAMES[i])
+      }
+    }
+
+    if (missingInRegistry.length > 0 || unknownToExecutor.length > 0 || staleLegacyNames.length > 0) {
+      console.warn(`[ToolExecutor][自检] 执行器与工具注册表存在漂移 -> 仅执行器可执行: [${missingInRegistry.join(', ')}]; 仅注册表登记: [${unknownToExecutor.join(', ')}]; LEGACY_TOOL_NAMES 中已失效: [${staleLegacyNames.join(', ')}]`)
+    }
   }
 
   private getStringArg(args: Record<string, Object>, key: string, defaultValue: string = ''): string {
@@ -147,10 +272,10 @@ export class ToolExecutor {
           return await this.executePipeline(args)
 
         // === 智能高阶辅助工具 ===
+        // 注：空壳工具 parse_text_to_schedule 已随 T7 移除（后端 schema/toolMeta 同步删除），
+        // 旧会话回放命中该名称时走 default 分支返回「未知工具」即可，无需兼容层。
         case 'generate_study_plan':
           return await this.generateStudyPlan(args)
-        case 'parse_text_to_schedule':
-          return this.parseTextToSchedule(args)
         case 'get_current_page_context':
           return this.getCurrentPageContext()
         case 'execute_page_action':
@@ -208,9 +333,9 @@ export class ToolExecutor {
         case 'refresh_reminders':
           return await this.executeAppControl(this.buildControlArgs('refresh_reminders'))
         case 'navigate_to_page':
-          return this.navigateToPage(args)
+          return await this.navigateToPage(args)
         case 'query_campus_guide':
-          return this.queryCampusGuide(args)
+          return await this.queryCampusGuide(args)
         case 'search_jwc_news':
           return await this.searchJwcNews(args)
 
@@ -382,7 +507,7 @@ export class ToolExecutor {
       : args
 
     if (action === 'navigate') {
-      return this.navigateToPage(params)
+      return await this.navigateToPage(params)
     } else if (action === 'sync_cloud') {
       const userId: string | undefined = await AuthService.getLoginUserId(this.context)
       if (!userId) {
@@ -428,8 +553,8 @@ export class ToolExecutor {
       return await this.searchJwcNews({ 'keyword': query, 'category': category })
     }
 
-    // 默认本地知识库检索
-    const localRes: ToolResult = this.queryCampusGuide({ 'keyword': query, 'category': category })
+    // 默认走后端校园指南知识库（含缓存与内置兜底降级）
+    const localRes: ToolResult = await this.queryCampusGuide({ 'keyword': query, 'category': category })
     try {
       const data = JSON.parse(localRes.data) as GuideResultData
       if (data.count > 0 || source === 'guide') {
@@ -500,7 +625,7 @@ export class ToolExecutor {
     return { success: true, data: JSON.stringify({ hasCourseData: hasData }) }
   }
 
-  private navigateToPage(args: Record<string, Object>): ToolResult {
+  private async navigateToPage(args: Record<string, Object>): Promise<ToolResult> {
     const page: string = this.getStringArg(args, 'page')
     const pageMap: Record<string, string> = {
       'course_table': RouterConstants.PAGE_TABLE_UI,
@@ -518,86 +643,123 @@ export class ToolExecutor {
     if (url.length === 0) {
       return { success: false, data: `未知页面: ${page}` }
     }
-    router.pushUrl({ url: url }).catch((err: Error) => {
+    // T4：pushUrl 的失败必须捕获并如实回传 success:false，让模型能向用户解释跳转未发生
+    try {
+      await router.pushUrl({ url: url })
+      return { success: true, data: JSON.stringify({ message: `已导航到 ${page} 页面` }) }
+    } catch (err) {
       console.error(`[ToolExecutor] navigate error: ${String(err)}`)
-    })
-    return { success: true, data: JSON.stringify({ message: `已导航到 ${page} 页面` }) }
+      const detail: string = this.extractErrorMessage(err as Object)
+      return {
+        success: false,
+        data: JSON.stringify({ message: `跳转到 ${page} 页面失败`, error: detail })
+      }
+    }
   }
 
-  // === 校园指南本地库 ===
-  private queryCampusGuide(args: Record<string, Object>): ToolResult {
+  /** 从路由/网络异常对象中尽量提取可读的 message，取不到时退化为 String() 形式 */
+  private extractErrorMessage(err: Object): string {
+    try {
+      const rec = err as Record<string, Object>
+      const msg = rec['message']
+      if (msg !== undefined && msg !== null && String(msg).length > 0) {
+        return String(msg)
+      }
+    } catch (e) {
+      // ignore
+    }
+    return String(err)
+  }
+
+  // === 校园指南检索（T6a：数据源切换为后端知识库，本地仅保留缓存与最小离线兜底） ===
+  private async queryCampusGuide(args: Record<string, Object>): Promise<ToolResult> {
     const category: string = this.getStringArg(args, 'category', 'all')
     const keyword: string = this.getStringArg(args, 'keyword', '').toLowerCase()
+    const cacheKey: string = `${category}|${keyword}`
 
-    const allGuides: GuideItem[] = [
-      {
-        title: '清水河 ⇋ 沙河 校车时刻表',
-        category: 'bus',
-        content: '工作日班次：07:00, 08:30, 10:00, 12:00, 13:30, 15:00, 16:30, 18:00, 21:00。周末与节假日班次有所减少。',
-        details: '清水河上车点：主楼东侧班车站；沙河上车点：东门班车站。乘车请出示校园卡或成电码。'
-      },
-      {
-        title: '期末缓考与补考规定',
-        category: 'academic_policy',
-        content: '必修课期末不及格通常在开学前一周安排补考；因病等不可抗力无法应考须在考试前在教务系统提交缓考申请及医院证明。',
-        details: '缓考成绩按正常考试计分；缺考或作弊者取消补考资格。'
-      },
-      {
-        title: '保研与推免学分绩点计算',
-        category: 'academic_policy',
-        content: '保研推免绩点主要计算培养方案规定内的所有必修课和限选课加权平均成绩（GPA），通识选修与重修初修记录按学院细则执行。',
-        details: '学术科研、学科竞赛获奖及综合素质测评加分按学院当年推免方案折算。'
-      },
-      {
-        title: '清水河与沙河校医院就医流程',
-        category: 'hospital',
-        content: '校医院工作时间：周一至周日全天 24 小时急诊值班；门诊常规接诊 08:30-12:00, 14:00-17:30。',
-        details: '清水河校医院位于商业街西侧，就医请带校园卡或身份证。学生享受成都市大学生医保门诊报销。'
-      },
-      {
-        title: '清水河图书馆与自习室指南',
-        category: 'facilities',
-        content: '清水河主图书馆开放时间 08:00 - 22:30。一至四楼设有静音自习区、研讨室及电子阅览室。',
-        details: '研修间与研讨室可在"成电移动校园"或图书馆官网提前预约；入馆需刷校园卡或电子校园卡。'
-      },
-      {
-        title: '体育场馆与游泳馆开放时间',
-        category: 'facilities',
-        content: '综合体育馆、羽毛球馆、网球场与游泳馆面向全校师生开放，一般开放时间为 12:00 - 21:30。',
-        details: '部分场馆周末需通过成电移动校园-场馆预约系统提前订场。'
+    // 1) 后端检索：地址与请求头统一经 AgentEndpointConfig（与 searchJwcNews 同一口径）
+    const endpoint: AgentEndpoint = await AgentEndpointConfig.resolve(this.context)
+    if (AgentEndpointConfig.isReady(endpoint)) {
+      // 约定：category=all 时传空串表示全量
+      const categoryParam: string = (category === 'all') ? '' : category
+      const requestUrl: string = AgentEndpointConfig.joinUrl(endpoint, `api/v1/knowledge/guides?category=${encodeURIComponent(categoryParam)}&keyword=${encodeURIComponent(keyword)}`)
+      const httpRequest = http.createHttp()
+      try {
+        const response = await httpRequest.request(requestUrl, {
+          method: http.RequestMethod.GET,
+          header: AgentEndpointConfig.buildHeaders(endpoint),
+          readTimeout: 10000,
+          connectTimeout: 5000
+        })
+        if (response.responseCode === 200 && response.result) {
+          let resStr = response.result as string
+          if (typeof resStr !== 'string') {
+            resStr = JSON.stringify(response.result)
+          }
+          const parsed = JSON.parse(resStr) as BackendGuideResponse
+          if (parsed.ok && parsed.data && parsed.data.length > 0) {
+            const resultData: GuideResultData = {
+              category: category,
+              keyword: keyword,
+              count: parsed.data.length,
+              guides: parsed.data,
+              generatedAt: parsed.generatedAt,
+              source: 'backend'
+            }
+            ToolExecutor.cacheGuideResult(cacheKey, resultData)
+            return { success: true, data: JSON.stringify(resultData) }
+          }
+        } else {
+          console.error(`[ToolExecutor] 校园指南后端检索异常: HTTP ${response.responseCode}`)
+        }
+      } catch (err) {
+        console.error(`[ToolExecutor] 连接校园指南服务失败: ${String(err)}`)
+      } finally {
+        httpRequest.destroy()
       }
-    ]
+    }
 
-    let matched: GuideItem[] = allGuides
+    // 2) 降级一：复用进程内缓存的上次成功结果（本轮不做持久化，见阻塞表 B-03）
+    const cached: GuideResultData | undefined = ToolExecutor.guideCache.get(cacheKey)
+    if (cached !== undefined) {
+      const cachedResult: GuideResultData = {
+        category: cached.category,
+        keyword: cached.keyword,
+        count: cached.count,
+        guides: cached.guides,
+        generatedAt: cached.generatedAt,
+        source: 'cache'
+      }
+      console.warn(`[ToolExecutor] 校园指南后端不可用，命中进程内缓存（source=cache, count=${cached.count}）`)
+      return { success: true, data: JSON.stringify(cachedResult) }
+    }
+
+    // 3) 降级二：内置最小离线兜底集（离线兜底，完整数据由后端下发）
+    let matched: GuideItem[] = ToolExecutor.builtinGuides
     if (category !== 'all') {
       matched = matched.filter((g: GuideItem) => g.category === category)
     }
     if (keyword.length > 0) {
       matched = matched.filter((g: GuideItem) => g.title.toLowerCase().includes(keyword) || g.content.toLowerCase().includes(keyword) || (g.details !== undefined && g.details.toLowerCase().includes(keyword)))
     }
-
-    const guideResult: GuideResultData = {
+    const fallbackData: GuideResultData = {
       category: category,
       keyword: keyword,
       count: matched.length,
-      guides: matched
+      guides: matched,
+      generatedAt: ToolExecutor.BUILTIN_GUIDES_GENERATED_AT,
+      source: 'fallback'
     }
-    return { success: true, data: JSON.stringify(guideResult) }
+    console.warn(`[ToolExecutor] 校园指南无缓存可用，返回内置离线兜底集（source=fallback, count=${matched.length}）`)
+    return { success: true, data: JSON.stringify(fallbackData) }
   }
 
-  private parseTextToSchedule(args: Record<string, Object>): ToolResult {
-    const rawText: string = this.getStringArg(args, 'rawText', '')
-    if (rawText.length === 0) {
-      return { success: false, data: '提供的文本内容为空，无法解析' }
+  /** 写入指南进程内缓存；超过容量上限时整体清空（查询基数低，简化处理即可） */
+  private static cacheGuideResult(key: string, value: GuideResultData): void {
+    if (!ToolExecutor.guideCache.has(key) && ToolExecutor.guideCache.size >= ToolExecutor.GUIDE_CACHE_MAX_ENTRIES) {
+      ToolExecutor.guideCache.clear()
     }
-    return {
-      success: true,
-      data: JSON.stringify({
-        status: 'ready_for_extraction',
-        rawLength: rawText.length,
-        hint: '请助手根据此文本提取日程详情（标题、日期YYYY-MM-DD、开始时间HH:mm、结束时间HH:mm、地点、描述），并调用 app_data_mutate 创建日程'
-      })
-    }
+    ToolExecutor.guideCache.set(key, value)
   }
 
   private async searchJwcNews(args: Record<string, Object>): Promise<ToolResult> {

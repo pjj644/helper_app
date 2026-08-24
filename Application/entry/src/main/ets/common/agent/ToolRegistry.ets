@@ -12,6 +12,47 @@ export interface ToolDefinition {
   riskLevel: 'low' | 'medium' | 'high'
 }
 
+/**
+ * 旧版别名工具名清单（T2）。
+ * 与 ToolExecutor 分发分支中的「向后兼容旧工具分发」段一一对应，
+ * 供本文件注册登记与 ToolExecutor 启动自检共用；
+ * 任一侧增删工具时必须同步维护此常量，否则启动自检会 console.warn 漂移差异。
+ */
+export const LEGACY_TOOL_NAMES: string[] = [
+  // 查询类（免确认）
+  'query_today_courses',
+  'query_tomorrow_courses',
+  'query_week_courses',
+  'query_current_week',
+  'get_current_datetime',
+  'query_courses_by_date',
+  'query_course_by_name',
+  'query_next_exam',
+  'query_all_exams',
+  'query_grades',
+  'query_gpa',
+  'query_schedule',
+  'list_calendar_events',
+  'query_reminder_settings',
+  'check_login_status',
+  'has_course_data',
+  'query_campus_guide',
+  'search_jwc_news',
+  'navigate_to_page',
+  // 日程/提醒变更类（需确认）
+  'create_schedule',
+  'delete_schedule',
+  'update_schedule',
+  'set_reminder_enabled',
+  'set_remind_minutes',
+  // 云端同步/恢复、提醒重建类（高危需确认）
+  'sync_courses_to_cloud',
+  'sync_exams_to_cloud',
+  'sync_all_to_cloud',
+  'download_all_from_cloud',
+  'refresh_reminders'
+]
+
 export class ToolRegistry {
   private static tools: ToolDefinition[] = ToolRegistry.initTools()
 
@@ -92,16 +133,6 @@ export class ToolRegistry {
         riskLevel: 'low'
       },
       {
-        name: 'parse_text_to_schedule',
-        description: '从文本中提取日程结构',
-        parameters: {
-          'rawText': { type: 'string', description: '原始文本内容' }
-        },
-        required: ['rawText'],
-        requiresConfirmation: false,
-        riskLevel: 'low'
-      },
-      {
         name: 'get_current_page_context',
         description: '获取用户手机当前所在的页面名称、数据概览及可用操作集合',
         parameters: {},
@@ -121,10 +152,18 @@ export class ToolRegistry {
         riskLevel: 'low'
       },
 
-      // 向后兼容保留
+      // 向后兼容保留（别名工具，名称清单见 LEGACY_TOOL_NAMES，风险等级继承所委托的元工具）
       {
         name: 'query_today_courses',
         description: '查询今天的课程安排',
+        parameters: emptyParams,
+        required: [],
+        requiresConfirmation: false,
+        riskLevel: 'low'
+      },
+      {
+        name: 'query_tomorrow_courses',
+        description: '查询明天的课程安排',
         parameters: emptyParams,
         required: [],
         requiresConfirmation: false,
@@ -142,6 +181,30 @@ export class ToolRegistry {
         name: 'query_current_week',
         description: '查询当前是第几教学周',
         parameters: emptyParams,
+        required: [],
+        requiresConfirmation: false,
+        riskLevel: 'low'
+      },
+      {
+        name: 'get_current_datetime',
+        description: '查询当前系统时间与教学周信息',
+        parameters: emptyParams,
+        required: [],
+        requiresConfirmation: false,
+        riskLevel: 'low'
+      },
+      {
+        name: 'query_courses_by_date',
+        description: '查询指定日期的课程安排',
+        parameters: { 'date': { type: 'string', description: '日期（YYYY-MM-DD）' } },
+        required: [],
+        requiresConfirmation: false,
+        riskLevel: 'low'
+      },
+      {
+        name: 'query_course_by_name',
+        description: '按课程名称关键词查询课程信息',
+        parameters: { 'courseName': { type: 'string', description: '课程名称关键词' } },
         required: [],
         requiresConfirmation: false,
         riskLevel: 'low'
@@ -187,6 +250,71 @@ export class ToolRegistry {
         riskLevel: 'low'
       },
       {
+        name: 'list_calendar_events',
+        description: '查询系统日历中指定时间范围内的事件',
+        parameters: {
+          'startDate': { type: 'string', description: '起始日期' },
+          'endDate': { type: 'string', description: '结束日期' }
+        },
+        required: [],
+        requiresConfirmation: false,
+        riskLevel: 'low'
+      },
+      {
+        name: 'query_reminder_settings',
+        description: '查询各类日程的提醒配置',
+        parameters: emptyParams,
+        required: [],
+        requiresConfirmation: false,
+        riskLevel: 'low'
+      },
+      {
+        name: 'check_login_status',
+        description: '检查用户登录状态并返回账号信息',
+        parameters: emptyParams,
+        required: [],
+        requiresConfirmation: false,
+        riskLevel: 'low'
+      },
+      {
+        name: 'has_course_data',
+        description: '检查本地是否已导入课程数据',
+        parameters: emptyParams,
+        required: [],
+        requiresConfirmation: false,
+        riskLevel: 'low'
+      },
+      {
+        name: 'query_campus_guide',
+        description: '按关键词与分类检索校园生活指南',
+        parameters: {
+          'keyword': { type: 'string', description: '检索关键词' },
+          'category': { type: 'string', description: '指南分类' }
+        },
+        required: [],
+        requiresConfirmation: false,
+        riskLevel: 'low'
+      },
+      {
+        name: 'search_jwc_news',
+        description: '检索教务处官网公告新闻',
+        parameters: {
+          'keyword': { type: 'string', description: '检索关键词' },
+          'category': { type: 'string', description: '公告分类' }
+        },
+        required: [],
+        requiresConfirmation: false,
+        riskLevel: 'low'
+      },
+      {
+        name: 'navigate_to_page',
+        description: '导航到应用内指定页面',
+        parameters: { 'page': { type: 'string', description: '页面标识' } },
+        required: ['page'],
+        requiresConfirmation: false,
+        riskLevel: 'low'
+      },
+      {
         name: 'create_schedule',
         description: '创建一条自定义日程',
         parameters: {
@@ -208,6 +336,60 @@ export class ToolRegistry {
         riskLevel: 'medium'
       },
       {
+        name: 'update_schedule',
+        description: '更新指定ID的日程内容',
+        parameters: {
+          'eventId': { type: 'string', description: '日程ID' },
+          'title': { type: 'string', description: '标题' },
+          'date': { type: 'string', description: '日期' },
+          'startTime': { type: 'string', description: '开始时间' },
+          'endTime': { type: 'string', description: '结束时间' },
+          'location': { type: 'string', description: '地点' },
+          'description': { type: 'string', description: '描述' }
+        },
+        required: ['eventId'],
+        requiresConfirmation: true,
+        riskLevel: 'medium'
+      },
+      {
+        name: 'set_reminder_enabled',
+        description: '更新指定类型日程的提醒配置',
+        parameters: {
+          'type': { type: 'string', description: '日程类型：custom/exam/assignment 等' },
+          'minutes': { type: 'number', description: '提前提醒分钟数' }
+        },
+        required: [],
+        requiresConfirmation: true,
+        riskLevel: 'medium'
+      },
+      {
+        name: 'set_remind_minutes',
+        description: '更新指定类型日程的提前提醒分钟数',
+        parameters: {
+          'type': { type: 'string', description: '日程类型：custom/exam/assignment 等' },
+          'minutes': { type: 'number', description: '提前提醒分钟数' }
+        },
+        required: [],
+        requiresConfirmation: true,
+        riskLevel: 'medium'
+      },
+      {
+        name: 'sync_courses_to_cloud',
+        description: '同步课表数据到云端',
+        parameters: emptyParams,
+        required: [],
+        requiresConfirmation: true,
+        riskLevel: 'high'
+      },
+      {
+        name: 'sync_exams_to_cloud',
+        description: '同步考试安排到云端',
+        parameters: emptyParams,
+        required: [],
+        requiresConfirmation: true,
+        riskLevel: 'high'
+      },
+      {
         name: 'sync_all_to_cloud',
         description: '全量同步到云端',
         parameters: emptyParams,
@@ -224,24 +406,62 @@ export class ToolRegistry {
         riskLevel: 'high'
       },
       {
-        name: 'navigate_to_page',
-        description: '导航到应用内指定页面',
-        parameters: { 'page': { type: 'string', description: '页面标识' } },
-        required: ['page'],
-        requiresConfirmation: false,
-        riskLevel: 'low'
+        name: 'refresh_reminders',
+        description: '全量刷新重建日程与系统日历提醒',
+        parameters: emptyParams,
+        required: [],
+        requiresConfirmation: true,
+        riskLevel: 'high'
       }
     ]
+
+    // 注册侧自检（T2）：LEGACY_TOOL_NAMES 中每个别名都必须已注册，防止常量与注册表再次漂移
+    for (let i = 0; i < LEGACY_TOOL_NAMES.length; i++) {
+      let found: boolean = false
+      for (let j = 0; j < tools.length; j++) {
+        if (tools[j].name === LEGACY_TOOL_NAMES[i]) {
+          found = true
+          break
+        }
+      }
+      if (!found) {
+        console.warn(`[ToolRegistry] 注册表自检失败：LEGACY_TOOL_NAMES 中的工具未注册: ${LEGACY_TOOL_NAMES[i]}`)
+      }
+    }
+
     return tools
   }
 
+  /**
+   * 按名称查找工具定义。
+   * T2 fail-closed：未命中时不再返回 undefined，而是返回「高危且需确认」的哨兵定义，
+   * 堵住「查不到定义 → 默认低风险放行」的确认弹窗旁路；哨兵沿用入参作为 name，便于日志定位。
+   */
   static getToolDefinition(name: string): ToolDefinition | undefined {
     for (let i = 0; i < ToolRegistry.tools.length; i++) {
       if (ToolRegistry.tools[i].name === name) {
         return ToolRegistry.tools[i]
       }
     }
-    return undefined
+    console.warn(`[ToolRegistry] 工具 "${name}" 未注册，已按 fail-closed 哨兵定义处理（riskLevel=high，需确认）`)
+    const sentinel: ToolDefinition = {
+      name: name,
+      description: `未注册工具（fail-closed 哨兵定义）: ${name}`,
+      parameters: {},
+      required: [],
+      requiresConfirmation: true,
+      riskLevel: 'high'
+    }
+    return sentinel
+  }
+
+  /** 返回当前已注册的全部工具名（供 ToolExecutor 启动自检做键集 diff） */
+  static getRegisteredToolNames(): string[] {
+    const names: string[] = []
+    for (let i = 0; i < ToolRegistry.tools.length; i++) {
+      names.push(ToolRegistry.tools[i].name)
+    }
+    return names
   }
 
   static requiresConfirmation(name: string, argsStr?: string): boolean {
@@ -255,8 +475,9 @@ export class ToolRegistry {
         // ignore
       }
     }
+    // 未注册工具经哨兵定义走 high 需确认；兜底分支同样取 true 保持 fail-closed 口径
     const tool: ToolDefinition | undefined = ToolRegistry.getToolDefinition(name)
-    return tool ? tool.requiresConfirmation : false
+    return tool ? tool.requiresConfirmation : true
   }
 
   static getRiskLevel(name: string, argsStr?: string): string {
@@ -270,8 +491,9 @@ export class ToolRegistry {
         // ignore
       }
     }
+    // 未注册工具返回 high（fail-closed），确认弹窗将展示高危警示样式
     const tool: ToolDefinition | undefined = ToolRegistry.getToolDefinition(name)
-    return tool ? tool.riskLevel : 'low'
+    return tool ? tool.riskLevel : 'high'
   }
 
   static getToolDescriptions(): string {
