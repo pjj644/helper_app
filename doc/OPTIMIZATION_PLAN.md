@@ -1,6 +1,6 @@
 # 成电助手优化实施计划（Phase 0 + Phase 1）
 
-> **版本**：v1.2（2026-08-24）　**状态**：✅ Phase 0 + Phase 1 全部完成（T1–T10 十项全绿），待用户 U2 冒烟与 U3 真机回归验收
+> **版本**：v1.3（2026-08-24）　**状态**：✅ Phase 0 + Phase 1 完成；U2 冒烟 6/7 通过，唯一失败项（确认弹窗）已修复（见 B-07）待复测；后续演进见 `doc/PHASE2_PLAN.md`
 > **范围**：P0 安全可靠修复 + P1 质量债清偿（共 10 个任务）。Phase 2（功能扩展）仅列大纲。
 > **执行模型**：主 agent 只做整合、测试、git 提交；实现工作由子 agent 团队分波次并行完成。
 > **后端约定**：`ai-proxy`（独立仓库）**本轮不部署 ECS**，仅本地 `npm run dev` 测试，改动在该仓库内独立提交。
@@ -161,14 +161,10 @@
 
 ---
 
-## 5. Phase 2 大纲（本轮不实施，仅备忘）
+## 5. Phase 2 计划（详见 `doc/PHASE2_PLAN.md`）
 
-1. 生活服务四件套：空闲教室、全校课程/教师查询、一卡通余额+流水、电费查询（🔴 需用户提供入口页面结构或授权抓包分析）；
-2. 课表/成绩单截图一键导入（GLM-4V 扩展，降低 WebView 抓取门槛）；
-3. 晨报卡片：今日课表+考试倒计时+班车的主动式每日简报；
-4. 云同步升级：自动同步、updatedAt 冲突解决、接入已有 idGenerator 云函数替换 hash 截断 ID、纳入日程与会话；
-5. Push Kit 成绩发布推送（🔴 需 AGC 控制台开通）；
-6. 长期：小艺开放平台 Skill/A2A 接入、跨会话记忆、华为应用市场上架。
+> 应用户要求（2026-08-24）：**生活服务四件套**与 **Push Kit 成绩发布推送**不纳入 Phase 2 范围。
+> Phase 2 聚焦：遗留清偿、截图导入（GLM-4V）、云同步升级、晨报卡片，另附实况窗与小艺 Skill 两项调研型任务。
 
 ---
 
@@ -207,6 +203,7 @@
 | B-04 | T2 | **确认弹窗真正闸门在 BackendAgentClient.handleToolCall（读后端 SSE 事件 requiresConfirmation 字段），注册表哨兵不覆盖「后端显式下发 false」的场景** | 执行器侧已 fail-closed；需在 handleToolCall 并入端侧裁决：`backend字段 \|\| ToolRegistry.requiresConfirmation(name)` | 🔴 集成必办 | Agent-D 完成后由主 agent 一行补齐并回归验证 |
 | B-05 | 存量 | set_reminder_enabled 实现只消费 type+minutes（enabled 参数无效、minutes≤0 报错），注册已按真实行为写 | 属既有行为缺陷非本轮引入 | 🟢 记录 | 后续轮次决定修行为或改 schema |
 | B-06 | T7a | AssistantPage.ets:314 残留 parse_text_to_schedule 显示名死映射 | 文件被 Agent-D 占用未动 | 🟢 无害 | 集成时顺手删除 |
+| B-07 | T2/U2 | **U2 唯一未过项**：①悬浮球浮窗 onConfirmationNeeded 写死 return true，高危操作在该入口零确认直接执行；②后端 getToolMeta 未收录工具名 fail-open 返回免确认 | 线上 SSE 实测证实主链路正常（app_data_mutate 下发 requiresConfirmation:true），缺口仅在浮窗与后端 meta 兜底；两端均改 fail-closed（前端 1c0b215 真弹窗+显示名收编 ToolRegistry，后端 e44f1ae），build/lint/typecheck 三绿，线上帧复测行为不变 | ✅ 已解决 | 🔴 模拟器复测：悬浮球内下发「创建日程」应弹出确认框 |
 
 ---
 
@@ -234,6 +231,7 @@
   - 测试脚手架已提交（后端 `cd48f9c`、前端 `151640e`）：phone-sim 六个线级失败场景（含自检退出码）+ U2 模拟器冒烟清单 `doc/SMOKE_CHECKLIST_U2.md`。
   - 披露：T8 过程中补齐了评测 harness 中 generate_study_plan 的 mock 返回契约（对齐端侧真实返回结构，评估器与数据集未改动）。
 
+- **2026-08-24 U2 冒烟回归修复**：用户冒烟除「确认弹窗指令」外全部通过。定位为悬浮球浮窗确认回调短路（B-07①）与后端 meta fail-open（B-07②），均已修复提交并实测复验。AI 助手 Tab 主链路本就正常（澄清提问→创建指令→rc:true 帧）。
 - **2026-08-24 Wave 3 完成（收尾）**：
   - T9 三笔（首页指纹门控节拍 fc33b30、提醒批量预载 fd964ae、死代码清理 bfac6b0，净删 475 行）；T10 一笔（卡片事件驱动推送 93850a3）。build+lint 双绿（警告 65→62）。
   - **T10b 调研结论（A3 验证）**：API 22 桌面卡片秒级倒计时不可行——updateDuration 最小粒度 30 分钟、setFormNextRefreshTime 最小 5 分钟且每日配额 50 次；SDK 无 FormAnimatableExtension 等动画扩展符号；替代通道为 Live View Kit 实况窗（需资质申请），留作 Phase 2 备选。当前「30 分钟定时+事件驱动推送+回前台校准」已达系统能力边界内最优。
