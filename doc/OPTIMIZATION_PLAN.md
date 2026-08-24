@@ -83,7 +83,7 @@
 - **验证**：grep 全仓无 `change-me` / `192.168` 残留；build+lint 过；模拟器未配置出引导、填入局域网地址后对话正常。
 - **提交**：`fix(agent): remove hardcoded proxy endpoint and key, unify config via settings`
 
-### T2 工具风险评级 fail-closed + 注册表补齐 `[ ] 待实施`
+### T2 工具风险评级 fail-closed + 注册表补齐 `[x] 已完成（897f4e3，闸门并集见 8f58589）`
 - **目标**：任何未注册工具一律按最高风险处理，堵住确认弹窗旁路。
 - **现状证据**：Executor 可执行 ~16 个 Registry 未注册的别名工具；查不到定义时默认 `requiresConfirmation=false/riskLevel='low'` 直接放行（`ToolRegistry.ets:258-274`）。
 - **方案**：
@@ -94,7 +94,7 @@
 - **验证**：build+lint；模拟器下发「帮我改日程」类指令确认弹出确认框。
 - **提交**：`fix(agent): fail-closed risk rating for unregistered tools, sync legacy registry`
 
-### T3 SSE 连接可靠性 `[ ] 待实施`（依赖 Wave 1 合入）
+### T3 SSE 连接可靠性 `[x] 已完成（8f58589）`
 - **目标**：断线可恢复、失败有反馈、不再静默吞错。
 - **现状证据**：连接失败即终止（`:129-137`）；流结束缺 final 静默成功（`:109-111`）；tool-result 回传失败仅 console.error、依赖后端 30s interrupt 超时导致对话悬挂（`:266-268`）。
 - **方案**：
@@ -107,7 +107,7 @@
 - **验证**：phone-sim 扩展场景（中途 kill 服务、延迟首包、缺 final 帧）；typecheck+eval 不回归；🔴 真机弱网体验留 U3。
 - **提交**：`fix(agent): add sse retry, watchdog and explicit failure states to backend client`
 
-### T4 页面跳转结果如实回传 `[ ] 待实施`
+### T4 页面跳转结果如实回传 `[x] 已完成（897f4e3）`
 - **现状证据**：`pushUrl` 异步失败仅打日志仍返回 success（`ToolExecutor.ets:521-524`），模型误判已跳转。
 - **方案**：捕获路由失败回调，返回 `success:false` + 错误描述，让模型可向用户解释。
 - **提交**：`fix(agent): report navigation failure instead of fake success`
@@ -116,7 +116,7 @@
 
 ## 4. Phase 1 —— 质量债与维护性（6 个任务）
 
-### T5 学期参数云端化 `[ ] 待实施`
+### T5 学期参数云端化 `[x] 已完成（后端 3197674 · 前端 e7ee80c/6211294）`
 - **目标**：学期锚点/学期 ID 改为云端下发 + 本地缓存兜底，消除「每学期发版」。
 - **现状证据**：`new Date(2026,7,31)`（`CourseModel.ets:307,360`）、`SCHOOL_SEMESTER_START`（`AppConstants.ets:36`）、`BASE_SEMESTER_ID=503`（`ExamAccessRules.ets:6`）。
 - **后端（T5b）**：新增 `GET /api/v1/config/app-config` 返回 `{semesterStartDate, baseSemesterId, semesterLabel}`，数据源 `src/config/appConfig.json`。
@@ -124,14 +124,14 @@
 - **验证**：模拟器修改后端 json 学期起点 → 课表周次联动变化正确；断开后端 → 缓存生效。
 - **提交**：后端 `feat(config): serve app config endpoint for semester parameters`；前端 `feat(model): load semester anchors from backend config with cached fallback`。
 
-### T6 校园数据单一来源化（班车时刻 + 校园指南）`[~] 后端已完成 · 前端 Wave 2 进行中`
+### T6 校园数据单一来源化（班车时刻 + 校园指南）`[x] 已完成（后端 3197674 · 前端 897f4e3/e7ee80c；持久化缓存遗留见 B-03）`
 - **目标**：删除前端硬编码知识副本，统一由后端知识库下发。
 - **现状证据**：前端硬编码 6 条指南（`ToolExecutor.ets:532-569`）；班车内置（`BusScheduleModel.ets`）；后端 `src/knowledge/data/` 已有 `bus_schedule.json` 等 7 个 JSON。
 - **后端（T6b）**：新增 `GET /api/v1/knowledge/bus-schedule`、`GET /api/v1/knowledge/guides`。
 - **前端（T6a)**：`campus_search` 本地指南逻辑删除、改走后端检索（preferences 缓存 last-good）；班车页数据远端获取；**保留一份标注生成日期的最小内置兜底集**应对首次安装离线场景。
 - **提交**：后端 `feat(knowledge): expose bus schedule and guide endpoints`；前端 `refactor(agent): source campus guides and bus schedule from backend with offline fallback`。
 
-### T7 移除空壳工具 `parse_text_to_schedule` `[ ] 待实施`
+### T7 移除空壳工具 `parse_text_to_schedule` `[x] 已完成（后端 97cd4ef · 前端 897f4e3）`
 - **理由**：不做任何解析只返回提示（`ToolExecutor.ets:588-601`），后端 LLM 本就内联解析，误选浪费轮次（评测 E03）。
 - **遵守三处同步铁律**：`tools.ts` schema/toolMeta、`ToolExecutor.ets` case、`ToolRegistry.ets` 注册三处同删；`prompt.ts` 相关提及与 eval 数据集同步清理。
 - **提交**：前后端各一条 `refactor(agent): drop shell tool parse_text_to_schedule`。
@@ -233,3 +233,8 @@
   - 后端 T5b/T6b/T7b/T8 已提交（后端仓 `3197674`/`97cd4ef`/`da199db`）。三个新只读端点经真机式冒烟验证（鉴权 401/200、字段形状、中文 keyword 过滤正常）。评测综合 **87.9% → 97.0%**（两轮达标，EDGE_CASES 66.7%→100%）。
   - 测试脚手架已提交（后端 `cd48f9c`、前端 `151640e`）：phone-sim 六个线级失败场景（含自检退出码）+ U2 模拟器冒烟清单 `doc/SMOKE_CHECKLIST_U2.md`。
   - 披露：T8 过程中补齐了评测 harness 中 generate_study_plan 的 mock 返回契约（对齐端侧真实返回结构，评估器与数据集未改动）。
+
+- **2026-08-24 Wave 2 完成**：
+  - T3/T2/T4/T7a/T6a/T5a 全部落地并按任务重写提交历史（auto-commit 进程曾污染 4 笔提交，已 reset 重排为 5 笔规范提交：`8f58589`/`897f4e3`/`e7ee80c`/`6211294`/`b3213d9`）。
+  - 集成四处收编：确认闸门并集裁决、EntryAbility warmUp 接线、SSE 可靠性常量入 AppConstants、死映射清理。build+lint 双绿。
+  - ⚠️ 请用户注意：仓库存在外部「update: auto commit」定时进程，会绕过任务粒度规范扫提交工作区，执行期间建议暂停。
