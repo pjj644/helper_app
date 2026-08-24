@@ -42,6 +42,8 @@ export struct FloatingSubWindowContent {
   @State isLoading: boolean = false;
   @State isRecording: boolean = false;
   @State recordingDuration: number = 0;
+  @State currentThinkingHint: string = '正在思考中...';
+  @State thinkingElapsedMs: number = 0;
 
   private scroller: Scroller = new Scroller();
   private speechHelper: SpeechRecognizerHelper = new SpeechRecognizerHelper();
@@ -49,6 +51,8 @@ export struct FloatingSubWindowContent {
   private breathTimer: number = -1;
   private recordTimer: number = -1;
   private collapseTimer: number = -1;
+  private thinkingTimer: number = -1;
+  private thinkingStartTime: number = 0;
 
   // 拖拽累计偏移
   private dragStartX: number = 0;
@@ -80,6 +84,10 @@ export struct FloatingSubWindowContent {
     if (this.recordTimer >= 0) {
       clearInterval(this.recordTimer);
       this.recordTimer = -1;
+    }
+    if (this.thinkingTimer >= 0) {
+      clearInterval(this.thinkingTimer);
+      this.thinkingTimer = -1;
     }
     if (this.currentClient) {
       this.currentClient.cancel();
@@ -218,6 +226,15 @@ export struct FloatingSubWindowContent {
     const assistantMsgIndex = this.messages.length;
     this.messages.push({ role: 'assistant', content: '' });
     this.isLoading = true;
+    this.thinkingStartTime = Date.now();
+    this.thinkingElapsedMs = 0;
+    this.currentThinkingHint = '✨ 正在理解您的问题...';
+    if (this.thinkingTimer >= 0) {
+      clearInterval(this.thinkingTimer);
+    }
+    this.thinkingTimer = setInterval(() => {
+      this.thinkingElapsedMs = Date.now() - this.thinkingStartTime;
+    }, 100);
 
     // 记录到会话消息
     this.sessionMessages.push({ role: 'user', content: raw });
@@ -244,10 +261,18 @@ export struct FloatingSubWindowContent {
     this.persistCurrentSession(context);
 
     const callbacks: AgentCallbacks = {
+      onStatusChange: (status: string, message: string) => {
+        this.currentThinkingHint = message;
+      },
+      onThoughtChunk: (chunk: string) => {
+        this.currentThinkingHint = '正在深度思考...';
+      },
       onToolCallStart: (toolName: string, args: string) => {
+        this.currentThinkingHint = `正在调用 ${toolName}...`;
         console.info(`[MiniAssistant] tool call start: ${toolName}`);
       },
       onToolCallResult: (toolName: string, result: string, success: boolean) => {
+        this.currentThinkingHint = '正在整理回答...';
         console.info(`[MiniAssistant] tool call result: ${toolName}, success: ${success}`);
       },
       onConfirmationNeeded: async (toolName: string, args: string): Promise<boolean> => {
@@ -255,12 +280,20 @@ export struct FloatingSubWindowContent {
         return true;
       },
       onTextChunk: (chunk: string) => {
+        if (this.thinkingTimer >= 0) {
+          clearInterval(this.thinkingTimer);
+          this.thinkingTimer = -1;
+        }
         if (this.messages[assistantMsgIndex]) {
           this.messages[assistantMsgIndex].content += chunk;
           this.scroller.scrollEdge(Edge.Bottom);
         }
       },
       onError: (error: string) => {
+        if (this.thinkingTimer >= 0) {
+          clearInterval(this.thinkingTimer);
+          this.thinkingTimer = -1;
+        }
         this.isLoading = false;
         if (this.messages[assistantMsgIndex]) {
           if (this.messages[assistantMsgIndex].content.length === 0) {
@@ -271,6 +304,10 @@ export struct FloatingSubWindowContent {
         this.persistCurrentSession(context);
       },
       onComplete: () => {
+        if (this.thinkingTimer >= 0) {
+          clearInterval(this.thinkingTimer);
+          this.thinkingTimer = -1;
+        }
         this.isLoading = false;
         this.currentClient = null;
         if (this.messages[assistantMsgIndex]) {
@@ -564,7 +601,7 @@ export struct FloatingSubWindowContent {
 
         // 简短对话消息流
         List({ scroller: this.scroller }) {
-          ForEach(this.messages, (msg: MiniDisplayMessage) => {
+          ForEach(this.messages, (msg: MiniDisplayMessage, index: number) => {
             ListItem() {
               Row() {
                 if (msg.role === 'user') {
@@ -589,15 +626,20 @@ export struct FloatingSubWindowContent {
                     .alignSelf(ItemAlign.Start);
 
                     Column() {
-                      if (this.isLoading && (!msg.content || msg.content.length === 0)) {
-                        Text('正在思考中...')
-                          .fontSize(13)
-                          .fontColor(ThemeManager.getTextSecondaryColor());
+                      if (this.isLoading && index === this.messages.length - 1 && (!msg.content || msg.content.length === 0)) {
+                        Row({ space: 6 }) {
+                          Text(`${this.currentThinkingHint} (${(this.thinkingElapsedMs / 1000).toFixed(1)}s)`)
+                            .fontSize(12)
+                            .fontColor(ThemeManager.getTextSecondaryColor());
+                        }
+                        .padding({ top: 4, bottom: 4 })
+                        .alignItems(VerticalAlign.Center);
                       } else {
                         MarkdownBubble({
                           content: msg.content,
                           isUser: false,
-                          isError: msg.isError
+                          isError: msg.isError,
+                          isStreaming: (this.isLoading && index === this.messages.length - 1)
                         })
                         .width('100%');
                       }
@@ -615,7 +657,7 @@ export struct FloatingSubWindowContent {
               .width('100%')
               .margin({ top: 4, bottom: 4 });
             }
-          });
+          }, (msg: MiniDisplayMessage, index: number) => `${index}_${msg.role}_${msg.content.length}`);
         }
         .width('100%')
         .layoutWeight(1)

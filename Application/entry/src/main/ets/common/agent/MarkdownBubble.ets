@@ -386,6 +386,7 @@ export struct MarkdownBubble {
   @Prop content: string = '';
   @Prop isUser: boolean = false;
   @Prop isError: boolean = false;
+  @Prop isStreaming: boolean = false;
   @StorageLink(ThemeManager.THEME_STORAGE_KEY) isDarkMode: boolean = false;
 
   private getBlocks(): MarkdownBlockItem[] {
@@ -604,6 +605,17 @@ export struct MarkdownBubble {
           .copyOption(CopyOptions.LocalDevice)
         }
       }, (block: MarkdownBlockItem) => block.id)
+
+      if (this.isStreaming) {
+        Row({ space: 4 }) {
+          Text('▌')
+            .fontSize(15)
+            .fontWeight(FontWeight.Bold)
+            .fontColor(this.isUser ? '#FFFFFF' : '#007AFF')
+        }
+        .alignSelf(ItemAlign.Start)
+        .margin({ top: 2 })
+      }
     }
     .width('100%')
     .alignItems(HorizontalAlign.Start)

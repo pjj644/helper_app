@@ -34,11 +34,20 @@ export struct AssistantPage {
   @State pendingDeleteSessionId: string = '';
   @State showToolCalls: boolean = false;
   @State expandedToolIndices: number[] = [];
+  @State currentThinkingHint: string = '✨ 正在理解您的问题与上下文...';
+  @State thinkingElapsedMs: number = 0;
+  @State isThinkingPhase: boolean = false;
+  @State activeThought: string = '';
+  @State isThoughtExpanded: boolean = true;
+  @State expandedThoughtIndices: number[] = [];
+  @State pulsePhase: number = 0;
   @StorageLink('floating_ball_enabled') isFloatingBallEnabled: boolean = true;
   @State isRecording: boolean = false;
   @StorageLink(ThemeManager.THEME_STORAGE_KEY) isDarkMode: boolean = false;
   private scroller: Scroller = new Scroller();
   private dotTimer: number = -1;
+  private thinkingStopwatchTimer: number = -1;
+  private thinkingStartTime: number = 0;
   private currentClient: BackendAgentClient | null = null;
   private speechHelper: SpeechRecognizerHelper = new SpeechRecognizerHelper();
 
@@ -53,7 +62,8 @@ export struct AssistantPage {
     );
     this.dotTimer = setInterval(() => {
       this.streamingDot = !this.streamingDot;
-    }, 500);
+      this.pulsePhase = (this.pulsePhase + 1) % 3;
+    }, 400);
     this.loadSessions();
     this.loadToolCallDisplaySetting();
     setTimeout(() => {
@@ -69,6 +79,7 @@ export struct AssistantPage {
       clearInterval(this.dotTimer);
       this.dotTimer = -1;
     }
+    this.stopThinkingTimer();
     this.speechHelper.release();
   }
 
@@ -569,6 +580,37 @@ export struct AssistantPage {
     });
   }
 
+  private startThinkingTimer(): void {
+    this.thinkingStartTime = Date.now();
+    this.thinkingElapsedMs = 0;
+    this.isThinkingPhase = true;
+    this.activeThought = '';
+    this.isThoughtExpanded = true;
+    this.currentThinkingHint = '正在理解您的问题与上下文...';
+    if (this.thinkingStopwatchTimer !== -1) {
+      clearInterval(this.thinkingStopwatchTimer);
+    }
+    this.thinkingStopwatchTimer = setInterval(() => {
+      const elapsed: number = Date.now() - this.thinkingStartTime;
+      this.thinkingElapsedMs = elapsed;
+      if (this.isThinkingPhase && (!this.activeThought || this.activeThought.length === 0)) {
+        if (elapsed > 4000 && this.currentThinkingHint.indexOf('成电知识库') !== -1) {
+          this.currentThinkingHint = '正在梳理最佳解决方案...';
+        } else if (elapsed > 1500 && this.currentThinkingHint.indexOf('理解您的问题') !== -1) {
+          this.currentThinkingHint = '正在结合成电知识库深入思考...';
+        }
+      }
+    }, 100);
+  }
+
+  private stopThinkingTimer(): void {
+    if (this.thinkingStopwatchTimer !== -1) {
+      clearInterval(this.thinkingStopwatchTimer);
+      this.thinkingStopwatchTimer = -1;
+    }
+    this.isThinkingPhase = false;
+  }
+
   private sendMessage(): void {
     const userInput: string = this.inputText.trim();
     if (userInput.length === 0 || this.isLoading) {
@@ -585,7 +627,15 @@ export struct AssistantPage {
       this.updateCurrentSessionTitle(this.generateTitle(userInput));
     }
 
-    this.displayMessages = [...this.displayMessages, { role: 'assistant', content: '', isError: false }];
+    this.startThinkingTimer();
+    this.displayMessages = [...this.displayMessages, {
+      role: 'assistant',
+      content: '',
+      isError: false,
+      thought: '',
+      thinkingDurationMs: 0,
+      statusHint: this.currentThinkingHint
+    }];
     this.scrollToBottom();
 
     this.trimHistory();
@@ -595,53 +645,147 @@ export struct AssistantPage {
     const self = this;
 
     const callbacks: AgentCallbacks = {
+      onStatusChange: (status: string, message: string) => {
+        self.currentThinkingHint = message;
+        for (let i = self.displayMessages.length - 1; i >= 0; i--) {
+          if (self.displayMessages[i].role === 'assistant') {
+            const updated: DisplayMessage[] = [...self.displayMessages];
+            updated[i] = {
+              role: 'assistant',
+              content: updated[i].content,
+              isError: updated[i].isError,
+              thought: updated[i].thought,
+              thinkingDurationMs: updated[i].thinkingDurationMs,
+              statusHint: message,
+              telemetry: updated[i].telemetry
+            };
+            self.displayMessages = updated;
+            break;
+          }
+        }
+      },
+      onThoughtChunk: (chunk: string) => {
+        self.activeThought += chunk;
+        self.currentThinkingHint = '深度思考中...';
+        for (let i = self.displayMessages.length - 1; i >= 0; i--) {
+          if (self.displayMessages[i].role === 'assistant') {
+            const updated: DisplayMessage[] = [...self.displayMessages];
+            updated[i] = {
+              role: 'assistant',
+              content: updated[i].content,
+              isError: updated[i].isError,
+              thought: self.activeThought,
+              thinkingDurationMs: Date.now() - self.thinkingStartTime,
+              statusHint: self.currentThinkingHint,
+              telemetry: updated[i].telemetry
+            };
+            self.displayMessages = updated;
+            break;
+          }
+        }
+        self.scrollToBottom();
+      },
       onToolCallStart: (toolName: string, args: string) => {
         const displayName: string = self.getToolDisplayName(toolName);
-        self.displayMessages = [...self.displayMessages, {
+        self.currentThinkingHint = `正在${displayName}...`;
+        const newToolCall: DisplayMessage = {
           role: 'tool_call',
           content: `正在${displayName}...`,
           isError: false,
           toolName: toolName,
           toolArgs: args
-        }];
+        };
+        const lastIdx: number = self.displayMessages.length - 1;
+        if (lastIdx >= 0 && self.displayMessages[lastIdx].role === 'assistant' && (!self.displayMessages[lastIdx].content || self.displayMessages[lastIdx].content.length === 0)) {
+          const updated: DisplayMessage[] = [...self.displayMessages];
+          updated.splice(lastIdx, 0, newToolCall);
+          self.displayMessages = updated;
+        } else {
+          self.displayMessages = [...self.displayMessages, newToolCall];
+        }
         self.scrollToBottom();
       },
       onToolCallResult: (toolName: string, result: string, success: boolean) => {
         const displayName: string = self.getToolDisplayName(toolName);
-        self.displayMessages = [...self.displayMessages, {
+        self.currentThinkingHint = success ? '数据已获取，正在提炼回答...' : '正在整理并生成回答...';
+        const newToolResult: DisplayMessage = {
           role: 'tool_result',
           content: success ? `${displayName}完成` : `${displayName}失败`,
           isError: !success,
           toolName: toolName,
           toolResult: result,
           isToolSuccess: success
-        }];
+        };
+        const lastIdx: number = self.displayMessages.length - 1;
+        if (lastIdx >= 0 && self.displayMessages[lastIdx].role === 'assistant' && (!self.displayMessages[lastIdx].content || self.displayMessages[lastIdx].content.length === 0)) {
+          const updated: DisplayMessage[] = [...self.displayMessages];
+          updated.splice(lastIdx, 0, newToolResult);
+          self.displayMessages = updated;
+        } else {
+          self.displayMessages = [...self.displayMessages, newToolResult];
+        }
         self.scrollToBottom();
       },
       onConfirmationNeeded: (toolName: string, args: string): Promise<boolean> => {
         return self.requestConfirmation(toolName, args);
       },
       onTextChunk: (chunk: string) => {
-        const lastIndex: number = self.displayMessages.length - 1;
-        if (lastIndex >= 0 && self.displayMessages[lastIndex].role === 'assistant') {
+        if (self.isThinkingPhase) {
+          self.stopThinkingTimer();
+          self.isThoughtExpanded = false;
+        }
+        const dur: number = self.thinkingElapsedMs > 0 ? self.thinkingElapsedMs : (Date.now() - self.thinkingStartTime);
+
+        let targetIdx: number = -1;
+        for (let i = self.displayMessages.length - 1; i >= 0; i--) {
+          if (self.displayMessages[i].role === 'assistant') {
+            targetIdx = i;
+            break;
+          }
+        }
+
+        if (targetIdx !== -1) {
           const updated: DisplayMessage[] = [...self.displayMessages];
-          updated[lastIndex] = {
+          const cur = updated[targetIdx];
+          updated[targetIdx] = {
             role: 'assistant',
-            content: updated[lastIndex].content + chunk,
-            isError: false
+            content: cur.content + chunk,
+            isError: false,
+            thought: self.activeThought.length > 0 ? self.activeThought : cur.thought,
+            thinkingDurationMs: cur.thinkingDurationMs && cur.thinkingDurationMs > 0 ? cur.thinkingDurationMs : dur,
+            telemetry: cur.telemetry
           };
           self.displayMessages = updated;
         } else {
-          self.displayMessages = [...self.displayMessages, { role: 'assistant', content: chunk, isError: false }];
+          self.displayMessages = [...self.displayMessages, {
+            role: 'assistant',
+            content: chunk,
+            isError: false,
+            thought: self.activeThought,
+            thinkingDurationMs: dur
+          }];
         }
         self.scrollToBottom();
       },
       onError: (error: string) => {
+        self.stopThinkingTimer();
         self.isLoading = false;
-        const lastIndex: number = self.displayMessages.length - 1;
-        if (lastIndex >= 0 && self.displayMessages[lastIndex].role === 'assistant') {
+        let targetIdx: number = -1;
+        for (let i = self.displayMessages.length - 1; i >= 0; i--) {
+          if (self.displayMessages[i].role === 'assistant') {
+            targetIdx = i;
+            break;
+          }
+        }
+        if (targetIdx !== -1) {
           const updated: DisplayMessage[] = [...self.displayMessages];
-          updated[lastIndex] = { role: 'assistant', content: error, isError: true };
+          updated[targetIdx] = {
+            role: 'assistant',
+            content: error,
+            isError: true,
+            thought: self.activeThought,
+            thinkingDurationMs: self.thinkingElapsedMs
+          };
           self.displayMessages = updated;
         } else {
           self.displayMessages = [...self.displayMessages, { role: 'assistant', content: error, isError: true }];
@@ -652,6 +796,7 @@ export struct AssistantPage {
         self.scrollToBottom();
       },
       onComplete: (telemetry?: AgentTelemetryInfo) => {
+        self.stopThinkingTimer();
         self.isLoading = false;
         const lastAssistantMsg: DisplayMessage | undefined = self.findLastAssistantMessage();
         if (lastAssistantMsg && lastAssistantMsg.content.length > 0) {
@@ -854,37 +999,158 @@ export struct AssistantPage {
         }
         .alignItems(HorizontalAlign.Start)
       } else {
-        Column({ space: 4 }) {
+        Column({ space: 6 }) {
           if (msg.role === 'assistant') {
-            MarkdownBubble({
-              content: msg.content,
-              isUser: false,
-              isError: msg.isError
-            })
-            .width('100%')
+            // 1. 思考中状态卡片（当处于加载状态且无正文时）
+            if (this.isLoading && index === this.displayMessages.length - 1 && (!msg.content || msg.content.length === 0)) {
+              Column({ space: 8 }) {
+                // 顶部状态提示行：阶段文案 + 实时秒表
+                Row({ space: 8 }) {
+                  Text(this.currentThinkingHint)
+                    .fontSize(13)
+                    .fontWeight(FontWeight.Medium)
+                    .fontColor(ThemeManager.getTextPrimaryColor())
+                    .layoutWeight(1)
+
+                  // 实时耗时秒表胶囊
+                  Row({ space: 4 }) {
+                    Text(`思考中 ${(this.thinkingElapsedMs / 1000).toFixed(1)}s`)
+                      .fontSize(11)
+                      .fontColor('#007AFF')
+                      .fontWeight(FontWeight.Medium)
+                  }
+                  .padding({ left: 8, right: 8, top: 3, bottom: 3 })
+                  .backgroundColor(this.isDarkMode ? 'rgba(0, 122, 255, 0.15)' : 'rgba(0, 122, 255, 0.08)')
+                  .borderRadius(10)
+                }
+                .width('100%')
+                .alignItems(VerticalAlign.Center)
+
+                // 呼吸波浪动效条 (三个呼吸微光点)
+                Row({ space: 6 }) {
+                  Circle({ width: 6, height: 6 })
+                    .fill('#007AFF')
+                    .opacity(this.pulsePhase === 0 ? 1.0 : 0.3)
+                    .scale({ x: this.pulsePhase === 0 ? 1.2 : 0.9, y: this.pulsePhase === 0 ? 1.2 : 0.9 })
+                  Circle({ width: 6, height: 6 })
+                    .fill('#007AFF')
+                    .opacity(this.pulsePhase === 1 ? 1.0 : 0.3)
+                    .scale({ x: this.pulsePhase === 1 ? 1.2 : 0.9, y: this.pulsePhase === 1 ? 1.2 : 0.9 })
+                  Circle({ width: 6, height: 6 })
+                    .fill('#007AFF')
+                    .opacity(this.pulsePhase === 2 ? 1.0 : 0.3)
+                    .scale({ x: this.pulsePhase === 2 ? 1.2 : 0.9, y: this.pulsePhase === 2 ? 1.2 : 0.9 })
+
+                  Text('AI 正在深度解析与推理中，即将输出解答...')
+                    .fontSize(12)
+                    .fontColor(ThemeManager.getTextTertiaryColor())
+                    .margin({ left: 4 })
+                }
+                .width('100%')
+                .alignItems(VerticalAlign.Center)
+
+                // 实时思维链流式展示（若模型输出 thought）
+                if (this.activeThought && this.activeThought.length > 0) {
+                  Column({ space: 4 }) {
+                    Row() {
+                      Text('思考过程：')
+                        .fontSize(12)
+                        .fontWeight(FontWeight.Bold)
+                        .fontColor(ThemeManager.getTextSecondaryColor())
+                    }
+                    .width('100%')
+
+                    Text(this.activeThought)
+                      .fontSize(12)
+                      .fontFamily('monospace')
+                      .fontColor(ThemeManager.getTextSecondaryColor())
+                      .lineHeight(17)
+                      .maxLines(10)
+                  }
+                  .width('100%')
+                  .padding(8)
+                  .backgroundColor(this.isDarkMode ? '#1E2433' : '#EDF0F5')
+                  .borderRadius(8)
+                }
+              }
+              .width('100%')
+              .padding(12)
+              .backgroundColor(this.isDarkMode ? 'rgba(30, 36, 51, 0.7)' : 'rgba(240, 243, 249, 0.9)')
+              .borderRadius(12)
+              .border({ width: 0.5, color: this.isDarkMode ? '#2D3748' : '#D1D9E6' })
+            }
+
+            // 2. 思考完成后的思维链折叠栏（当有 thought 且正文已开始输出或生成完毕时）
+            if (msg.thought && msg.thought.length > 0 && (msg.content.length > 0 || !this.isLoading)) {
+              Column({ space: 6 }) {
+                Row({ space: 6 }) {
+                  Text(`已深度思考 ${(Number(msg.thinkingDurationMs || 0) / 1000).toFixed(1)}s`)
+                    .fontSize(12)
+                    .fontWeight(FontWeight.Medium)
+                    .fontColor(ThemeManager.getTextSecondaryColor())
+                    .layoutWeight(1)
+
+                  Text(this.expandedThoughtIndices.indexOf(index) !== -1 ? '▾ 收起' : '▸ 查看思考过程')
+                    .fontSize(11)
+                    .fontColor('#007AFF')
+                }
+                .width('100%')
+                .padding({ left: 10, right: 10, top: 6, bottom: 6 })
+                .backgroundColor(this.isDarkMode ? '#1E2433' : '#EDF2F7')
+                .borderRadius(8)
+                .alignItems(VerticalAlign.Center)
+                .onClick(() => {
+                  const pos = this.expandedThoughtIndices.indexOf(index);
+                  if (pos !== -1) {
+                    this.expandedThoughtIndices.splice(pos, 1);
+                  } else {
+                    this.expandedThoughtIndices.push(index);
+                  }
+                })
+
+                if (this.expandedThoughtIndices.indexOf(index) !== -1) {
+                  Text(msg.thought)
+                    .fontSize(12)
+                    .fontFamily('monospace')
+                    .fontColor(ThemeManager.getTextSecondaryColor())
+                    .padding(10)
+                    .backgroundColor(this.isDarkMode ? '#141820' : '#F7FAFC')
+                    .borderRadius(6)
+                    .border({ width: 0.5, color: this.isDarkMode ? '#2D3748' : '#E2E8F0' })
+                    .lineHeight(18)
+                }
+              }
+              .width('100%')
+              .margin({ bottom: 4 })
+            }
+
+            // 3. 正文 Markdown 流式/全量渲染
+            if (msg.content && msg.content.length > 0) {
+              MarkdownBubble({
+                content: msg.content,
+                isUser: false,
+                isError: msg.isError,
+                isStreaming: (this.isLoading && index === this.displayMessages.length - 1)
+              })
+              .width('100%')
+            }
+
+            // 4. 遥测信息 (Tokens / 耗时)
+            if (msg.telemetry && msg.telemetry.totalTokens) {
+              Row({ space: 4 }) {
+                Text(`⚡ ${msg.telemetry.totalTokens} Tokens · ${(Number(msg.telemetry.durationMs || 0) / 1000).toFixed(1)}s${msg.telemetry.ttftMs ? ` (首字 ${(Number(msg.telemetry.ttftMs) / 1000).toFixed(1)}s)` : ''}`)
+                  .fontSize(10)
+                  .fontColor(ThemeManager.getTextTertiaryColor())
+              }
+              .margin({ top: 4 })
+              .alignSelf(ItemAlign.End)
+            }
           } else {
             Text(msg.content)
               .fontSize(15)
               .fontColor('#FFFFFF')
               .maxLines(Number.MAX_SAFE_INTEGER)
               .copyOption(CopyOptions.LocalDevice)
-          }
-
-          if (msg.role === 'assistant' && this.isLoading && index === this.displayMessages.length - 1 && msg.content.length === 0) {
-            Text(this.streamingDot ? '▌' : ' ')
-              .fontSize(15)
-              .fontColor(ThemeManager.getTextPrimaryColor())
-              .margin({ top: 2 })
-          }
-
-          if (msg.role === 'assistant' && msg.telemetry && msg.telemetry.totalTokens) {
-            Row({ space: 4 }) {
-              Text(`⚡ ${msg.telemetry.totalTokens} Tokens · ${(Number(msg.telemetry.durationMs || 0) / 1000).toFixed(1)}s`)
-                .fontSize(10)
-                .fontColor(ThemeManager.getTextTertiaryColor())
-            }
-            .margin({ top: 4 })
-            .alignSelf(ItemAlign.End)
           }
         }
         .layoutWeight(msg.role === 'assistant' ? 1 : undefined)

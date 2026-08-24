@@ -12,6 +12,8 @@ export interface AgentCallbacks {
   onToolCallResult: (toolName: string, result: string, success: boolean) => void
   onConfirmationNeeded: (toolName: string, args: string) => Promise<boolean>
   onTextChunk: (chunk: string) => void
+  onThoughtChunk?: (chunk: string) => void
+  onStatusChange?: (status: string, message: string) => void
   onError: (error: string) => void
   onComplete: (telemetry?: AgentTelemetryInfo) => void
 }
@@ -170,6 +172,17 @@ export class BackendAgentClient {
         const content: string = (evt['content'] as string) || ''
         if (content.length > 0) {
           this.callbacks.onTextChunk(content)
+        }
+      } else if (type === 'thought_chunk' || type === 'thinking_chunk') {
+        const content: string = (evt['content'] as string) || ''
+        if (content.length > 0 && this.callbacks.onThoughtChunk) {
+          this.callbacks.onThoughtChunk(content)
+        }
+      } else if (type === 'status') {
+        const status: string = (evt['status'] as string) || ''
+        const message: string = (evt['message'] as string) || ''
+        if (this.callbacks.onStatusChange) {
+          this.callbacks.onStatusChange(status, message)
         }
       } else if (type === 'tool_call') {
         const batchId: string = (evt['batch_id'] as string) || ''

@@ -23,6 +23,10 @@ export interface ChatDisplayMessage {
   toolResult?: string;
   isToolSuccess?: boolean;
   telemetry?: AgentTelemetryInfo;
+  thought?: string;
+  thinkingDurationMs?: number;
+  isThoughtExpanded?: boolean;
+  statusHint?: string;
 }
 
 export interface ChatSession {
