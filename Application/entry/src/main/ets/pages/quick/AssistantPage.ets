@@ -306,39 +306,8 @@ export struct AssistantPage {
   }
 
   private getToolDisplayName(toolName: string): string {
-    const nameMap: Record<string, string> = {
-      'app_data_query': '查询应用数据',
-      'app_data_mutate': '变更应用数据',
-      'app_control': '应用系统控制',
-      'campus_search': '检索校园信息',
-      'app_pipeline': '执行复合流水线',
-      'query_today_courses': '查询今日课程',
-      'query_week_courses': '查询本周课程',
-      'query_current_week': '查询当前周',
-      'query_next_exam': '查询最近考试',
-      'query_all_exams': '查询所有考试',
-      'query_grades': '查询成绩',
-      'query_gpa': '查询GPA',
-      'query_schedule': '查询日程',
-      'check_login_status': '检查登录状态',
-      'check_time_conflict': '检查时间冲突',
-      'query_reminder_settings': '查询提醒设置',
-      'has_course_data': '检查课表数据',
-      'create_schedule': '创建日程',
-      'delete_schedule': '删除日程',
-      'sync_courses_to_cloud': '同步课表到云端',
-      'sync_exams_to_cloud': '同步考试到云端',
-      'sync_all_to_cloud': '全量同步到云端',
-      'download_all_from_cloud': '从云端恢复数据',
-      'set_reminder_enabled': '设置提醒开关',
-      'set_remind_minutes': '设置提醒时间',
-      'refresh_reminders': '刷新提醒',
-      'navigate_to_page': '导航到页面',
-      'query_campus_guide': '查询成电指南',
-      'generate_study_plan': '生成突击规划',
-      'search_jwc_news': '检索教务处官网'
-    };
-    return nameMap[toolName] || toolName;
+    // 显示名映射已收编至 ToolRegistry（悬浮球确认弹窗共用同一来源）
+    return ToolRegistry.getDisplayName(toolName);
   }
 
   private formatToolResult(toolName: string, result: string): string {

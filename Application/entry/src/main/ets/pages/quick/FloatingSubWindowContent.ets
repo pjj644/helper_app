@@ -5,6 +5,7 @@ import { PageContextTracker, PageSnapshot, PageActionDescriptor } from '../../co
 import { UIActionDispatcher } from '../../common/agent/UIActionDispatcher';
 import { BackendAgentClient, AgentCallbacks, AgentMessage } from '../../common/agent/BackendAgentClient';
 import { ToolExecutor } from '../../common/agent/ToolExecutor';
+import { ToolRegistry } from '../../common/agent/ToolRegistry';
 import { SpeechRecognizerHelper } from '../../common/speech/SpeechRecognizerHelper';
 import { ThemeManager } from '../../common/utils/ThemeManager';
 import { ChatSessionRepository, ChatSession, ChatMessage, ChatDisplayMessage } from '../../repository/ChatSessionRepository';
@@ -189,6 +190,45 @@ export struct FloatingSubWindowContent {
     }, 100);
   }
 
+  /**
+   * 工具执行确认弹窗（与 AssistantPage.requestConfirmation 同一口径）：
+   * 展示工具中文名与参数摘要，高危操作附加警示；拒绝/允许分别 resolve false/true。
+   */
+  private requestConfirmation(toolName: string, args: string): Promise<boolean> {
+    return new Promise<boolean>((resolve: (value: boolean) => void) => {
+      const displayName: string = ToolRegistry.getDisplayName(toolName);
+      const riskLevel: string = ToolRegistry.getRiskLevel(toolName, args);
+      let message: string = `AI助手请求执行：${displayName}`;
+      if (riskLevel === 'high') {
+        message += '\n\n⚠️ 此操作涉及数据变更，请谨慎确认';
+      }
+      if (args.length > 0) {
+        const argsPreview: string = args.length > 300 ? args.substring(0, 300) + '...' : args;
+        message += `\n\n参数：${argsPreview}`;
+      }
+      AlertDialog.show({
+        title: '操作确认',
+        message: message,
+        autoCancel: false,
+        alignment: DialogAlignment.Center,
+        primaryButton: {
+          value: '拒绝',
+          fontColor: this.isDarkMode ? '#CCCCCC' : '#666666',
+          action: () => {
+            resolve(false);
+          }
+        },
+        secondaryButton: {
+          value: '允许',
+          fontColor: riskLevel === 'high' ? '#FF9500' : '#007AFF',
+          action: () => {
+            resolve(true);
+          }
+        }
+      });
+    });
+  }
+
   private persistCurrentSession(context: Context): void {
     const displayList: ChatDisplayMessage[] = this.messages.map((m: MiniDisplayMessage): ChatDisplayMessage => ({
       role: m.role,
@@ -297,9 +337,9 @@ export struct FloatingSubWindowContent {
         this.currentThinkingHint = '正在整理回答...';
         console.info(`[MiniAssistant] tool call result: ${toolName}, success: ${success}`);
       },
-      onConfirmationNeeded: async (toolName: string, args: string): Promise<boolean> => {
-        // Mini 浮窗直接确认或简单提示
-        return true;
+      onConfirmationNeeded: (toolName: string, args: string): Promise<boolean> => {
+        // 悬浮球与主页面共用同一确认闸门：高危操作必须弹窗确认，不得静默放行
+        return this.requestConfirmation(toolName, args);
       },
       onTextChunk: (chunk: string) => {
         if (this.thinkingTimer >= 0) {
