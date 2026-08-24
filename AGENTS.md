@@ -73,7 +73,7 @@ devecocli check compat                                       # 跨 SDK API 兼�
 ### 后端开发与验证
 - **启动后端**：`cd "C:\Users\28399\Desktop\华为云\后端服务\ai-proxy" && npm run dev`（端口 3000）。后端 `.env`（`DEEPSEEK_API_KEY` 等）已 gitignore，勿提交。
 - **单独模拟联调**（不连手机）：`node test/phone-sim.mjs` + `npm run typecheck`。
-- **自动化评测基准**：`cd "C:\Users\28399\Desktop\华为云\后端服务\ai-proxy" && npm run eval`（33 条用例回归评测并生成 `test/evals/EVAL_REPORT.md`）。
+- **自动化评测基准**：`cd "C:\Users\28399\Desktop\华为云\后端服务\ai-proxy" && npm run test:eval`（33 条用例回归评测并生成 `test/evals/EVAL_REPORT.md`）。
 - **真机/模拟器联调**：填电脑 **局域网 LAN IP**（如 `http://192.168.1.11:3000`），不要填 `localhost`。
 - **调试日志前缀**：`[BackendAgentClient]` / `[CalendarKit]` / `[ReminderDebug]` / `[ExamDebug]` / `[HomeDebug]` / `[FloatingWindow]`。
 
@@ -87,7 +87,7 @@ devecocli check compat                                       # 跨 SDK API 兼�
 | `/commit` | 按规范提交改动（`type: what & why` + `Co-Authored-By`） |
 | `/add-tool` | AI 助手加工具三处同步流程（后端 `tools.ts` + 前端 `ToolExecutor.ets` + `ToolRegistry.ets`） |
 | `/dev-backend` | 启动 `ai-proxy` 后端开发服务（端口 3000）并进行健康检查 |
-| `/eval` | 运行 AI Agent 自动化评测基准套件（`npm run eval`，生成 `EVAL_REPORT.md`） |
+| `/eval` | 运行 AI Agent 自动化评测基准套件（`npm run test:eval`，生成 `EVAL_REPORT.md`） |
 
 ## 7. 按需查阅详细文档
 
