@@ -12,13 +12,18 @@ import { CalendarKitReminderService } from './CalendarKitReminderService';
 const SCHEDULE_REMINDER_PREFIX: string = 'schedule_remind_';
 const REMIND_MINUTES_DEFAULT: number = 30;
 
+// 单个日程类别的提醒配置快照（循环前一次性预载，避免循环内逐条读偏好）
+interface CategoryReminderSetting {
+  enabled: boolean;
+  defaultMinutes: number;
+}
+
 export class ReminderService {
   private static agentReminderAvailable: boolean | null = null;
 
   static async checkNotificationEnabled(): Promise<boolean> {
     try {
       const enabled = await notificationManager.isNotificationEnabled();
-      console.info(`[ReminderDebug] checkNotificationEnabled: ${enabled}`);
       return enabled;
     } catch (error) {
       const err = error as BusinessError;
@@ -42,7 +47,6 @@ export class ReminderService {
   }
 
   static async refreshAllReminders(context: Context): Promise<void> {
-    console.info('[ReminderDebug] refreshAllReminders called');
     try {
       await ScheduleService.syncCoursesToSchedule(context);
       await ScheduleService.syncExamsToSchedule(context);
@@ -54,7 +58,6 @@ export class ReminderService {
   }
 
   static async refreshScheduleReminders(context: Context): Promise<void> {
-    console.info('[ReminderDebug] refreshScheduleReminders called');
     try {
       let hasNotification = await ReminderService.checkNotificationEnabled();
       if (!hasNotification) {
@@ -65,13 +68,10 @@ export class ReminderService {
           console.error('[ReminderDebug] Notification permission denied! Reminders will not work.');
           return;
         }
-        console.info('[ReminderDebug] Notification permission granted!');
       }
 
       const masterEnabled = await ReminderService.getGlobalScheduleReminderEnabled(context);
-      console.info(`[ReminderDebug] masterEnabled=${masterEnabled}`);
       if (!masterEnabled) {
-        console.info('[ReminderDebug] master disabled, skipping');
         return;
       }
 
@@ -80,16 +80,17 @@ export class ReminderService {
       // 先加载并与系统日历双向对齐（若用户在系统日历中已删除，在此步自动完成本地清理）
       const rawEvents: ScheduleEvent[] = await ScheduleRepository.loadSchedules(context);
       const allEvents: ScheduleEvent[] = await ScheduleService.syncAndPruneSchedulesWithCalendar(context, rawEvents);
-      console.info(`[ReminderDebug] loaded and aligned ${allEvents.length} events from repository`);
 
       if (allEvents.length === 0) {
-        console.info('[ReminderDebug] no events, skipping');
         return;
       }
 
+      // 批量预载各类别提醒配置：旧实现在循环内逐条读偏好，事件多时开销随事件数放大；
+      // 现改为循环外一次读取，循环内仅做纯内存计算。
+      const categorySettings: Map<string, CategoryReminderSetting> = ReminderService.loadCategorySettings(context);
+
       const now = Date.now();
       const maxFutureTime = now + 7 * 24 * 60 * 60 * 1000;
-      console.info(`[ReminderDebug] now=${new Date(now).toISOString()}, maxFuture=${new Date(maxFutureTime).toISOString()}`);
       let createdCount = 0;
       const MAX_REMINDERS = 30;
 
@@ -97,40 +98,30 @@ export class ReminderService {
         const event = allEvents[i];
 
         if (createdCount >= MAX_REMINDERS) {
-          console.info(`[ReminderDebug] reached MAX_REMINDERS=${MAX_REMINDERS}, stopping`);
           break;
         }
 
-        console.info(`[ReminderDebug] processing event[${i}]: id=${event.id}, title=${event.title}, date=${event.date}, timeRange=${event.timeRange}, startTime=${event.startTime}, type=${event.type}, remindMinutes=${event.remindMinutes}`);
-
-        const categoryEnabled = await ReminderService.getCategoryReminderEnabled(context, event.type);
-        console.info(`[ReminderDebug]   categoryEnabled(${event.type})=${categoryEnabled}`);
+        const setting = categorySettings.get(event.type);
+        const categoryEnabled = setting ? setting.enabled : true;
+        const categoryDefaultMinutes = setting ? setting.defaultMinutes : REMIND_MINUTES_DEFAULT;
         if (!categoryEnabled) {
-          console.info(`[ReminderDebug]   SKIP: category disabled`);
           continue;
         }
 
-        const remindMinutes = await ReminderService.getEffectiveRemindMinutes(context, event);
-        console.info(`[ReminderDebug]   effectiveRemindMinutes=${remindMinutes}`);
+        const remindMinutes = ReminderService.resolveEffectiveRemindMinutes(event, categoryDefaultMinutes);
         if (remindMinutes <= 0) {
-          console.info(`[ReminderDebug]   SKIP: remindMinutes <= 0`);
           continue;
         }
 
         const dateParts = event.date.split('-').map(Number);
         const eventDate = new Date(dateParts[0], dateParts[1] - 1, dateParts[2]);
-        console.info(`[ReminderDebug]   base date=${eventDate.toISOString()}`);
         ReminderService.applyEventTime(eventDate, event);
-        console.info(`[ReminderDebug]   after applyEventTime=${eventDate.toISOString()}`);
 
         const triggerTime = eventDate.getTime() - remindMinutes * 60 * 1000;
-        console.info(`[ReminderDebug]   triggerTime=${new Date(triggerTime).toISOString()}, now=${new Date(now).toISOString()}, diff=${triggerTime - now}ms`);
         if (triggerTime <= now) {
-          console.info(`[ReminderDebug]   SKIP: triggerTime <= now (already past)`);
           continue;
         }
         if (triggerTime > maxFutureTime) {
-          console.info(`[ReminderDebug]   SKIP: triggerTime > maxFutureTime (more than 7 days ahead)`);
           continue;
         }
 
@@ -145,8 +136,6 @@ export class ReminderService {
           contentParts.push(event.location);
         }
         const content = contentParts.join(' ');
-
-        console.info(`[ReminderDebug]   publishing reminder: id=${notificationId}, title=${title}, content=${content}`);
 
         let published = false;
 
@@ -166,15 +155,13 @@ export class ReminderService {
               notificationId: notificationId,
             };
             await reminderAgentManager.publishReminder(reminderRequest);
-            console.info(`[ReminderDebug]   SUCCESS: agent reminder published`);
             ReminderService.agentReminderAvailable = true;
             published = true;
           } catch (err) {
             const be = err as BusinessError;
-            console.warn(`[ReminderDebug]   agent reminder failed (code=${be.code})`);
+            console.warn(`[ReminderDebug] agent reminder failed for "${event.title}" (code=${be.code})`);
             if (be.code === 1700002) {
               ReminderService.agentReminderAvailable = false;
-              console.info(`[ReminderDebug]   agent reminder not available (1700002), switching to Calendar Kit`);
             }
           }
         }
@@ -185,7 +172,6 @@ export class ReminderService {
             const uiContext = context as common.UIAbilityContext;
             const hasCalendarPerm = await CalendarKitReminderService.checkCalendarPermission(uiContext);
             if (!hasCalendarPerm) {
-              console.info(`[ReminderDebug]   requesting calendar permission...`);
               await CalendarKitReminderService.requestCalendarPermission(uiContext);
             }
 
@@ -196,20 +182,18 @@ export class ReminderService {
             }
 
             if (existsInCal) {
-              console.info(`[ReminderDebug]   calendar event already uniquely exists (id=${event.calendarEventId}), skipping duplicate insert`);
               published = true;
             } else {
               const calEventId = await CalendarKitReminderService.addEventReminder(context, event, remindMinutes);
               if (calEventId >= 0) {
-                console.info(`[ReminderDebug]   SUCCESS: Calendar Kit reminder added, calEventId=${calEventId}`);
                 event.calendarEventId = calEventId;
                 published = true;
               } else {
-                console.error(`[ReminderDebug]   FAILED: Calendar Kit reminder returned -1`);
+                console.error(`[ReminderDebug] FAILED: Calendar Kit reminder returned -1 for "${event.title}"`);
               }
             }
           } catch (calErr) {
-            console.error(`[ReminderDebug]   FAILED: Calendar Kit error:`, JSON.stringify(calErr));
+            console.error(`[ReminderDebug] FAILED: Calendar Kit error:`, JSON.stringify(calErr));
           }
         }
 
@@ -218,19 +202,62 @@ export class ReminderService {
         }
       }
 
-      console.info(`[ReminderDebug] total reminders processed: ${createdCount}`);
+      console.info(`[ReminderDebug] refreshed reminders: published=${createdCount}, totalEvents=${allEvents.length}`);
       await ScheduleRepository.saveSchedules(context, allEvents);
-      console.info(`[ReminderDebug] saved calendarEventId mappings to repository`);
     } catch (error) {
       console.error('[ReminderDebug] refreshScheduleReminders error:', JSON.stringify(error));
     }
+  }
+
+  /**
+   * 一次性预载四类日程的提醒开关与默认提前分钟数。
+   * 键值语义与 getCategoryReminderEnabled / getCategoryRemindMinutes 完全一致：
+   * 未配置或读取失败时开关默认开、分钟数取 REMIND_MINUTES_DEFAULT。
+   */
+  private static loadCategorySettings(context: Context): Map<string, CategoryReminderSetting> {
+    const settings: Map<string, CategoryReminderSetting> = new Map();
+    let pref: preferences.Preferences | null = null;
+    try {
+      pref = preferences.getPreferencesSync(context, { name: AppConstants.COURSE_TABLE_PREF_NAME });
+    } catch (e) {
+      console.error('[ReminderService] loadCategorySettings error:', JSON.stringify(e));
+    }
+
+    const types: ScheduleEventType[] = ['course', 'exam', 'custom', 'assignment'];
+    for (let i = 0; i < types.length; i++) {
+      const type = types[i];
+      const enabledKey = ReminderService.getCategoryReminderKey(type);
+      const minutesKey = ReminderService.getCategoryRemindMinutesKey(type);
+      let enabled = true;
+      let defaultMinutes = REMIND_MINUTES_DEFAULT;
+      if (pref !== null && enabledKey && minutesKey) {
+        enabled = pref.getSync(enabledKey, true) as boolean;
+        defaultMinutes = pref.getSync(minutesKey, REMIND_MINUTES_DEFAULT) as number;
+      }
+      settings.set(type, { enabled: enabled, defaultMinutes: defaultMinutes });
+    }
+    return settings;
+  }
+
+  /** 单条事件实际生效的提前提醒分钟数（纯内存版本，供批量预载后的循环内使用）。 */
+  private static resolveEffectiveRemindMinutes(event: ScheduleEvent, categoryDefaultMinutes: number): number {
+    const selfMinutes: number | undefined = event.remindMinutes;
+    if (selfMinutes === undefined || selfMinutes === null) {
+      return categoryDefaultMinutes;
+    }
+    if (selfMinutes > 0) {
+      return selfMinutes;
+    }
+    if (selfMinutes === -1) {
+      return categoryDefaultMinutes;
+    }
+    return 0;
   }
 
   private static async clearAgentReminders(): Promise<void> {
     try {
       if (ReminderService.agentReminderAvailable !== false) {
         await reminderAgentManager.cancelAllReminders();
-        console.info('[ReminderDebug] cleared existing agent reminders');
       }
     } catch (error) {
       console.warn('[ReminderDebug] cancelAllReminders error:', JSON.stringify(error));
@@ -363,33 +390,11 @@ export class ReminderService {
     }
   }
 
-  static async getEffectiveRemindMinutes(context: Context, event: ScheduleEvent): Promise<number> {
-    console.info(`[ReminderDebug] getEffectiveRemindMinutes: remindMinutes=${event.remindMinutes}, type=${event.type}`);
-    if (event.remindMinutes === undefined || event.remindMinutes === null) {
-      const defaultMinutes = await ReminderService.getCategoryRemindMinutes(context, event.type);
-      console.info(`[ReminderDebug]   undefined/null -> category default=${defaultMinutes}`);
-      return defaultMinutes;
-    }
-    if (event.remindMinutes > 0) {
-      console.info(`[ReminderDebug]   >0 -> use self=${event.remindMinutes}`);
-      return event.remindMinutes;
-    }
-    if (event.remindMinutes === -1) {
-      const defaultMinutes = await ReminderService.getCategoryRemindMinutes(context, event.type);
-      console.info(`[ReminderDebug]   -1 -> category default=${defaultMinutes}`);
-      return defaultMinutes;
-    }
-    console.info(`[ReminderDebug]   0 -> disabled`);
-    return 0;
-  }
-
   private static applyEventTime(date: Date, event: ScheduleEvent): void {
-    console.info(`[ReminderDebug] applyEventTime: startTime=${event.startTime}, timeRange=${event.timeRange}`);
     if (event.startTime) {
       const match = event.startTime.match(/^(\d{1,2}):(\d{2})$/);
       if (match) {
         date.setHours(parseInt(match[1]), parseInt(match[2]), 0, 0);
-        console.info(`[ReminderDebug]   used startTime: ${match[1]}:${match[2]}`);
         return;
       }
     }
@@ -397,12 +402,10 @@ export class ReminderService {
       const match = event.timeRange.match(/^(\d{1,2}):(\d{2})/);
       if (match) {
         date.setHours(parseInt(match[1]), parseInt(match[2]), 0, 0);
-        console.info(`[ReminderDebug]   used timeRange start: ${match[1]}:${match[2]}`);
         return;
       }
     }
     date.setHours(9, 0, 0, 0);
-    console.info(`[ReminderDebug]   fallback to 9:00`);
   }
 
   private static hashCode(str: string): number {
