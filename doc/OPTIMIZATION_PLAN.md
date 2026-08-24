@@ -1,6 +1,6 @@
 # 成电助手优化实施计划（Phase 0 + Phase 1）
 
-> **版本**：v1.1（2026-08-24）　**状态**：▶ 已获用户批准（同日），按 §7 全部假设执行
+> **版本**：v1.2（2026-08-24）　**状态**：✅ Phase 0 + Phase 1 全部完成（T1–T10 十项全绿），待用户 U2 冒烟与 U3 真机回归验收
 > **范围**：P0 安全可靠修复 + P1 质量债清偿（共 10 个任务）。Phase 2（功能扩展）仅列大纲。
 > **执行模型**：主 agent 只做整合、测试、git 提交；实现工作由子 agent 团队分波次并行完成。
 > **后端约定**：`ai-proxy`（独立仓库）**本轮不部署 ECS**，仅本地 `npm run dev` 测试，改动在该仓库内独立提交。
@@ -143,7 +143,7 @@
 - **流程**：`npm run eval` 迭代循环直至达标；更新后的 `EVAL_REPORT.md` 入库。
 - **提交**：`fix(prompt): improve pipeline/study-plan routing and argument extraction`
 
-### T9 性能优化与死代码清理 `[ ] 待实施`
+### T9 性能优化与死代码清理 `[x] 已完成（fc33b30/fd964ae/bfac6b0）`
 - 1. 首页每秒 `setInterval`（`Index.ets:126-128`）改为按需刷新/降频时钟组件；
 - 2. `ReminderService.refreshScheduleReminders` 循环内逐条 await 读偏好（`:106,113`）改批量预载；
 - 3. 生产日志降噪（冗余 console.info 收敛）；
@@ -151,7 +151,7 @@
 - ⚠️ 「我的-个人信息」占位页**默认保留不动**，去留属产品决策（U5）。
 - **提交**：`perf(home)/perf(reminder)/chore(cleanup)` 三条独立 commit。
 
-### T10 桌面卡片刷新及时性 `[ ] 待实施`
+### T10 桌面卡片刷新及时性 `[x] 已完成（93850a3）`
 - **现状**：仅 30 分钟定时刷新（`form_config.json:17,34` `updateDuration:1`），倒计时误差大。
 - **方案**：
   a) 事件驱动即时刷新：课程数据变更落盘后经 `FormProvider.updateForm` 主动推送；应用进前台时同步刷新缓存；
@@ -202,7 +202,7 @@
 | 编号 | 关联任务 | 问题描述 | 已尝试 | 状态 | 后续处理 |
 |---|---|---|---|---|---|
 | B-01 | T8 | M04_SYNC_CLOUD 在 R2 被裁判方差判负（工具选择与全部确定性校验均正确） | 复核确定性校验通过，维度通过率与基线持平（80%） | 🟡 低风险 | 下一轮评测观察；不视为能力回归 |
-| B-02 | 文档 | AGENTS.md 记载的评测命令 `npm run eval` 实际为 `npm run test:eval` | 已确认 package.json 无 eval 脚本 | 🟡 待修正 | 收尾阶段统一修正 AGENTS.md 与计划文档命令 |
+| B-02 | 文档 | AGENTS.md 记载的评测命令 `npm run eval` 实际为 `npm run test:eval` | 已修正 AGENTS.md 与本文档（d7f16e8） | ✅ 已解决 | — |
 | B-03 | T6a | 校园指南的持久化 last-good 缓存因 Wave 2 并行文件归属限制，本轮先做内存缓存+内置兜底 | 端点契约已定 | 🟡 待补 | 收尾或下一轮补 preferences 持久化 |
 | B-04 | T2 | **确认弹窗真正闸门在 BackendAgentClient.handleToolCall（读后端 SSE 事件 requiresConfirmation 字段），注册表哨兵不覆盖「后端显式下发 false」的场景** | 执行器侧已 fail-closed；需在 handleToolCall 并入端侧裁决：`backend字段 \|\| ToolRegistry.requiresConfirmation(name)` | 🔴 集成必办 | Agent-D 完成后由主 agent 一行补齐并回归验证 |
 | B-05 | 存量 | set_reminder_enabled 实现只消费 type+minutes（enabled 参数无效、minutes≤0 报错），注册已按真实行为写 | 属既有行为缺陷非本轮引入 | 🟢 记录 | 后续轮次决定修行为或改 schema |
@@ -234,6 +234,10 @@
   - 测试脚手架已提交（后端 `cd48f9c`、前端 `151640e`）：phone-sim 六个线级失败场景（含自检退出码）+ U2 模拟器冒烟清单 `doc/SMOKE_CHECKLIST_U2.md`。
   - 披露：T8 过程中补齐了评测 harness 中 generate_study_plan 的 mock 返回契约（对齐端侧真实返回结构，评估器与数据集未改动）。
 
+- **2026-08-24 Wave 3 完成（收尾）**：
+  - T9 三笔（首页指纹门控节拍 fc33b30、提醒批量预载 fd964ae、死代码清理 bfac6b0，净删 475 行）；T10 一笔（卡片事件驱动推送 93850a3）。build+lint 双绿（警告 65→62）。
+  - **T10b 调研结论（A3 验证）**：API 22 桌面卡片秒级倒计时不可行——updateDuration 最小粒度 30 分钟、setFormNextRefreshTime 最小 5 分钟且每日配额 50 次；SDK 无 FormAnimatableExtension 等动画扩展符号；替代通道为 Live View Kit 实况窗（需资质申请），留作 Phase 2 备选。当前「30 分钟定时+事件驱动推送+回前台校准」已达系统能力边界内最优。
+  - 遗留建议（后续轮次）：CountdownCard 组件内 4 条 [CountdownDebug] 日志降噪；CalendarKitReminderService/ScheduleService 存量 Date 复用。
 - **2026-08-24 Wave 2 完成**：
   - T3/T2/T4/T7a/T6a/T5a 全部落地并按任务重写提交历史（auto-commit 进程曾污染 4 笔提交，已 reset 重排为 5 笔规范提交：`8f58589`/`897f4e3`/`e7ee80c`/`6211294`/`b3213d9`）。
   - 集成四处收编：确认闸门并集裁决、EntryAbility warmUp 接线、SSE 可靠性常量入 AppConstants、死映射清理。build+lint 双绿。
