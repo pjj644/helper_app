@@ -63,7 +63,7 @@
 | 静态检查 | `devecocli check lint` | 0 error | 主 agent（每次 commit 前） |
 | 后端类型 | `cd ai-proxy && npm run typecheck` | 无错误 | 主 agent（后端 commit 前） |
 | 对话链路模拟 | `node test/phone-sim.mjs` | 全场景通过 | 主 agent |
-| 评测基准 | `npm run eval` | 综合 ≥92%，且不低于基线 | 主 agent（T8 及收尾） |
+| 评测基准 | `npm run test:eval` | 综合 ≥92%，且不低于基线 | 主 agent（T8 及收尾） |
 | 模拟器冒烟 | 五 Tab、AI 对话、班车页、桌面卡片、设置页 | 功能正常 | 🔴 U2（用户配合） |
 | 真机回归 | 弱网重连、悬浮球、卡片倒计时、教务抓取 | 见 §6 U3 | 🔴 U3（用户，最终验收前） |
 
@@ -71,7 +71,7 @@
 
 ## 3. Phase 0 —— 安全与正确性（4 个任务）
 
-### T1 密钥与后端地址治理 `[ ] 待实施`
+### T1 密钥与后端地址治理 `[x] 已完成（8d7e296）`
 - **目标**：消灭硬编码端点/密钥，设置页成为唯一配置源；未配置时有清晰引导。
 - **现状证据**：默认值 `http://192.168.1.100:3000` + `uestc-helper-proxy-key-change-me` 写死于 `AppConstants.ets:76-77`；`searchJwcNews`（`ToolExecutor.ets:619`）与视觉解析（`VisionScheduleHelper.ets:76`）直接写死请求头，**用户改设置无效**。
 - **方案**：
