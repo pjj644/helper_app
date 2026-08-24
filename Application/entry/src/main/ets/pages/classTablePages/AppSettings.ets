@@ -606,7 +606,9 @@ struct AppSettings {
         .borderRadius(10)
         .onChange((value: string) => {
           this.agentBackendUrl = value;
-          SettingsRepository.saveAgentBackendUrl(getContext(this), value);
+          SettingsRepository.saveAgentBackendUrl(getContext(this), value).then(() => {
+            AgentEndpointConfig.syncConfiguredState(getContext(this));
+          });
         })
 
       Column({ space: 4 }) {
@@ -632,7 +634,9 @@ struct AppSettings {
         .borderRadius(10)
         .onChange((value: string) => {
           this.agentProxyKey = value;
-          SettingsRepository.saveAgentProxyKey(getContext(this), value);
+          SettingsRepository.saveAgentProxyKey(getContext(this), value).then(() => {
+            AgentEndpointConfig.syncConfiguredState(getContext(this));
+          });
         })
 
       Divider().color($r('app.color.divider_color'))

@@ -38,6 +38,7 @@ import { QuickLinksGrid, HomeToolItem } from '../components/home/QuickLinksGrid'
 
 import { PreferencesUtil } from '../common/PreferencesUtil';
 import { PrivacyDialogComponent } from '../components/PrivacyDialogComponent';
+import { AgentEndpointConfig } from '../common/agent/AgentEndpointConfig';
 
 // 首页时间节拍间隔：本页所有依赖时间的展示（最近考试、未来考试数）均为分钟级文案，
 // 秒级跳动的倒计时数字由 CountdownCard 组件内部定时器自行驱动，不依赖本页节拍，
@@ -163,11 +164,15 @@ struct MainPage {
     this.loadQuickInfo();
     this.checkLoginStatus();
     ReminderService.refreshAllReminders(getContext(this));
+    AgentEndpointConfig.syncConfiguredState(getContext(this));
     this.updateCurrentTabContext();
   }
 
   private updateCurrentTabContext(): void {
     FloatingWindowManager.getInstance().setAssistantPageActive(this.currentTabIndex === 1);
+    if (this.currentTabIndex === 1) {
+      AgentEndpointConfig.syncConfiguredState(getContext(this));
+    }
 
     if (this.currentTabIndex === 0) {
       PageContextTracker.getInstance().updateSnapshot(

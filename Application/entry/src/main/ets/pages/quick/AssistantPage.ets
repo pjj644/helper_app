@@ -42,6 +42,7 @@ export struct AssistantPage {
   @State expandedThoughtIndices: number[] = [];
   @State pulsePhase: number = 0;
   @StorageLink('floating_ball_enabled') isFloatingBallEnabled: boolean = true;
+  @StorageLink(AgentEndpointConfig.STORAGE_KEY_CONFIGURED) @Watch('onConfiguredStateChange') isBackendConfigured: boolean = false;
   @State isRecording: boolean = false;
   @State showBackendGuide: boolean = false;
   @State backendGuideHint: string = '';
@@ -105,12 +106,18 @@ export struct AssistantPage {
     }, 300);
   }
 
+  private onConfiguredStateChange(): void {
+    this.refreshBackendGuide();
+  }
+
   // 检查助手后端配置是否齐全，缺失时在会话区顶部展示引导卡片（onPageShow 会复检，从设置返回后自动消失）
-  private async refreshBackendGuide(): Promise<void> {
+  public async refreshBackendGuide(): Promise<void> {
     try {
       const endpoint: AgentEndpoint = await AgentEndpointConfig.resolve(getContext(this));
-      this.showBackendGuide = !AgentEndpointConfig.isReady(endpoint);
+      const ready: boolean = AgentEndpointConfig.isReady(endpoint);
+      this.showBackendGuide = !ready;
       this.backendGuideHint = AgentEndpointConfig.missingHint(endpoint);
+      AppStorage.setOrCreate(AgentEndpointConfig.STORAGE_KEY_CONFIGURED, ready);
     } catch (e) {
       this.showBackendGuide = true;
       this.backendGuideHint = '无法读取助手后端配置，请前往设置重新填写。';

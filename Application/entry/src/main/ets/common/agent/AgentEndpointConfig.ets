@@ -20,6 +20,18 @@ export interface AgentEndpoint {
 }
 
 export class AgentEndpointConfig {
+  static readonly STORAGE_KEY_CONFIGURED: string = 'agent_backend_configured';
+
+  /**
+   * 同步当前后端配置就绪状态至 AppStorage，供各组件响应式绑定
+   */
+  static async syncConfiguredState(context: Context): Promise<boolean> {
+    const endpoint: AgentEndpoint = await AgentEndpointConfig.resolve(context);
+    const ready: boolean = AgentEndpointConfig.isReady(endpoint);
+    AppStorage.setOrCreate(AgentEndpointConfig.STORAGE_KEY_CONFIGURED, ready);
+    return ready;
+  }
+
   /**
    * 从设置读取并归一化地址与密钥，永不抛出；
    * 读偏好异常时按"全部缺失"处理，由调用方走引导 / 报错路径。
