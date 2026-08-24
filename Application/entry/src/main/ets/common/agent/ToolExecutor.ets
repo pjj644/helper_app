@@ -96,6 +96,7 @@ export class ToolExecutor {
     'generate_study_plan',
     'get_current_page_context',
     'execute_page_action',
+    'ask_user_clarification',
     // === 向后兼容旧工具分发 ===
     'query_today_courses',
     'query_tomorrow_courses',
@@ -280,6 +281,8 @@ export class ToolExecutor {
           return this.getCurrentPageContext()
         case 'execute_page_action':
           return await this.executePageAction(args)
+        case 'ask_user_clarification':
+          return this.askUserClarification(args)
 
         // === 向后兼容旧工具分发 ===
         case 'query_today_courses':
@@ -854,6 +857,20 @@ export class ToolExecutor {
       success: true,
       data: JSON.stringify(snapshot)
     }
+  }
+
+  /**
+   * 澄清反问工具：后端 LLM 在意图模糊/信息不足时下发问题与可选快捷项。
+   * 问题文案由模型随后以正文形式展示给用户（端侧无需弹 UI），
+   * 这里只需如实回报「已转达」，让后端图正常收束到等待用户下一条消息回答；
+   * 若缺实现会被判执行失败，在气泡上标红「ask_user_clarification失败」（U2 复测发现的缺口）。
+   */
+  private askUserClarification(args: Record<string, Object>): ToolResult {
+    const question: string = this.getStringArg(args, 'question')
+    if (question.length === 0) {
+      return { success: false, data: '缺少 question 参数，无法向用户转达澄清问题' }
+    }
+    return { success: true, data: '澄清问题已展示给用户，用户将在下一条消息中回答' }
   }
 
   private async executePageAction(args: Record<string, Object>): Promise<ToolResult> {

@@ -231,6 +231,7 @@
   - 测试脚手架已提交（后端 `cd48f9c`、前端 `151640e`）：phone-sim 六个线级失败场景（含自检退出码）+ U2 模拟器冒烟清单 `doc/SMOKE_CHECKLIST_U2.md`。
   - 披露：T8 过程中补齐了评测 harness 中 generate_study_plan 的 mock 返回契约（对齐端侧真实返回结构，评估器与数据集未改动）。
 
+- **2026-08-24 U2 复测补充修复**：悬浮球弹窗修复后复测发现新缺口——后端澄清反问工具 ask_user_clarification 端侧执行器无对应 case，被判「未知工具」标红（模型自行降级纯文本提问，功能未断但体验破损）。已在 ToolExecutor 补实现（如实回报「已转达」）并登记 ToolRegistry（false/low，与后端 meta 对齐）；另经全量对账确认其余 5 个仅存于后端 meta 的工具（日历写入三件套/remove_calendar_event/check_time_conflict）未暴露给 LLM、端侧不可达，无需补齐。
 - **2026-08-24 U2 冒烟回归修复**：用户冒烟除「确认弹窗指令」外全部通过。定位为悬浮球浮窗确认回调短路（B-07①）与后端 meta fail-open（B-07②），均已修复提交并实测复验。AI 助手 Tab 主链路本就正常（澄清提问→创建指令→rc:true 帧）。
 - **2026-08-24 Wave 3 完成（收尾）**：
   - T9 三笔（首页指纹门控节拍 fc33b30、提醒批量预载 fd964ae、死代码清理 bfac6b0，净删 475 行）；T10 一笔（卡片事件驱动推送 93850a3）。build+lint 双绿（警告 65→62）。

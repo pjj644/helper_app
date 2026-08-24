@@ -151,6 +151,18 @@ export class ToolRegistry {
         requiresConfirmation: false,
         riskLevel: 'low'
       },
+      {
+        name: 'ask_user_clarification',
+        description: '意图模糊或缺少关键信息时向用户反问（问题由模型正文展示，端侧仅确认已转达）',
+        parameters: {
+          'question': { type: 'string', description: '向用户反问的具体问题' },
+          'options': { type: 'object', description: '快捷选择候选项列表（可选）' },
+          'allowFreeInput': { type: 'boolean', description: '是否允许自由文本补充，默认 true（可选）' }
+        },
+        required: ['question'],
+        requiresConfirmation: false,
+        riskLevel: 'low'
+      },
 
       // 向后兼容保留（别名工具，名称清单见 LEGACY_TOOL_NAMES，风险等级继承所委托的元工具）
       {
