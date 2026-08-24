@@ -83,6 +83,12 @@ export class AppConstants {
   static readonly SETTING_AI_SHOW_TOOL_CALLS_KEY: string = 'setting_ai_show_tool_calls';
   static readonly SETTING_FLOATING_BALL_ENABLED_KEY: string = 'setting_floating_ball_enabled';
   static readonly FLOATING_SUBWINDOW_NAME: string = 'ai_floating_subwindow';
+  /** AI 助手 SSE 首包 watchdog 阈值（毫秒）：超时未收到任何事件按首事件前失败处理 */
+  static readonly AI_FIRST_PACKET_WATCHDOG_MS: number = 45000;
+  /** AI 助手首事件前失败的指数退避重试间隔（毫秒），共重试 2 次 */
+  static readonly AI_CONNECT_RETRY_DELAYS_MS: number[] = [1000, 3000];
+  /** AI 助手 tool-result 回传失败的本地重试间隔（毫秒），共重试 2 次 */
+  static readonly AI_TOOL_RESULT_RETRY_DELAYS_MS: number[] = [500, 2000];
 
   static readonly CONTENT_MAX_LINE: number = 2;
   static readonly MAX_ID: number = 100;
@@ -138,6 +144,18 @@ export class AppConstants {
   static readonly MAX_LINES: number = 2;
   static readonly SINGLE_LINE: number = 1;
   static readonly UNREAD_DOT_SIZE: number = 8;
+
+  // ==================== 云端配置与知识库（T5a/T6a 集中追加） ====================
+  /** GET app-config：学期锚点等应用级配置端点（相对路径，经 AgentEndpointConfig.joinUrl 拼接） */
+  static readonly APP_CONFIG_PATH: string = 'api/v1/config/app-config';
+  /** GET bus-schedule：双校区班车时刻知识库端点 */
+  static readonly KNOWLEDGE_BUS_SCHEDULE_PATH: string = 'api/v1/knowledge/bus-schedule';
+  /** 学期配置 last-good JSON 偏好键（含 fetchedAt，见 repository/AppConfigRepository） */
+  static readonly PREF_APP_CONFIG_JSON_KEY: string = 'app_config_last_good_json';
+  /** 班车时刻 last-good JSON 偏好键（见 service/BusDataService） */
+  static readonly PREF_BUS_SCHEDULE_JSON_KEY: string = 'bus_schedule_last_good_json';
+  /** 班车数据后台刷新最小间隔：6 小时 */
+  static readonly BUS_SCHEDULE_REFRESH_MIN_INTERVAL_MS: number = 6 * 60 * 60 * 1000;
 }
 
 export class RouterConstants {

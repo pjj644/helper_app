@@ -5,6 +5,7 @@ import { ThemeManager } from '../common/utils/ThemeManager';
 import { UISettings } from '../common/UISettings';
 import { PreferencesUtil } from '../common/PreferencesUtil';
 import { AuthService } from '../service/AuthService';
+import { AppConfigRepository } from '../repository/AppConfigRepository';
 import { FloatingWindowManager } from '../common/agent/FloatingWindowManager';
 
 const HILOG_DOMAIN = 0x0000;
@@ -16,6 +17,8 @@ export default class EntryAbility extends UIAbility {
       this.context.getApplicationContext().setColorMode(ConfigurationConstant.ColorMode.COLOR_MODE_NOT_SET);
       PreferencesUtil.getInstance().init(this.context);
       UISettings.getInstance().initDarkMode(this.context);
+      // 学期参数云端配置预热：异步拉取 app-config 并落 last-good 缓存（读取侧走同步通道，失败静默用内置兜底）
+      AppConfigRepository.warmUp(this.context);
 
       // 合规要求：仅在用户已授权隐私政策后才初始化 AGC 等第三方/云端 SDK
       if (PreferencesUtil.getInstance().hasAgreedPrivacy()) {
