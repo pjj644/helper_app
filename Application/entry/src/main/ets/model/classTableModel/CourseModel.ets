@@ -1,4 +1,13 @@
 // 课程数据模型 - 与UI解耦的数据层
+// 周次锚点自 T5a 起优先消费云端 app-config 注入值（repository/AppConfigRepository 同步读取），
+// 内置常量仅作为云端不可用时的最终兜底（见下方 getWeekForDate / getWeekDatesForWeek）。
+
+import { AppConfigRepository } from '../../repository/AppConfigRepository';
+import {
+  getMondayMsForWeek,
+  resolveTermMondayAnchor,
+  weekNumberFor
+} from '../SemesterConfig';
 
 // 原始活动数据接口（从教务系统获取的原始格式）
 export interface RawActivity {
@@ -301,22 +310,22 @@ export class CourseTableModel {
 export const courseTableModel = new CourseTableModel();
 
 // 计算指定日期是第几教学周
-// 2026-2027学年第一学期行课首日为 2026-09-01（周二）。
+// 锚点优先取云端注入的行课首日（AppConfigRepository.getConfig，同步读），
+// 行课首日允许为一周内任意一天，统一归一到所在教学周的周一；
+// 取不到时回退内置常量锚点（最终兜底，勿删）：
+// 2026-2027学年第一学期行课首日为 2026-09-01（周二），
 // 周次按周一~周日对齐 validWeeks，故锚定到含 2026-09-01 的那周的周一 2026-08-31。
 export function getWeekForDate(date: Date): number {
-  const termStart: Date = new Date(2026, 7, 31); // month从0开始，7表示8月
-  termStart.setHours(0, 0, 0, 0);
-
-  const d: Date = new Date(date);
-  d.setHours(0, 0, 0, 0);
-
-  const diffMs: number = d.getTime() - termStart.getTime();
-  if (diffMs < 0) {
-    return 1;
+  const anchor: Date | null =
+    resolveTermMondayAnchor(AppConfigRepository.getConfig().semesterStartDate);
+  if (anchor !== null) {
+    return weekNumberFor(date, anchor);
   }
 
-  const week: number = Math.floor(diffMs / (7 * 24 * 60 * 60 * 1000)) + 1;
-  return Math.max(1, week);
+  // 最终兜底：历史硬编码锚点
+  const termStart: Date = new Date(2026, 7, 31); // month从0开始，7表示8月
+  termStart.setHours(0, 0, 0, 0);
+  return weekNumberFor(date, termStart);
 }
 
 // 获取当前是第几周
@@ -356,11 +365,15 @@ export function getWeekDates(): WeekDateInfo[] {
 }
 
 // 获取指定教学周（1-20周）的周一到周日日期数组
+// 周一锚点与 getWeekForDate 同源（云端注入优先，内置常量兜底）
 export function getWeekDatesForWeek(targetWeek: number): WeekDateInfo[] {
-  const termStart: Date = new Date(2026, 7, 31); // 2026-08-31 周一
+  const anchor: Date | null =
+    resolveTermMondayAnchor(AppConfigRepository.getConfig().semesterStartDate);
+  // 兜底：2026-08-31 周一
+  const termStart: Date = anchor !== null ? anchor : new Date(2026, 7, 31);
   termStart.setHours(0, 0, 0, 0);
 
-  const targetMondayMs: number = termStart.getTime() + (Math.max(1, targetWeek) - 1) * 7 * 24 * 60 * 60 * 1000;
+  const targetMondayMs: number = getMondayMsForWeek(termStart, targetWeek);
   const dates: WeekDateInfo[] = [];
 
   for (let i = 0; i < 7; i++) {

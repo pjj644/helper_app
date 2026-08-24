@@ -1,12 +1,44 @@
 import { AppConstants } from '../../common/constants/AppConstants';
+import { AppConfigRepository } from '../../repository/AppConfigRepository';
+import { SemesterAnchor, parseSemesterAnchorFromLabel } from '../SemesterConfig';
 
 export const EAMS_EXAM_MENU_URL: string = AppConstants.EAMS_EXAM_MENU_URL;
 export const EAMS_EXAM_TABLE_BASE_URL: string = AppConstants.EAMS_EXAM_TABLE_BASE_URL;
 
-const BASE_SEMESTER_ID: number = 503;
-const BASE_ACADEMIC_START_YEAR: number = 2025;
-const BASE_TERM_NUMBER: number = 2;
+// ===== 教务系统学期 ID 锚点（T5a 云端化） =====
+// 优先消费云端 app-config 注入：baseSemesterId 与 semesterLabel 反推的学年/学期锚点必须
+// 成对生效（同一包内校验通过才启用），避免 id 空间与锚点错位；
+// 以下常量为云端不可用时的最终兜底（历史硬编码值），勿删除。
+const FALLBACK_BASE_SEMESTER_ID: number = 503;
+const FALLBACK_BASE_ACADEMIC_START_YEAR: number = 2025;
+const FALLBACK_BASE_TERM_NUMBER: number = 2;
 const SEMESTER_ID_STEP: number = 20;
+
+/** 生效的学期 ID 映射基准：id 基准值 + 其对应的学年期锚点 */
+interface BaseSemesterMapping {
+  baseSemesterId: number;
+  baseStartYear: number;
+  baseTermNumber: number;
+}
+
+/** 解析生效映射基准：云端配置合法时用注入值，否则整体回退内置常量 */
+function resolveBaseSemesterMapping(): BaseSemesterMapping {
+  const config = AppConfigRepository.getConfig();
+  const anchor: SemesterAnchor | null = parseSemesterAnchorFromLabel(config.semesterLabel);
+  if (config.baseSemesterId > 0 && anchor !== null) {
+    const injected: BaseSemesterMapping = {
+      baseSemesterId: config.baseSemesterId,
+      baseStartYear: anchor.startYear,
+      baseTermNumber: anchor.termNumber
+    };
+    return injected;
+  }
+  return {
+    baseSemesterId: FALLBACK_BASE_SEMESTER_ID,
+    baseStartYear: FALLBACK_BASE_ACADEMIC_START_YEAR,
+    baseTermNumber: FALLBACK_BASE_TERM_NUMBER
+  };
+}
 
 const EXAM_TYPE_LABELS: string[] = ['期末考试', '期中考试', '缓补考试'];
 
@@ -69,11 +101,12 @@ function getCurrentAcademicSemester(date: Date): AcademicSemester {
 
 function getSemesterIdByYearTerm(startYear: number, termNumber: number): number {
   const targetIndex: number = toSemesterIndex({ startYear, termNumber });
+  const base: BaseSemesterMapping = resolveBaseSemesterMapping();
   const baseIndex: number = toSemesterIndex({
-    startYear: BASE_ACADEMIC_START_YEAR,
-    termNumber: BASE_TERM_NUMBER,
+    startYear: base.baseStartYear,
+    termNumber: base.baseTermNumber,
   });
-  return BASE_SEMESTER_ID + (targetIndex - baseIndex) * SEMESTER_ID_STEP;
+  return base.baseSemesterId + (targetIndex - baseIndex) * SEMESTER_ID_STEP;
 }
 
 export function normalizeExamTypeId(value: string | number | undefined): number {
@@ -125,11 +158,12 @@ export function detectExamTypeIdFromText(examTypeText: string): number | undefin
 export function calculateSemesterId(date: Date = new Date()): number {
   const targetSemester: AcademicSemester = getCurrentAcademicSemester(date);
   const targetIndex: number = toSemesterIndex(targetSemester);
+  const base: BaseSemesterMapping = resolveBaseSemesterMapping();
   const baseIndex: number = toSemesterIndex({
-    startYear: BASE_ACADEMIC_START_YEAR,
-    termNumber: BASE_TERM_NUMBER,
+    startYear: base.baseStartYear,
+    termNumber: base.baseTermNumber,
   });
-  return BASE_SEMESTER_ID + (targetIndex - baseIndex) * SEMESTER_ID_STEP;
+  return base.baseSemesterId + (targetIndex - baseIndex) * SEMESTER_ID_STEP;
 }
 
 export function normalizeSemesterId(value: string | number | undefined, fallbackDate: Date = new Date()): number {
@@ -141,11 +175,12 @@ export function normalizeSemesterId(value: string | number | undefined, fallback
 }
 
 export function getSemesterLabelById(semesterId: number): string {
+  const base: BaseSemesterMapping = resolveBaseSemesterMapping();
   const baseIndex: number = toSemesterIndex({
-    startYear: BASE_ACADEMIC_START_YEAR,
-    termNumber: BASE_TERM_NUMBER,
+    startYear: base.baseStartYear,
+    termNumber: base.baseTermNumber,
   });
-  const diffStep: number = Math.round((semesterId - BASE_SEMESTER_ID) / SEMESTER_ID_STEP);
+  const diffStep: number = Math.round((semesterId - base.baseSemesterId) / SEMESTER_ID_STEP);
   const targetSemester: AcademicSemester = fromSemesterIndex(baseIndex + diffStep);
   return toSemesterLabel(targetSemester);
 }

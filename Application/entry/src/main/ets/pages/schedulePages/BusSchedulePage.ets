@@ -1,5 +1,7 @@
 import { router, promptAction } from '@kit.ArkUI';
 import { BusScheduleModel, BusItem, NextBusInfo } from '../../model/BusScheduleModel';
+import { BusDataService } from '../../service/BusDataService';
+import { AppConfigRepository } from '../../repository/AppConfigRepository';
 import { CalendarKitReminderService } from '../../service/CalendarKitReminderService';
 import { ToastComponent } from '../../components/ToastComponents';
 import { common } from '@kit.AbilityKit';
@@ -16,9 +18,15 @@ struct BusSchedulePage {
   @State nowTick: number = Date.now();
 
   private timerId: number = -1;
+  private alive: boolean = true;
 
   aboutToAppear(): void {
+    const context = getContext(this) as common.UIAbilityContext;
+    // 学期参数云端预热（幂等）；班车数据过期时顺带后台刷新
+    AppConfigRepository.warmUp(context);
+    // 先用本地 last-good / 内置兜底立即渲染，再后台拉远端替换
     this.refreshSchedule();
+    this.backgroundRefresh(context);
     this.timerId = setInterval(() => {
       this.nowTick = Date.now();
       this.refreshNextBus();
@@ -26,19 +34,29 @@ struct BusSchedulePage {
   }
 
   aboutToDisappear(): void {
+    this.alive = false;
     if (this.timerId >= 0) {
       clearInterval(this.timerId);
       this.timerId = -1;
     }
   }
 
+  /** 后台刷新远端班次数据，完成后替换当前列表（页面已销毁则跳过） */
+  private async backgroundRefresh(context: common.UIAbilityContext): Promise<void> {
+    await BusDataService.refreshIfNeeded(context);
+    if (!this.alive) {
+      return;
+    }
+    this.refreshSchedule();
+  }
+
   private refreshSchedule(): void {
-    this.busList = BusScheduleModel.getBusList(this.departure, this.isWeekend);
+    this.busList = BusDataService.getEffectiveBusList(this.departure, this.isWeekend);
     this.refreshNextBus();
   }
 
   private refreshNextBus(): void {
-    this.nextBusInfo = BusScheduleModel.getNextBus(this.departure, this.isWeekend);
+    this.nextBusInfo = BusDataService.getNextBus(this.departure, this.isWeekend);
   }
 
   private showToast(msg: string): void {
