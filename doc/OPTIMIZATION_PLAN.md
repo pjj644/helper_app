@@ -124,7 +124,7 @@
 - **验证**：模拟器修改后端 json 学期起点 → 课表周次联动变化正确；断开后端 → 缓存生效。
 - **提交**：后端 `feat(config): serve app config endpoint for semester parameters`；前端 `feat(model): load semester anchors from backend config with cached fallback`。
 
-### T6 校园数据单一来源化（班车时刻 + 校园指南）`[ ] 待实施`
+### T6 校园数据单一来源化（班车时刻 + 校园指南）`[~] 后端已完成 · 前端 Wave 2 进行中`
 - **目标**：删除前端硬编码知识副本，统一由后端知识库下发。
 - **现状证据**：前端硬编码 6 条指南（`ToolExecutor.ets:532-569`）；班车内置（`BusScheduleModel.ets`）；后端 `src/knowledge/data/` 已有 `bus_schedule.json` 等 7 个 JSON。
 - **后端（T6b）**：新增 `GET /api/v1/knowledge/bus-schedule`、`GET /api/v1/knowledge/guides`。
@@ -137,7 +137,7 @@
 - **提交**：前后端各一条 `refactor(agent): drop shell tool parse_text_to_schedule`。
 - ⚠️ **假设 A4**：默认删除。若你想保留并真正实现，审阅时注明。
 
-### T8 评测定向修复 `[ ] 待实施`
+### T8 评测定向修复 `[x] 已完成 · 综合 97.0%，两轮达标（da199db）`
 - **目标**：综合通过率 87.9% → **≥92%**；EDGE_CASES ≥85%；M05（pipeline 不被选）、E03（study_plan 误路由）、Q07（minGpa 丢失）、T04（room→keyword）转通过，且其余维度不回归。
 - **手段**：`prompt.ts` 强化 `app_pipeline`/`generate_study_plan` 的适用场景描述与 few-shot；`tools.ts` 参数描述加取值示例（如 room 格式）；必要时 DataQueryEngine 增加 room 写法归一（前端配合）。
 - **流程**：`npm run eval` 迭代循环直至达标；更新后的 `EVAL_REPORT.md` 入库。
@@ -201,7 +201,9 @@
 
 | 编号 | 关联任务 | 问题描述 | 已尝试 | 状态 | 后续处理 |
 |---|---|---|---|---|---|
-| B-01 | — | （空） | — | — | — |
+| B-01 | T8 | M04_SYNC_CLOUD 在 R2 被裁判方差判负（工具选择与全部确定性校验均正确） | 复核确定性校验通过，维度通过率与基线持平（80%） | 🟡 低风险 | 下一轮评测观察；不视为能力回归 |
+| B-02 | 文档 | AGENTS.md 记载的评测命令 `npm run eval` 实际为 `npm run test:eval` | 已确认 package.json 无 eval 脚本 | 🟡 待修正 | 收尾阶段统一修正 AGENTS.md 与计划文档命令 |
+| B-03 | T6a | 校园指南的持久化 last-good 缓存因 Wave 2 并行文件归属限制，本轮先做内存缓存+内置兜底 | 端点契约已定 | 🟡 待补 | 收尾或下一轮补 preferences 持久化 |
 
 ---
 
@@ -218,3 +220,13 @@
 - [ ] 首页无秒级空转 tick、提醒批量加载、死代码清零（T9）
 - [ ] 课程数据变更后卡片 ≤ 数秒内更新（T10）
 - [ ] 全程：每次 commit 前 build + lint 双绿；后端 typecheck 绿；分支不 push
+
+---
+
+## 10. 执行日志
+
+- **2026-08-24 Wave 1 完成**：
+  - T1 前端密钥治理已提交（前端仓 `8d7e296`，build+lint 双绿，硬编码残留清零）。行为变化：旧版内置默认密钥清空，升级后首次使用需在设置页配置地址+密钥（有引导卡片）。
+  - 后端 T5b/T6b/T7b/T8 已提交（后端仓 `3197674`/`97cd4ef`/`da199db`）。三个新只读端点经真机式冒烟验证（鉴权 401/200、字段形状、中文 keyword 过滤正常）。评测综合 **87.9% → 97.0%**（两轮达标，EDGE_CASES 66.7%→100%）。
+  - 测试脚手架已提交（后端 `cd48f9c`、前端 `151640e`）：phone-sim 六个线级失败场景（含自检退出码）+ U2 模拟器冒烟清单 `doc/SMOKE_CHECKLIST_U2.md`。
+  - 披露：T8 过程中补齐了评测 harness 中 generate_study_plan 的 mock 返回契约（对齐端侧真实返回结构，评估器与数据集未改动）。
