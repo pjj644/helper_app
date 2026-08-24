@@ -44,6 +44,11 @@ export struct FloatingSubWindowContent {
   @State recordingDuration: number = 0;
   @State currentThinkingHint: string = '正在思考中...';
   @State thinkingElapsedMs: number = 0;
+  // T3 中断态：需要展示「重新发送」入口的消息下标（-1 表示无中断）
+  @State interruptedMsgIndex: number = -1;
+  // 记录本轮载荷与气泡下标，供中断态「重新发送」复用（同一 session_id 幂等续接）
+  private lastPromptWithContext: string = '';
+  private lastAssistantMsgIndex: number = -1;
 
   private scroller: Scroller = new Scroller();
   private speechHelper: SpeechRecognizerHelper = new SpeechRecognizerHelper();
@@ -154,7 +159,11 @@ export struct FloatingSubWindowContent {
       this.currentClient.cancel();
       this.currentClient = null;
     }
+    // 新对话放弃当前轮次：清理中断态与重发上下文
     this.isLoading = false;
+    this.interruptedMsgIndex = -1;
+    this.lastPromptWithContext = '';
+    this.lastAssistantMsgIndex = -1;
     const newSession = ChatSessionRepository.createNewSession();
     this.currentSessionId = newSession.id;
     this.sessionMessages = [];
@@ -248,17 +257,30 @@ export struct FloatingSubWindowContent {
     const contextPrompt = tracker.getFormattedPromptContext();
     const promptWithContext = `[系统当前页面信息]:\n${contextPrompt}\n\n[用户指令]:\n${raw}`;
 
+    // 记录本轮载荷与气泡下标，供中断态「重新发送」复用（同一 session_id 幂等续接）
+    this.lastPromptWithContext = promptWithContext;
+    this.lastAssistantMsgIndex = assistantMsgIndex;
+
+    // 发送前先保存用户消息
+    this.persistCurrentSession(getContext(this) as common.UIAbilityContext);
+
+    this.dispatchAgentTurn(promptWithContext, assistantMsgIndex);
+  }
+
+  /**
+   * 组装回调并发起一次后端请求（新消息与中断重发共用）。
+   * 重发时不追加任何用户消息，沿用当前 sessionMessages 与同一 promptWithContext，
+   * 由后端 checkpoint 幂等续接，续传内容写回原 assistant 气泡。
+   */
+  private dispatchAgentTurn(promptWithContext: string, assistantMsgIndex: number): void {
+    const context = getContext(this) as common.UIAbilityContext;
+    const executor = new ToolExecutor(context);
+
     const history: AgentMessage[] = [];
     for (let i = 0; i < this.sessionMessages.length - 1; i++) {
       history.push({ role: this.sessionMessages[i].role, content: this.sessionMessages[i].content });
     }
     history.push({ role: 'user', content: promptWithContext });
-
-    const context = getContext(this) as common.UIAbilityContext;
-    const executor = new ToolExecutor(context);
-
-    // 发送前先保存用户消息
-    this.persistCurrentSession(context);
 
     const callbacks: AgentCallbacks = {
       onStatusChange: (status: string, message: string) => {
@@ -295,6 +317,7 @@ export struct FloatingSubWindowContent {
           this.thinkingTimer = -1;
         }
         this.isLoading = false;
+        this.interruptedMsgIndex = -1;
         if (this.messages[assistantMsgIndex]) {
           if (this.messages[assistantMsgIndex].content.length === 0) {
             this.messages[assistantMsgIndex].content = `⚠️ 请求失败: ${error}`;
@@ -310,16 +333,59 @@ export struct FloatingSubWindowContent {
         }
         this.isLoading = false;
         this.currentClient = null;
+        this.interruptedMsgIndex = -1;
         if (this.messages[assistantMsgIndex]) {
           this.sessionMessages.push({ role: 'assistant', content: this.messages[assistantMsgIndex].content });
         }
+        this.persistCurrentSession(context);
+      },
+      onIncomplete: (message: string) => {
+        // 缺 final 帧（completed_with_warning）：轻提示，内容照常展示、不进错误态
+        promptAction.showToast({ message: message, duration: 2500 });
+      },
+      onInterrupted: (message: string) => {
+        // 已收到部分内容后流中断：保留已收内容并标记中断态，气泡下方出现「重新发送」入口；
+        // 不向 sessionMessages 追加半截回复，重发续接完成后再统一落库
+        if (this.thinkingTimer >= 0) {
+          clearInterval(this.thinkingTimer);
+          this.thinkingTimer = -1;
+        }
+        this.isLoading = false;
+        this.interruptedMsgIndex = assistantMsgIndex;
+        console.warn(`[MiniAssistant] stream interrupted: ${message}`);
         this.persistCurrentSession(context);
       }
     };
 
     const client = new BackendAgentClient(context, executor, callbacks);
     this.currentClient = client;
-    await client.run(this.currentSessionId, history);
+    client.run(this.currentSessionId, history);
+  }
+
+  /**
+   * 中断态「重新发送」：复用上一轮的页面上下文载荷与原 assistant 气泡，
+   * 不重复入列用户消息，由后端 checkpoint 幂等续接。
+   */
+  private resendMiniLastMessage(): void {
+    if (this.isLoading || this.lastAssistantMsgIndex < 0 || this.lastPromptWithContext.length === 0) {
+      return;
+    }
+    console.info(`[MiniAssistant] resend last message, msgIndex: ${this.lastAssistantMsgIndex}`);
+    this.interruptedMsgIndex = -1;
+    this.isLoading = true;
+    this.thinkingStartTime = Date.now();
+    this.thinkingElapsedMs = 0;
+    this.currentThinkingHint = '正在重新连接...';
+    if (this.thinkingTimer >= 0) {
+      clearInterval(this.thinkingTimer);
+    }
+    this.thinkingTimer = setInterval(() => {
+      this.thinkingElapsedMs = Date.now() - this.thinkingStartTime;
+    }, 100);
+    this.dispatchAgentTurn(this.lastPromptWithContext, this.lastAssistantMsgIndex);
+    setTimeout(() => {
+      this.scroller.scrollEdge(Edge.Bottom);
+    }, 100);
   }
 
   // === 语音识别控制 ===
@@ -643,6 +709,24 @@ export struct FloatingSubWindowContent {
                         })
                         .width('100%');
                       }
+
+                      // T3 中断态：保留已收内容并提供「重新发送」入口（同 session_id 幂等续接）
+                      if (index === this.interruptedMsgIndex) {
+                        Row({ space: 8 }) {
+                          Text('⚠️ 连接中断，回复未完成')
+                            .fontSize(11)
+                            .fontColor('#EF4444');
+                          Text('重新发送')
+                            .fontSize(12)
+                            .fontWeight(FontWeight.Medium)
+                            .fontColor('#4F46E5')
+                            .onClick(() => {
+                              this.resendMiniLastMessage();
+                            });
+                        }
+                        .padding({ top: 4 })
+                        .alignItems(VerticalAlign.Center);
+                      }
                     }
                     .layoutWeight(1)
                     .padding(10)
@@ -657,7 +741,7 @@ export struct FloatingSubWindowContent {
               .width('100%')
               .margin({ top: 4, bottom: 4 });
             }
-          }, (msg: MiniDisplayMessage, index: number) => `${index}_${msg.role}_${msg.content.length}`);
+          }, (msg: MiniDisplayMessage, index: number) => `${index}_${msg.role}_${msg.content.length}_${index === this.interruptedMsgIndex ? 'i' : 'n'}`);
         }
         .width('100%')
         .layoutWeight(1)

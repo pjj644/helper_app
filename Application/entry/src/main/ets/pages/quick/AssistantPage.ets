@@ -45,12 +45,16 @@ export struct AssistantPage {
   @State isRecording: boolean = false;
   @State showBackendGuide: boolean = false;
   @State backendGuideHint: string = '';
+  // T3 中断态：需要展示「重新发送」入口的 assistant 气泡下标（-1 表示无中断）
+  @State interruptedMsgIndex: number = -1;
   @StorageLink(ThemeManager.THEME_STORAGE_KEY) isDarkMode: boolean = false;
   private scroller: Scroller = new Scroller();
   private dotTimer: number = -1;
   private thinkingStopwatchTimer: number = -1;
   private thinkingStartTime: number = 0;
   private currentClient: BackendAgentClient | null = null;
+  // T3 缺 final 帧标记：onIncomplete 时置位，onComplete 时消费并落持久化轻提示
+  private pendingIncompleteRound: boolean = false;
   private speechHelper: SpeechRecognizerHelper = new SpeechRecognizerHelper();
 
   aboutToAppear(): void {
@@ -76,6 +80,11 @@ export struct AssistantPage {
 
   aboutToDisappear(): void {
     FloatingWindowManager.getInstance().setAssistantPageActive(false);
+    // 离开页面时取消在途请求（首包 watchdog 与重试定时器一并清理）
+    if (this.currentClient) {
+      this.currentClient.cancel();
+      this.currentClient = null;
+    }
     this.syncCurrentSession();
     this.saveSessions();
     if (this.dotTimer !== -1) {
@@ -175,6 +184,15 @@ export struct AssistantPage {
   }
 
   private createNewChat(): void {
+    // 新建对话视为用户放弃当前轮次：取消在途连接（watchdog/重试一并清理）
+    if (this.currentClient) {
+      this.currentClient.cancel();
+      this.currentClient = null;
+      this.isLoading = false;
+      this.stopThinkingTimer();
+      this.pendingIncompleteRound = false;
+      this.interruptedMsgIndex = -1;
+    }
     this.syncCurrentSession();
     for (let i = 0; i < this.sessions.length; i++) {
       if (this.sessions[i].messages.length === 0) {
@@ -311,7 +329,6 @@ export struct AssistantPage {
       'navigate_to_page': '导航到页面',
       'query_campus_guide': '查询成电指南',
       'generate_study_plan': '生成突击规划',
-      'parse_text_to_schedule': '解析日程文本',
       'search_jwc_news': '检索教务处官网'
     };
     return nameMap[toolName] || toolName;
@@ -654,6 +671,16 @@ export struct AssistantPage {
     }];
     this.scrollToBottom();
 
+    this.dispatchAgentRun();
+  }
+
+  /**
+   * 组装回调并发起一次后端对话请求。
+   * sendMessage（新消息）与 resendLastMessage（中断重发）共用：
+   * 重发时不追加用户消息，沿用当前 session_id 与现有历史，由后端 checkpoint 幂等续接，
+   * 续传内容写回原 assistant 气泡。
+   */
+  private dispatchAgentRun(): void {
     this.trimHistory();
 
     const context: Context = getContext(this);
@@ -786,6 +813,8 @@ export struct AssistantPage {
       onError: (error: string) => {
         self.stopThinkingTimer();
         self.isLoading = false;
+        self.pendingIncompleteRound = false;
+        self.interruptedMsgIndex = -1;
         let targetIdx: number = -1;
         for (let i = self.displayMessages.length - 1; i >= 0; i--) {
           if (self.displayMessages[i].role === 'assistant') {
@@ -800,11 +829,12 @@ export struct AssistantPage {
             content: error,
             isError: true,
             thought: self.activeThought,
-            thinkingDurationMs: self.thinkingElapsedMs
+            thinkingDurationMs: self.thinkingElapsedMs,
+            statusHint: ''
           };
           self.displayMessages = updated;
         } else {
-          self.displayMessages = [...self.displayMessages, { role: 'assistant', content: error, isError: true }];
+          self.displayMessages = [...self.displayMessages, { role: 'assistant', content: error, isError: true, statusHint: '' }];
         }
         self.updateCurrentSessionTimestamp();
         self.syncCurrentSession();
@@ -814,6 +844,9 @@ export struct AssistantPage {
       onComplete: (telemetry?: AgentTelemetryInfo) => {
         self.stopThinkingTimer();
         self.isLoading = false;
+        // 消费缺 final 帧标记：completed_with_warning 时落一条持久化轻提示，其余清空陈旧状态提示
+        const wasIncomplete: boolean = self.pendingIncompleteRound;
+        self.pendingIncompleteRound = false;
         const lastAssistantMsg: DisplayMessage | undefined = self.findLastAssistantMessage();
         if (lastAssistantMsg && lastAssistantMsg.content.length > 0) {
           self.messages = [...self.messages, { role: 'assistant', content: lastAssistantMsg.content }];
@@ -826,6 +859,59 @@ export struct AssistantPage {
               }
             }
           }
+        }
+        for (let i = self.displayMessages.length - 1; i >= 0; i--) {
+          if (self.displayMessages[i].role === 'assistant') {
+            const refreshed: DisplayMessage[] = [...self.displayMessages];
+            refreshed[i] = {
+              role: 'assistant',
+              content: refreshed[i].content,
+              isError: refreshed[i].isError,
+              thought: refreshed[i].thought,
+              thinkingDurationMs: refreshed[i].thinkingDurationMs,
+              statusHint: wasIncomplete ? '⚠️ 回复可能不完整' : '',
+              telemetry: refreshed[i].telemetry
+            };
+            self.displayMessages = refreshed;
+            break;
+          }
+        }
+        self.interruptedMsgIndex = -1;
+        self.updateCurrentSessionTimestamp();
+        self.syncCurrentSession();
+        self.saveSessions();
+        self.scrollToBottom();
+      },
+      onIncomplete: (message: string) => {
+        // 流干净结束但缺 final 帧（completed_with_warning）：轻提示，内容照常展示、不进错误态
+        self.pendingIncompleteRound = true;
+        promptAction.showToast({ message: message, duration: 2500 });
+      },
+      onInterrupted: (message: string) => {
+        // 已收到部分内容后流中断：保留已收内容、标记中断态并暴露「重新发送」入口；
+        // 不触发消息历史入库，重发续接完成后再统一落库，避免半截回复与续传回复重复
+        self.stopThinkingTimer();
+        self.isLoading = false;
+        let targetIdx: number = -1;
+        for (let i = self.displayMessages.length - 1; i >= 0; i--) {
+          if (self.displayMessages[i].role === 'assistant') {
+            targetIdx = i;
+            break;
+          }
+        }
+        if (targetIdx !== -1) {
+          const updated: DisplayMessage[] = [...self.displayMessages];
+          updated[targetIdx] = {
+            role: 'assistant',
+            content: updated[targetIdx].content,
+            isError: false,
+            thought: self.activeThought.length > 0 ? self.activeThought : updated[targetIdx].thought,
+            thinkingDurationMs: updated[targetIdx].thinkingDurationMs,
+            statusHint: `⚠️ ${message}`,
+            telemetry: updated[targetIdx].telemetry
+          };
+          self.displayMessages = updated;
+          self.interruptedMsgIndex = targetIdx;
         }
         self.updateCurrentSessionTimestamp();
         self.syncCurrentSession();
@@ -843,6 +929,49 @@ export struct AssistantPage {
     }
 
     client.run(this.currentSessionId, history);
+  }
+
+  /**
+   * 中断态「重新发送」：携带同一 session_id 原样重发用户最后一条消息，
+   * 不重复入列用户消息；清除中断标记后复用原 assistant 气泡承接续传内容。
+   */
+  private resendLastMessage(): void {
+    if (this.isLoading || this.interruptedMsgIndex === -1) {
+      return;
+    }
+    let lastUserContent: string = '';
+    for (let i = this.messages.length - 1; i >= 0; i--) {
+      if (this.messages[i].role === 'user') {
+        lastUserContent = this.messages[i].content;
+        break;
+      }
+    }
+    if (lastUserContent.length === 0) {
+      this.interruptedMsgIndex = -1;
+      return;
+    }
+    console.info('[AssistantPage] resend last message, session:', this.currentSessionId);
+
+    const idx: number = this.interruptedMsgIndex;
+    this.interruptedMsgIndex = -1;
+    const updated: DisplayMessage[] = [...this.displayMessages];
+    if (idx >= 0 && idx < updated.length && updated[idx].role === 'assistant') {
+      updated[idx] = {
+        role: 'assistant',
+        content: updated[idx].content,
+        isError: false,
+        thought: '',
+        thinkingDurationMs: 0,
+        statusHint: '',
+        telemetry: updated[idx].telemetry
+      };
+      this.displayMessages = updated;
+    }
+
+    this.isLoading = true;
+    this.startThinkingTimer();
+    this.scrollToBottom();
+    this.dispatchAgentRun();
   }
 
   private findLastAssistantMessage(): DisplayMessage | undefined {
@@ -1160,6 +1289,37 @@ export struct AssistantPage {
               }
               .margin({ top: 4 })
               .alignSelf(ItemAlign.End)
+            }
+
+            // 5. completed_with_warning 持久化轻提示（流干净结束但缺 final 帧）
+            if (msg.statusHint && msg.statusHint.indexOf('⚠️') === 0 && index !== this.interruptedMsgIndex) {
+              Text(msg.statusHint)
+                .fontSize(11)
+                .fontColor('#FF9500')
+                .margin({ top: 4 })
+            }
+
+            // 6. 中断态：保留已收内容并提供「重新发送」入口（同 session_id 借后端 checkpoint 幂等续接）
+            if (index === this.interruptedMsgIndex) {
+              Row({ space: 10 }) {
+                Text(msg.statusHint && msg.statusHint.length > 0 ? msg.statusHint : '⚠️ 连接中断，回复未完成')
+                  .fontSize(12)
+                  .fontColor('#FF9500')
+                  .layoutWeight(1)
+                Button('重新发送')
+                  .height(28)
+                  .fontSize(12)
+                  .fontColor('#FFFFFF')
+                  .backgroundColor('#007AFF')
+                  .borderRadius(14)
+                  .padding({ left: 12, right: 12 })
+                  .onClick(() => {
+                    this.resendLastMessage();
+                  })
+              }
+              .width('100%')
+              .margin({ top: 6 })
+              .alignItems(VerticalAlign.Center)
             }
           } else {
             Text(msg.content)
@@ -1671,7 +1831,7 @@ export struct AssistantPage {
               this.MessageBubbleBuilder(msg, index as number)
             }
           }
-        }, (msg: DisplayMessage, index: number) => `${index}_${msg.role}_${msg.content.length}`)
+        }, (msg: DisplayMessage, index: number) => `${index}_${msg.role}_${msg.content.length}_${(msg.statusHint && msg.statusHint.length > 0) ? 'h' : 'n'}_${index === this.interruptedMsgIndex ? 'i' : 'n'}`)
 
         if (this.displayMessages.length === 0) {
           ListItem() {
