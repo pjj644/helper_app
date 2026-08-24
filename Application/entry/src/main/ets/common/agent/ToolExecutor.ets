@@ -13,7 +13,7 @@ import { AppConstants, RouterConstants } from '../constants/AppConstants'
 import { router } from '@kit.ArkUI'
 import { common } from '@kit.AbilityKit'
 import { http } from '@kit.NetworkKit'
-import { SettingsRepository } from '../../repository/SettingsRepository'
+import { AgentEndpointConfig, AgentEndpoint } from './AgentEndpointConfig'
 import { ScheduleRepository } from '../../repository/ScheduleRepository'
 import { DataQueryEngine, QueryFilter } from './DataQueryEngine'
 import { PageContextTracker } from './PageContextTracker'
@@ -603,21 +603,19 @@ export class ToolExecutor {
   private async searchJwcNews(args: Record<string, Object>): Promise<ToolResult> {
     const keyword = this.getStringArg(args, 'keyword', '')
     const category = this.getStringArg(args, 'category', 'all')
-    let backendUrl = AppConstants.AI_AGENT_URL
-    try {
-      backendUrl = await SettingsRepository.getAgentBackendUrl(this.context)
-    } catch (e) {
-      // ignore
+    // 后端地址与密钥统一从设置读取，未配置时直接返回引导提示（不崩溃）
+    const agentEndpoint: AgentEndpoint = await AgentEndpointConfig.resolve(this.context)
+    if (!AgentEndpointConfig.isReady(agentEndpoint)) {
+      return { success: false, data: AgentEndpointConfig.missingHint(agentEndpoint) }
     }
 
-    const endpoint = `${backendUrl.replace(/\/+$/, '')}/api/jwc/search?keyword=${encodeURIComponent(keyword)}&category=${encodeURIComponent(category)}&limit=6`
+    const query = `keyword=${encodeURIComponent(keyword)}&category=${encodeURIComponent(category)}&limit=6`
+    const requestUrl = AgentEndpointConfig.joinUrl(agentEndpoint, `api/jwc/search?${query}`)
     const httpRequest = http.createHttp()
     try {
-      const response = await httpRequest.request(endpoint, {
+      const response = await httpRequest.request(requestUrl, {
         method: http.RequestMethod.GET,
-        header: {
-          'x-proxy-key': 'uestc-helper-proxy-key-change-me'
-        },
+        header: AgentEndpointConfig.buildHeaders(agentEndpoint),
         readTimeout: 10000,
         connectTimeout: 5000
       })

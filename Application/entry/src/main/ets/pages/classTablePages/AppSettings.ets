@@ -1,4 +1,5 @@
 import { router } from '@kit.ArkUI';
+import { http } from '@kit.NetworkKit';
 import { MaterialLevel } from '../../common/HdsCompat';
 import { photoAccessHelper } from '@kit.MediaLibraryKit';
 import { UISettings } from '../../common/UISettings';
@@ -18,6 +19,7 @@ import { ReminderService } from '../../service/ReminderService';
 import { ScheduleService } from '../../service/ScheduleService';
 import { LoadingOverlay } from '../../components/LoadingOverlay';
 import { SettingsRepository } from '../../repository/SettingsRepository';
+import { AgentEndpointConfig, AgentEndpoint } from '../../common/agent/AgentEndpointConfig';
 import { FloatingWindowManager } from '../../common/agent/FloatingWindowManager';
 import { PrivacyDialogComponent } from '../../components/PrivacyDialogComponent';
 
@@ -63,6 +65,10 @@ struct AppSettings {
   @State notificationEnabled: boolean = true;
   @State autoUpdateEnabled: boolean = false;
   @State agentBackendUrl: string = '';
+  @State agentProxyKey: string = '';
+  @State testingConnection: boolean = false;
+  @State testResultText: string = '';
+  @State testConnectionSuccess: boolean = false;
   @State showAgentToolCalls: boolean = false;
   @StorageLink('floating_ball_enabled') floatingBallEnabled: boolean = true;
 
@@ -178,8 +184,48 @@ struct AppSettings {
   private async loadAgentBackendUrl(): Promise<void> {
     try {
       this.agentBackendUrl = await SettingsRepository.getAgentBackendUrl(getContext(this));
+      this.agentProxyKey = await SettingsRepository.getAgentProxyKey(getContext(this));
     } catch (error) {
-      this.agentBackendUrl = AppConstants.AI_AGENT_URL;
+      console.error(`[AppSettings] 加载助手后端配置失败: ${JSON.stringify(error)}`);
+      this.agentBackendUrl = '';
+      this.agentProxyKey = '';
+    }
+  }
+
+  // 测试与后端的连通性：GET {url}/health（该路由在后端无需鉴权头，成功仅代表服务可达）
+  private async testAgentConnection(): Promise<void> {
+    if (this.testingConnection) {
+      return;
+    }
+    const agentEndpoint: AgentEndpoint = await AgentEndpointConfig.resolve(getContext(this));
+    if (!AgentEndpointConfig.isReady(agentEndpoint)) {
+      this.testConnectionSuccess = false;
+      this.testResultText = AgentEndpointConfig.missingHint(agentEndpoint);
+      return;
+    }
+
+    this.testingConnection = true;
+    this.testResultText = '';
+    const httpRequest = http.createHttp();
+    try {
+      const response = await httpRequest.request(AgentEndpointConfig.joinUrl(agentEndpoint, AppConstants.AI_HEALTH_PATH), {
+        method: http.RequestMethod.GET,
+        connectTimeout: 5000,
+        readTimeout: 5000
+      });
+      if (response.responseCode === 200) {
+        this.testConnectionSuccess = true;
+        this.testResultText = '✓ 连接成功，后端服务正常';
+      } else {
+        this.testConnectionSuccess = false;
+        this.testResultText = `✗ 后端响应异常：HTTP ${response.responseCode}`;
+      }
+    } catch (error) {
+      this.testConnectionSuccess = false;
+      this.testResultText = `✗ 连接失败：请检查地址、网络与防火墙（${String(error)}）`;
+    } finally {
+      httpRequest.destroy();
+      this.testingConnection = false;
     }
   }
 
@@ -550,7 +596,7 @@ struct AppSettings {
       .alignItems(HorizontalAlign.Start)
       .padding({ bottom: 8 })
 
-      TextInput({ text: this.agentBackendUrl, placeholder: 'http://192.168.1.100:3000' })
+      TextInput({ text: this.agentBackendUrl, placeholder: 'http://电脑局域网IP:3000' })
         .width('100%')
         .height(48)
         .fontSize(14)
@@ -562,6 +608,58 @@ struct AppSettings {
           this.agentBackendUrl = value;
           SettingsRepository.saveAgentBackendUrl(getContext(this), value);
         })
+
+      Column({ space: 4 }) {
+        Text('访问密钥')
+          .fontSize(15)
+          .fontColor($r('app.color.text_primary'))
+        Text('后端 PROXY_AUTH_KEY 对应的值，助手请求会携带 x-proxy-key 鉴权头，需与后端一致。')
+          .fontSize(12)
+          .fontColor($r('app.color.text_tertiary'))
+      }
+      .width('100%')
+      .alignItems(HorizontalAlign.Start)
+      .padding({ top: 12, bottom: 8 })
+
+      TextInput({ text: this.agentProxyKey, placeholder: '请输入后端访问密钥' })
+        .type(InputType.Password)
+        .width('100%')
+        .height(48)
+        .fontSize(14)
+        .fontColor($r('app.color.text_primary'))
+        .placeholderColor($r('app.color.text_tertiary'))
+        .backgroundColor($r('app.color.button_background'))
+        .borderRadius(10)
+        .onChange((value: string) => {
+          this.agentProxyKey = value;
+          SettingsRepository.saveAgentProxyKey(getContext(this), value);
+        })
+
+      Divider().color($r('app.color.divider_color'))
+
+      Row({ space: 12 }) {
+        Button() {
+          Text(this.testingConnection ? '测试中...' : '测试连接')
+            .fontSize(14)
+            .fontColor('#FFFFFF')
+        }
+        .width(120)
+        .height(40)
+        .backgroundColor(this.testingConnection ? $r('app.color.text_tertiary') : $r('app.color.primary_color'))
+        .borderRadius(10)
+        .enabled(!this.testingConnection)
+        .onClick(() => this.testAgentConnection())
+
+        if (this.testResultText.length > 0) {
+          Text(this.testResultText)
+            .fontSize(13)
+            .fontColor(this.testConnectionSuccess ? $r('app.color.success_color') : $r('app.color.danger_color'))
+            .layoutWeight(1)
+        }
+      }
+      .width('100%')
+      .alignItems(VerticalAlign.Center)
+      .padding({ top: 12 })
 
       Divider().color($r('app.color.divider_color'))
 

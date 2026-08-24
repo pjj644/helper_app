@@ -2,7 +2,7 @@ import { photoAccessHelper } from '@kit.MediaLibraryKit';
 import { fileIo as fs } from '@kit.CoreFileKit';
 import { util } from '@kit.ArkTS';
 import { http } from '@kit.NetworkKit';
-import { AppConstants } from '../constants/AppConstants';
+import { AgentEndpointConfig } from './AgentEndpointConfig';
 
 export interface VisionScheduleResult {
   title: string;
@@ -55,13 +55,20 @@ export class VisionScheduleHelper {
   }
 
   static async parseScheduleFromImage(
-    backendUrl: string,
+    context: Context,
     imageBase64: string,
     userHint?: string
   ): Promise<VisionScheduleResult | null> {
+    // 后端地址与密钥统一从设置读取，缺失时记日志并返回 null，由上层给出配置引导文案
+    const agentEndpoint = await AgentEndpointConfig.resolve(context);
+    if (!AgentEndpointConfig.isReady(agentEndpoint)) {
+      console.error('[VisionHelper] parseSchedule skipped:', AgentEndpointConfig.missingHint(agentEndpoint));
+      return null;
+    }
+
     const httpRequest = http.createHttp();
     try {
-      const endpoint = `${backendUrl.replace(/\/+$/, '')}/api/vision/parse-schedule`;
+      const requestUrl = AgentEndpointConfig.joinUrl(agentEndpoint, 'api/vision/parse-schedule');
       const bodyObj: Record<string, string> = {
         'image': imageBase64
       };
@@ -69,12 +76,9 @@ export class VisionScheduleHelper {
         bodyObj['hint'] = userHint;
       }
 
-      const response = await httpRequest.request(endpoint, {
+      const response = await httpRequest.request(requestUrl, {
         method: http.RequestMethod.POST,
-        header: {
-          'Content-Type': 'application/json',
-          'x-proxy-key': 'uestc-helper-proxy-key-change-me'
-        },
+        header: AgentEndpointConfig.buildHeaders(agentEndpoint),
         extraData: JSON.stringify(bodyObj),
         readTimeout: 45000,
         connectTimeout: 15000

@@ -1,16 +1,16 @@
 import { preferences } from '@kit.ArkData';
 import { ThemeManager } from '../../common/utils/ThemeManager';
-import { AppConstants } from '../../common/constants/AppConstants';
+import { AppConstants, RouterConstants } from '../../common/constants/AppConstants';
 import { ToolRegistry } from '../../common/agent/ToolRegistry';
 import { ToolExecutor } from '../../common/agent/ToolExecutor';
 import { BackendAgentClient, AgentCallbacks, AgentMessage } from '../../common/agent/BackendAgentClient';
+import { AgentEndpointConfig, AgentEndpoint } from '../../common/agent/AgentEndpointConfig';
 import { SpeechRecognizerHelper } from '../../common/speech/SpeechRecognizerHelper';
 import { VisionScheduleHelper, VisionScheduleResult } from '../../common/agent/VisionScheduleHelper';
-import { SettingsRepository } from '../../repository/SettingsRepository';
 import { FloatingWindowManager } from '../../common/agent/FloatingWindowManager';
 import { PageContextTracker } from '../../common/agent/PageContextTracker';
 import { common } from '@kit.AbilityKit';
-import { promptAction } from '@kit.ArkUI';
+import { promptAction, router } from '@kit.ArkUI';
 import { ChatSessionRepository, ChatSession, ChatMessage, ChatDisplayMessage, AgentTelemetryInfo } from '../../repository/ChatSessionRepository';
 import { MarkdownBubble } from '../../common/agent/MarkdownBubble';
 
@@ -43,6 +43,8 @@ export struct AssistantPage {
   @State pulsePhase: number = 0;
   @StorageLink('floating_ball_enabled') isFloatingBallEnabled: boolean = true;
   @State isRecording: boolean = false;
+  @State showBackendGuide: boolean = false;
+  @State backendGuideHint: string = '';
   @StorageLink(ThemeManager.THEME_STORAGE_KEY) isDarkMode: boolean = false;
   private scroller: Scroller = new Scroller();
   private dotTimer: number = -1;
@@ -66,6 +68,7 @@ export struct AssistantPage {
     }, 400);
     this.loadSessions();
     this.loadToolCallDisplaySetting();
+    this.refreshBackendGuide();
     setTimeout(() => {
       this.scroller.scrollEdge(Edge.Bottom);
     }, 400);
@@ -87,9 +90,22 @@ export struct AssistantPage {
     FloatingWindowManager.getInstance().setAssistantPageActive(true);
     this.loadSessions();
     this.loadToolCallDisplaySetting();
+    this.refreshBackendGuide();
     setTimeout(() => {
       this.scroller.scrollEdge(Edge.Bottom);
     }, 300);
+  }
+
+  // 检查助手后端配置是否齐全，缺失时在会话区顶部展示引导卡片（onPageShow 会复检，从设置返回后自动消失）
+  private async refreshBackendGuide(): Promise<void> {
+    try {
+      const endpoint: AgentEndpoint = await AgentEndpointConfig.resolve(getContext(this));
+      this.showBackendGuide = !AgentEndpointConfig.isReady(endpoint);
+      this.backendGuideHint = AgentEndpointConfig.missingHint(endpoint);
+    } catch (e) {
+      this.showBackendGuide = true;
+      this.backendGuideHint = '无法读取助手后端配置，请前往设置重新填写。';
+    }
   }
 
   private loadToolCallDisplaySetting(): void {
@@ -1220,12 +1236,13 @@ export struct AssistantPage {
         throw new Error('读取图片失败');
       }
 
-      let backendUrl: string = AppConstants.AI_AGENT_URL;
-      try {
-        backendUrl = await SettingsRepository.getAgentBackendUrl(getContext(this));
-      } catch (e) {}
+      // 先校验后端配置，缺失时直接给出引导文案（不发起无谓请求）
+      const agentEndpoint: AgentEndpoint = await AgentEndpointConfig.resolve(getContext(this));
+      if (!AgentEndpointConfig.isReady(agentEndpoint)) {
+        throw new Error(AgentEndpointConfig.missingHint(agentEndpoint));
+      }
 
-      const result: VisionScheduleResult | null = await VisionScheduleHelper.parseScheduleFromImage(backendUrl, base64);
+      const result: VisionScheduleResult | null = await VisionScheduleHelper.parseScheduleFromImage(getContext(this), base64);
       if (!result) {
         throw new Error('未能从海报中提取到有效日程');
       }
@@ -1578,6 +1595,45 @@ export struct AssistantPage {
   }
 
   @Builder
+  private BackendGuideCard(): void {
+    Column({ space: 10 }) {
+      Row({ space: 8 }) {
+        Text('⚠️')
+          .fontSize(18)
+        Text('AI 助手后端尚未配置')
+          .fontSize(15)
+          .fontWeight(FontWeight.Bold)
+          .fontColor('#FF9500')
+      }
+      .width('100%')
+      .alignItems(VerticalAlign.Center)
+
+      Text(this.backendGuideHint.length > 0 ? this.backendGuideHint : '请先在「我的 - 应用设置 - 助手后端」填写后端地址与访问密钥，再使用 AI 助手。')
+        .fontSize(13)
+        .fontColor(ThemeManager.getTextSecondaryColor())
+        .width('100%')
+
+      Button('去设置')
+        .width('100%')
+        .height(36)
+        .fontSize(14)
+        .fontColor(Color.White)
+        .backgroundColor('#007AFF')
+        .borderRadius(10)
+        .onClick(() => {
+          router.pushUrl({ url: RouterConstants.PAGE_SETTINGS }).catch((error: Error) => {
+            console.error('[AssistantPage] jump to settings failed:', JSON.stringify(error));
+          });
+        })
+    }
+    .width('100%')
+    .padding(14)
+    .borderRadius(16)
+    .backgroundColor(this.isDarkMode ? '#3A2E12' : '#FFF7E6')
+    .border({ width: 1, color: this.isDarkMode ? '#8A6D1A' : '#F0D48A' })
+  }
+
+  @Builder
   private PromptChipBuilder(label: string, promptText: string): void {
     Button() {
       Text(label)
@@ -1601,6 +1657,14 @@ export struct AssistantPage {
       this.TitleBarBuilder()
 
       List({ space: 0, scroller: this.scroller }) {
+        // 后端配置缺失时的引导卡片（配置齐全时不渲染）
+        if (this.showBackendGuide) {
+          ListItem() {
+            this.BackendGuideCard()
+          }
+          .margin({ left: 16, right: 16, top: 8 })
+        }
+
         ForEach(this.displayMessages, (msg: DisplayMessage, index: number) => {
           ListItem() {
             if (this.showToolCalls || (msg.role !== 'tool_call' && msg.role !== 'tool_result')) {

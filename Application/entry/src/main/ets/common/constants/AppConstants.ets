@@ -72,12 +72,14 @@ export class AppConstants {
   static readonly AI_AGENT_MAX_TOOL_ROUNDS: number = 5;
   static readonly AI_AGENT_TOOL_TIMEOUT_MS: number = 30000;
 
-  // ECS proxy — change URL to your ECS server address
-  static readonly AI_AGENT_URL: string = 'http://192.168.1.100:3000';
-  static readonly AI_AGENT_KEY: string = 'uestc-helper-proxy-key-change-me';
+  // ECS proxy — 地址与密钥不内置默认值，统一经 common/agent/AgentEndpointConfig 从设置读取
+  static readonly AI_AGENT_URL: string = '';
+  static readonly AI_AGENT_KEY: string = '';
   static readonly AI_CHAT_PATH: string = 'api/chat';
   static readonly AI_TOOL_RESULT_PATH: string = 'api/tool-result';
+  static readonly AI_HEALTH_PATH: string = 'health';
   static readonly SETTING_AGENT_BACKEND_URL_KEY: string = 'setting_agent_backend_url';
+  static readonly SETTING_AGENT_PROXY_KEY_KEY: string = 'setting_agent_proxy_key';
   static readonly SETTING_AI_SHOW_TOOL_CALLS_KEY: string = 'setting_ai_show_tool_calls';
   static readonly SETTING_FLOATING_BALL_ENABLED_KEY: string = 'setting_floating_ball_enabled';
   static readonly FLOATING_SUBWINDOW_NAME: string = 'ai_floating_subwindow';

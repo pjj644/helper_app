@@ -2,7 +2,7 @@ import { http } from '@kit.NetworkKit'
 import { util } from '@kit.ArkTS'
 import { ToolExecutor, ToolResult } from './ToolExecutor'
 import { AppConstants } from '../constants/AppConstants'
-import { SettingsRepository } from '../../repository/SettingsRepository'
+import { AgentEndpointConfig, AgentEndpoint } from './AgentEndpointConfig'
 
 import { AgentTelemetryInfo } from '../../repository/ChatSessionRepository'
 
@@ -70,18 +70,15 @@ export class BackendAgentClient {
     const last: AgentMessage | undefined = history[history.length - 1]
     const message: string = (last && last.content) ? last.content : ''
 
-    // 后端地址从设置读取，AppConstants 作默认回退
-    let baseUrl: string = AppConstants.AI_AGENT_URL
-    try {
-      baseUrl = await SettingsRepository.getAgentBackendUrl(this.context)
-    } catch (e) {
-      // 用默认
+    // 后端地址与密钥统一从设置读取（归一化），缺失时直接走错误回调引导用户去配置
+    const endpoint: AgentEndpoint = await AgentEndpointConfig.resolve(this.context)
+    if (!AgentEndpointConfig.isReady(endpoint)) {
+      this.finish(true, AgentEndpointConfig.missingHint(endpoint))
+      return
     }
-    if (!baseUrl.endsWith('/')) {
-      baseUrl = baseUrl + '/'
-    }
-    const chatUrl: string = baseUrl + AppConstants.AI_CHAT_PATH
-    const toolResultUrl: string = baseUrl + AppConstants.AI_TOOL_RESULT_PATH
+
+    const chatUrl: string = AgentEndpointConfig.joinUrl(endpoint, AppConstants.AI_CHAT_PATH)
+    const toolResultUrl: string = AgentEndpointConfig.joinUrl(endpoint, AppConstants.AI_TOOL_RESULT_PATH)
 
     const httpRequest: http.HttpRequest = http.createHttp()
     this.currentRequest = httpRequest
@@ -95,14 +92,14 @@ export class BackendAgentClient {
       while (idx !== -1) {
         const raw: string = this.buffer.substring(0, idx)
         this.buffer = this.buffer.substring(idx + 2)
-        this.handleEvent(raw, sessionId, toolResultUrl)
+        this.handleEvent(raw, sessionId, toolResultUrl, endpoint)
         idx = this.buffer.indexOf('\n\n')
       }
     })
 
     httpRequest.on('dataEnd', () => {
       if (this.buffer.length > 0) {
-        this.handleEvent(this.buffer, sessionId, toolResultUrl)
+        this.handleEvent(this.buffer, sessionId, toolResultUrl, endpoint)
         this.buffer = ''
       }
       this.currentRequest = null
@@ -113,15 +110,15 @@ export class BackendAgentClient {
     const timestampStr: string = Date.now().toString()
     const nonceStr: string = 'nonce_' + Date.now() + '_' + Math.floor(Math.random() * 100000)
 
+    // 鉴权头统一由 AgentEndpointConfig 构造，这里只追加流式请求的额外头
+    const requestHeaders: Record<string, string> = AgentEndpointConfig.buildHeaders(endpoint)
+    requestHeaders['X-Timestamp'] = timestampStr
+    requestHeaders['X-Nonce'] = nonceStr
+    requestHeaders['Accept'] = 'text/event-stream'
+
     httpRequest.requestInStream(chatUrl, {
       method: http.RequestMethod.POST,
-      header: {
-        'Content-Type': 'application/json',
-        'X-Proxy-Key': AppConstants.AI_AGENT_KEY,
-        'X-Timestamp': timestampStr,
-        'X-Nonce': nonceStr,
-        'Accept': 'text/event-stream'
-      },
+      header: requestHeaders,
       extraData: JSON.stringify({ session_id: sessionId, message: message }),
       connectTimeout: 10000,
       readTimeout: 120000
@@ -133,7 +130,7 @@ export class BackendAgentClient {
       if (this.isCancelled) {
         this.finish(false, '')
       } else {
-        this.finish(true, `无法连接助手后端：${String(err)}。请确认电脑已开机且在同一 WiFi，地址在"应用设置-助手后端"中配置。`)
+        this.finish(true, `无法连接助手后端：${String(err)}。请确认电脑已开机且在同一 WiFi，并在"我的-应用设置-助手后端"检查地址与密钥。`)
       }
     })
   }
@@ -150,7 +147,7 @@ export class BackendAgentClient {
     }
   }
 
-  private handleEvent(raw: string, sessionId: string, toolResultUrl: string): void {
+  private handleEvent(raw: string, sessionId: string, toolResultUrl: string, endpoint: AgentEndpoint): void {
     const lines: string[] = raw.split('\n')
     for (let i = 0; i < lines.length; i++) {
       const line: string = lines[i].trim()
@@ -187,7 +184,7 @@ export class BackendAgentClient {
       } else if (type === 'tool_call') {
         const batchId: string = (evt['batch_id'] as string) || ''
         const toolCallsRaw: Object[] = (evt['tool_calls'] as Object[]) || []
-        this.fireAndForget(this.handleToolCall(sessionId, batchId, toolCallsRaw, toolResultUrl))
+        this.fireAndForget(this.handleToolCall(sessionId, batchId, toolCallsRaw, toolResultUrl, endpoint))
       } else if (type === 'final') {
         let telemetry: AgentTelemetryInfo | undefined = undefined
         if (evt['telemetry']) {
@@ -213,7 +210,7 @@ export class BackendAgentClient {
     })
   }
 
-  private async handleToolCall(sessionId: string, batchId: string, toolCallsRaw: Object[], toolResultUrl: string): Promise<void> {
+  private async handleToolCall(sessionId: string, batchId: string, toolCallsRaw: Object[], toolResultUrl: string, endpoint: AgentEndpoint): Promise<void> {
     const results: ToolResultOut[] = []
     for (let i = 0; i < toolCallsRaw.length; i++) {
       if (this.isCancelled) {
@@ -246,18 +243,15 @@ export class BackendAgentClient {
     if (this.isCancelled) {
       return
     }
-    await this.postToolResult(toolResultUrl, sessionId, batchId, results)
+    await this.postToolResult(toolResultUrl, sessionId, batchId, results, endpoint)
   }
 
-  private async postToolResult(url: string, sessionId: string, batchId: string, results: ToolResultOut[]): Promise<void> {
+  private async postToolResult(url: string, sessionId: string, batchId: string, results: ToolResultOut[], endpoint: AgentEndpoint): Promise<void> {
     try {
       const req: http.HttpRequest = http.createHttp()
       await req.request(url, {
         method: http.RequestMethod.POST,
-        header: {
-          'Content-Type': 'application/json',
-          'X-Proxy-Key': AppConstants.AI_AGENT_KEY
-        },
+        header: AgentEndpointConfig.buildHeaders(endpoint),
         extraData: JSON.stringify({ session_id: sessionId, batch_id: batchId, results: results }),
         connectTimeout: 10000,
         readTimeout: 15000

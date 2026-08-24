@@ -71,4 +71,18 @@ export class SettingsRepository {
     await pref.put(AppConstants.SETTING_AGENT_BACKEND_URL_KEY, url);
     await pref.flush();
   }
+
+  static async getAgentProxyKey(context: Object): Promise<string> {
+    const abilityContext = ContextUtils.getAbilityContext(context);
+    const pref = await preferences.getPreferences(abilityContext, AppConstants.COURSE_TABLE_PREF_NAME);
+    const key: string = (await pref.get(AppConstants.SETTING_AGENT_PROXY_KEY_KEY, AppConstants.AI_AGENT_KEY)) as string;
+    return key && key.length > 0 ? key : '';
+  }
+
+  static async saveAgentProxyKey(context: Object, key: string): Promise<void> {
+    const abilityContext = ContextUtils.getAbilityContext(context);
+    const pref = await preferences.getPreferences(abilityContext, AppConstants.COURSE_TABLE_PREF_NAME);
+    await pref.put(AppConstants.SETTING_AGENT_PROXY_KEY_KEY, key);
+    await pref.flush();
+  }
 }
