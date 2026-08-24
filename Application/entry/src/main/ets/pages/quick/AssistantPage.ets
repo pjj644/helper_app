@@ -48,6 +48,9 @@ export struct AssistantPage {
   @State backendGuideHint: string = '';
   // T3 中断态：需要展示「重新发送」入口的 assistant 气泡下标（-1 表示无中断）
   @State interruptedMsgIndex: number = -1;
+  // 澄清提问卡片：输入框草稿（同一时刻至多一张未回答卡片）与最近一次下发的提问参数缓存
+  @State clarificationInputText: string = '';
+  private lastClarificationArgs: string = '';
   @StorageLink(ThemeManager.THEME_STORAGE_KEY) isDarkMode: boolean = false;
   private scroller: Scroller = new Scroller();
   private dotTimer: number = -1;
@@ -557,6 +560,186 @@ export struct AssistantPage {
     return text
   }
 
+  /**
+   * 澄清提问卡片入列：以 tool_result 消息形态插入（复用既有持久化结构），
+   * toolArgs 携带提问 JSON，toolResult 留空表示未回答；用户作答后回填 toolResult。
+   */
+  private pushClarificationCard(toolName: string, success: boolean): void {
+    const cardMsg: DisplayMessage = {
+      role: 'tool_result',
+      content: success ? 'AI 助手发起澄清提问' : '澄清提问下发失败',
+      isError: !success,
+      toolName: toolName,
+      toolArgs: this.lastClarificationArgs,
+      toolResult: '',
+      isToolSuccess: success,
+      statusHint: success ? 'await_answer' : ''
+    };
+    const lastIdx: number = this.displayMessages.length - 1;
+    if (lastIdx >= 0 && this.displayMessages[lastIdx].role === 'assistant' && (!this.displayMessages[lastIdx].content || this.displayMessages[lastIdx].content.length === 0)) {
+      const updated: DisplayMessage[] = [...this.displayMessages];
+      updated.splice(lastIdx, 0, cardMsg);
+      this.displayMessages = updated;
+    } else {
+      this.displayMessages = [...this.displayMessages, cardMsg];
+    }
+    this.scrollToBottom();
+  }
+
+  /** 用户作答（点推荐项或输入提交）：回填卡片为已答态，并把答案作为下一条用户消息发出 */
+  private answerClarification(msgIndex: number, answer: string): void {
+    const text: string = answer.trim();
+    if (text.length === 0 || this.isLoading) {
+      return;
+    }
+    const cur: DisplayMessage = this.displayMessages[msgIndex];
+    const updated: DisplayMessage[] = [...this.displayMessages];
+    updated[msgIndex] = {
+      role: cur.role,
+      content: cur.content,
+      isError: cur.isError,
+      toolName: cur.toolName,
+      toolArgs: cur.toolArgs,
+      toolResult: text,
+      isToolSuccess: cur.isToolSuccess,
+      telemetry: cur.telemetry,
+      thought: cur.thought,
+      thinkingDurationMs: cur.thinkingDurationMs,
+      isThoughtExpanded: cur.isThoughtExpanded,
+      statusHint: ''
+    };
+    this.displayMessages = updated;
+    this.clarificationInputText = '';
+    this.inputText = text;
+    this.sendMessage();
+  }
+
+  private parseClarificationQuestion(argsJson: string): string {
+    try {
+      const parsed: Record<string, Object> = JSON.parse(argsJson) as Record<string, Object>
+      const q: Object | undefined = parsed['question']
+      return typeof q === 'string' ? q : ''
+    } catch (e) {
+      return ''
+    }
+  }
+
+  private parseClarificationOptions(argsJson: string): string[] {
+    const out: string[] = []
+    try {
+      const parsed: Record<string, Object> = JSON.parse(argsJson) as Record<string, Object>
+      const raw: Object | undefined = parsed['options']
+      if (Array.isArray(raw)) {
+        for (let i = 0; i < raw.length; i++) {
+          if (typeof raw[i] === 'string' && (raw[i] as string).length > 0) {
+            out.push(raw[i] as string)
+          }
+        }
+      }
+    } catch (e) {
+      // 参数缺失/非法时按无推荐项处理
+    }
+    return out
+  }
+
+  private isClarificationFreeInputAllowed(argsJson: string): boolean {
+    try {
+      const parsed: Record<string, Object> = JSON.parse(argsJson) as Record<string, Object>
+      const v: Object | undefined = parsed['allowFreeInput']
+      return typeof v === 'boolean' ? v as boolean : true
+    } catch (e) {
+      return true
+    }
+  }
+
+  private isClarificationAnswered(msg: DisplayMessage): boolean {
+    return msg.toolResult !== undefined && msg.toolResult.length > 0
+  }
+
+  /** 澄清提问交互卡片：问题 + 推荐项 chips（有才显示）+ 自由输入框；已答态展示所选答案 */
+  @Builder
+  private ClarificationCardBuilder(msg: DisplayMessage, index: number): void {
+    Column({ space: 10 }) {
+      Row({ space: 6 }) {
+        Text('❓')
+          .fontSize(14)
+        Text('AI 助手需要补充信息')
+          .fontSize(12)
+          .fontWeight(FontWeight.Medium)
+          .fontColor('#007AFF')
+      }
+
+      Text(this.parseClarificationQuestion(msg.toolArgs || ''))
+        .fontSize(14)
+        .fontWeight(FontWeight.Medium)
+        .fontColor(ThemeManager.getTextPrimaryColor())
+        .width('100%')
+
+      if (this.isClarificationAnswered(msg)) {
+        Row({ space: 6 }) {
+          Text('✅')
+            .fontSize(12)
+          Text(`已回答：${msg.toolResult}`)
+            .fontSize(13)
+            .fontColor(ThemeManager.getTextSecondaryColor())
+        }
+        .padding(10)
+        .borderRadius(8)
+        .width('100%')
+        .backgroundColor(this.isDarkMode ? '#15251B' : '#EAF5EC')
+      } else {
+        if (this.parseClarificationOptions(msg.toolArgs || '').length > 0) {
+          Flex({ wrap: FlexWrap.Wrap, justifyContent: FlexAlign.Start }) {
+            ForEach(this.parseClarificationOptions(msg.toolArgs || ''), (opt: string) => {
+              Text(opt)
+                .fontSize(13)
+                .fontColor('#007AFF')
+                .padding({ left: 12, right: 12, top: 7, bottom: 7 })
+                .borderRadius(16)
+                .border({ width: 1, color: '#007AFF' })
+                .backgroundColor(this.isDarkMode ? '#1E2433' : '#F0F6FF')
+                .margin({ right: 8, bottom: 8 })
+                .opacity(this.isLoading ? 0.5 : 1.0)
+                .onClick(() => {
+                  this.answerClarification(index, opt);
+                })
+            }, (opt: string) => opt)
+          }
+          .width('100%')
+        }
+        if (this.isClarificationFreeInputAllowed(msg.toolArgs || '')) {
+          Row({ space: 8 }) {
+            TextInput({ text: this.clarificationInputText, placeholder: '或输入自定义回答...' })
+              .fontSize(13)
+              .layoutWeight(1)
+              .height(38)
+              .backgroundColor(this.isDarkMode ? '#1E2433' : '#FFFFFF')
+              .onChange((value: string) => {
+                this.clarificationInputText = value;
+              })
+              .onSubmit(() => {
+                this.answerClarification(index, this.clarificationInputText);
+              })
+            Button('发送')
+              .fontSize(13)
+              .height(38)
+              .enabled(!this.isLoading && this.clarificationInputText.trim().length > 0)
+              .onClick(() => {
+                this.answerClarification(index, this.clarificationInputText);
+              })
+          }
+          .width('100%')
+        }
+      }
+    }
+    .padding(12)
+    .borderRadius(12)
+    .backgroundColor(this.isDarkMode ? '#182030' : '#F7FAFF')
+    .border({ width: 1, color: this.isDarkMode ? '#2A3B5A' : '#CCE0FF' })
+    .width('92%')
+    .alignItems(HorizontalAlign.Start)
+  }
+
   private requestConfirmation(toolName: string, args: string): Promise<boolean> {
     return new Promise<boolean>((resolve: (value: boolean) => void) => {
       const displayName: string = this.getToolDisplayName(toolName);
@@ -705,6 +888,10 @@ export struct AssistantPage {
         self.scrollToBottom();
       },
       onToolCallStart: (toolName: string, args: string) => {
+        if (toolName === 'ask_user_clarification') {
+          // 澄清提问：缓存参数供 onToolCallResult 渲染交互卡片（提问/选项/是否允许自由输入）
+          self.lastClarificationArgs = args;
+        }
         const displayName: string = self.getToolDisplayName(toolName);
         self.currentThinkingHint = `正在${displayName}...`;
         const newToolCall: DisplayMessage = {
@@ -725,6 +912,11 @@ export struct AssistantPage {
         self.scrollToBottom();
       },
       onToolCallResult: (toolName: string, result: string, success: boolean) => {
+        if (toolName === 'ask_user_clarification') {
+          // 澄清提问不走普通结果 chip，改渲染交互式问答卡片（用户点选项或输入后作为下一条消息发出）
+          self.pushClarificationCard(toolName, success);
+          return;
+        }
         const displayName: string = self.getToolDisplayName(toolName);
         self.currentThinkingHint = success ? '数据已获取，正在提炼回答...' : '正在整理并生成回答...';
         const newToolResult: DisplayMessage = {
@@ -1071,6 +1263,8 @@ export struct AssistantPage {
         .backgroundColor(this.isDarkMode ? '#1E2433' : '#F2F4F7')
         .border({ width: 0.5, color: this.isDarkMode ? '#2D3748' : '#E2E8F0' })
         .alignItems(VerticalAlign.Center)
+      } else if (msg.role === 'tool_result' && msg.toolName === 'ask_user_clarification') {
+        this.ClarificationCardBuilder(msg, index)
       } else if (msg.role === 'tool_result') {
         Column({ space: 4 }) {
           Row({ space: 6 }) {
@@ -1803,11 +1997,11 @@ export struct AssistantPage {
 
         ForEach(this.displayMessages, (msg: DisplayMessage, index: number) => {
           ListItem() {
-            if (this.showToolCalls || (msg.role !== 'tool_call' && msg.role !== 'tool_result')) {
+            if (this.showToolCalls || (msg.role !== 'tool_call' && msg.role !== 'tool_result') || (msg.role === 'tool_result' && msg.toolName === 'ask_user_clarification')) {
               this.MessageBubbleBuilder(msg, index as number)
             }
           }
-        }, (msg: DisplayMessage, index: number) => `${index}_${msg.role}_${msg.content.length}_${(msg.statusHint && msg.statusHint.length > 0) ? 'h' : 'n'}_${index === this.interruptedMsgIndex ? 'i' : 'n'}`)
+        }, (msg: DisplayMessage, index: number) => `${index}_${msg.role}_${msg.content.length}_${(msg.statusHint && msg.statusHint.length > 0) ? 'h' : 'n'}_${(msg.toolResult && msg.toolResult.length > 0) ? 'a' : 'p'}_${index === this.interruptedMsgIndex ? 'i' : 'n'}`)
 
         if (this.displayMessages.length === 0) {
           ListItem() {
