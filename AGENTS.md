@@ -26,19 +26,13 @@
 
 DevEco 安装在 `D:\deveco\DevEco Studio\`（路径含空格）。**严禁直接敲 `hvigorw`**（会因空格或环境变量解析失败）。
 
-### 推荐构建方式：
-1. **官方 CLI**（推荐）：
-   ```bash
-   devecocli build --modules entry@default --build-mode debug   # debug 增量构建
-   devecocli build clean                                        # 清理产物
-   devecocli check lint                                         # 运行 code-linter (0 error)
-   devecocli check compat                                       # 跨 SDK API 兼容扫描
-   ```
-2. **根目录批处理脚本**（内部优先 `devecocli`，自动回退 hvigorw；**脚本内不要 `setlocal`**）：
-   - PowerShell：`& "D:\harmony\helper_app\_build.bat"`
-   - CMD / Git Bash：`cmd //c "D:\harmony\helper_app\_build.bat"`
-   - 全量编译：`_clean_build.bat`
-   - 代码检查：`_lint.bat`
+### 推荐构建方式（官方 CLI）：
+```bash
+devecocli build --modules entry@default --build-mode debug   # debug 增量构建
+devecocli build clean                                        # 清理产物
+devecocli check lint                                         # 运行 code-linter (0 error)
+devecocli check compat                                       # 跨 SDK API 兼容扫描
+```
 - **构建成功标志**：`BUILD SUCCESSFUL`。`@hw-agconnect/auth` 的 `sourceMapsPath` 警告为预先存在，无关紧要。
 - **验证手段**：构建 0 error + `devecocli check lint` 0 error + DevEco Previewer / 真机 Logcat。
 
@@ -87,9 +81,9 @@ DevEco 安装在 `D:\deveco\DevEco Studio\`（路径含空格）。**严禁直�
 
 | 命令 | 对应操作 / 作用 |
 |---|---|
-| `/build` | 构建 HAP 并报告结果（`_build.bat`，增量 debug 构建） |
-| `/clean` | 干净全量构建（`_clean_build.bat`） |
-| `/lint` | 运行代码静态检查（`_lint.bat` / `devecocli check lint`） |
+| `/build` | 构建 HAP 并报告结果（`devecocli build --modules entry@default --build-mode debug`） |
+| `/clean` | 干净全量构建（`devecocli build clean`） |
+| `/lint` | 运行代码静态检查（`devecocli check lint`） |
 | `/commit` | 按规范提交改动（`type: what & why` + `Co-Authored-By`） |
 | `/add-tool` | AI 助手加工具三处同步流程（后端 `tools.ts` + 前端 `ToolExecutor.ets` + `ToolRegistry.ets`） |
 | `/dev-backend` | 启动 `ai-proxy` 后端开发服务（端口 3000）并进行健康检查 |

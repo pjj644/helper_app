@@ -43,15 +43,14 @@ hvigorw clean assembleHap                # clean build
 
 Hvigor daemon 能加速增量构建。
 
-### Windows 构建脚本（路径含空格）
-
-DevEco 装在 `D:\deveco\DevEco Studio\`（路径含空格），直接在 bash 里 `cd` / 转义容易出错。仓库根目录提供批处理（**内部优先 `devecocli`，未安装时回退 hvigorw**；不要 `setlocal`，会找不到工程）：
-
-- `_build.bat` - 增量 debug 构建（日常验证 0 error）
-- `_clean_build.bat` - clean + 全量构建
-- `_lint.bat` - `devecocli check lint`
-
-用法：`cmd //c "D:\harmony\helper_app\_build.bat"` 或 PowerShell `& "D:\harmony\helper_app\_build.bat"`。成功标志：`BUILD SUCCESSFUL`。警告通常来自 `@hw-agconnect/auth` 的 `sourceMapsPath`（预先存在，无关）。
+### Windows 命令行构建注意事项
+DevEco 装在 `D:\deveco\DevEco Studio\`（路径含空格）。**严禁直接敲 `hvigorw`**（会因空格或环境变量解析失败），统一推荐使用官方 `devecocli`：
+```bash
+devecocli build --modules entry@default --build-mode debug   # debug 增量构建
+devecocli build clean                                        # 清理产物
+devecocli check lint                                         # 代码检查 (0 error)
+```
+成功标志：`BUILD SUCCESSFUL`。警告通常来自 `@hw-agconnect/auth` 的 `sourceMapsPath`（预先存在，无关）。
 
 ## 模拟器 / 真机
 
