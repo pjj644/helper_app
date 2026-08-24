@@ -1,7 +1,11 @@
-import { formBindingData, formProvider, FormExtensionAbility } from '@kit.FormKit';
+import { formBindingData, formProvider, FormExtensionAbility, formInfo } from '@kit.FormKit';
 import { Want } from '@kit.AbilityKit';
 import dataPreferences from '@ohos.data.preferences';
 import { AppConstants } from '../common/constants/AppConstants';
+
+// 桌面卡片实例 ID 列表在偏好文件中的存储键。
+// 注意：与 service/CourseService.ets 中的同名常量保持成对一致（读取方在彼处）。
+const WIDGET_FORM_IDS_KEY: string = 'widget_form_ids';
 
 interface NextCourseCacheData {
   name?: string;
@@ -87,9 +91,59 @@ export default class EntryFormAbility extends FormExtensionAbility {
     return formData;
   }
 
-  onAddForm(_want: Want): formBindingData.FormBindingData {
+  onAddForm(want: Want): formBindingData.FormBindingData {
+    // 记录卡片实例 ID：应用侧事件驱动主动刷新（CourseService.pushWidgetUpdate）
+    // 依赖该列表定位需要推送的卡片
+    const params: Record<string, Object> | undefined = want.parameters;
+    if (params) {
+      const identity = params[formInfo.FormParam.IDENTITY_KEY];
+      if (typeof identity === 'string' && identity.length > 0) {
+        this.rememberFormId(identity);
+      }
+    }
     const formData = this.getFormData();
     return formBindingData.createFormBindingData(formData);
+  }
+
+  onRemoveForm(formId: string): void {
+    this.forgetFormId(formId);
+  }
+
+  /** 将新添加的卡片实例 ID 追加进持久化列表（去重）。 */
+  private rememberFormId(formId: string): void {
+    try {
+      let pref = dataPreferences.getPreferencesSync(this.context, { name: AppConstants.PREF_COURSE_DB_NAME });
+      const idsStr = pref.getSync(WIDGET_FORM_IDS_KEY, '[]') as string;
+      const ids: string[] = JSON.parse(idsStr) as string[];
+      if (ids.indexOf(formId) < 0) {
+        ids.push(formId);
+        pref.putSync(WIDGET_FORM_IDS_KEY, JSON.stringify(ids));
+        pref.flushSync();
+      }
+    } catch (e) {
+      console.error('[EntryFormAbility] rememberFormId error:', JSON.stringify(e));
+    }
+  }
+
+  /** 从持久化列表中移除已被删除的卡片实例 ID。 */
+  private forgetFormId(formId: string): void {
+    try {
+      let pref = dataPreferences.getPreferencesSync(this.context, { name: AppConstants.PREF_COURSE_DB_NAME });
+      const idsStr = pref.getSync(WIDGET_FORM_IDS_KEY, '[]') as string;
+      const ids: string[] = JSON.parse(idsStr) as string[];
+      const remaining: string[] = [];
+      for (let i = 0; i < ids.length; i++) {
+        if (ids[i] !== formId) {
+          remaining.push(ids[i]);
+        }
+      }
+      if (remaining.length !== ids.length) {
+        pref.putSync(WIDGET_FORM_IDS_KEY, JSON.stringify(remaining));
+        pref.flushSync();
+      }
+    } catch (e) {
+      console.error('[EntryFormAbility] forgetFormId error:', JSON.stringify(e));
+    }
   }
 
   onUpdateForm(formId: string) {

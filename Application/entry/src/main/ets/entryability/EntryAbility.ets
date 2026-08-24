@@ -5,6 +5,7 @@ import { ThemeManager } from '../common/utils/ThemeManager';
 import { UISettings } from '../common/UISettings';
 import { PreferencesUtil } from '../common/PreferencesUtil';
 import { AuthService } from '../service/AuthService';
+import { CourseService } from '../service/CourseService';
 import { AppConfigRepository } from '../repository/AppConfigRepository';
 import { FloatingWindowManager } from '../common/agent/FloatingWindowManager';
 
@@ -66,6 +67,9 @@ export default class EntryAbility extends UIAbility {
   onForeground(): void {
     // Ability has brought to foreground
     hilog.info(HILOG_DOMAIN, TAG, '%{public}s', 'Ability onForeground');
+    // 回前台即时校准桌面卡片：重载课表数据并重建下一节课缓存（内部主动推送已添加的卡片），
+    // 保证后台期间课程时间流逝后，用户切回应用时卡片立即显示正确内容
+    CourseService.refreshCardCache(this.context);
   }
 
   onBackground(): void {

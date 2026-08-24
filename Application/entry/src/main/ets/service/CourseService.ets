@@ -3,7 +3,15 @@ import { CourseRepository } from '../repository/CourseRepository';
 import { calculateSemesterId } from '../model/classTableModel/ExamAccessRules';
 import { AppConstants } from '../common/constants/AppConstants';
 import dataPreferences from '@ohos.data.preferences';
+import { formBindingData, formProvider } from '@kit.FormKit';
+import { BusinessError } from '@kit.BasicServicesKit';
 import { Context } from '@kit.AbilityKit';
+
+// 桌面卡片实例 ID 列表在偏好文件中的存储键。
+// 注意：与 entryformability/EntryFormAbility.ets 中的同名常量保持成对一致（写入方在彼处）。
+const WIDGET_FORM_IDS_KEY: string = 'widget_form_ids';
+// formProvider.updateForm 错误码：目标卡片 ID 不存在（卡片已被用户移除）
+const FORM_ID_NOT_EXIST_CODE: number = 16501001;
 
 let courseServiceModel: CourseTableModel = courseTableModel;
 
@@ -236,8 +244,73 @@ export class CourseService {
       let pref = await dataPreferences.getPreferences(context as Context, AppConstants.PREF_COURSE_DB_NAME);
       await pref.put('next_course_cache', JSON.stringify(cacheObj));
       await pref.flush();
+
+      // 缓存落盘成功后主动推送已添加的桌面卡片，弥补 30 分钟定时刷新的滞后
+      await CourseService.pushWidgetUpdate(pref, cacheObj);
     } catch (e) {
       console.error('[CourseService] updateNextCourseCache error:', JSON.stringify(e));
+    }
+  }
+
+  /**
+   * 应用回到前台时校准卡片缓存：从磁盘重载课表数据后重建下一节课缓存
+   * （内部会顺带主动推送已添加的卡片），保证用户切回应用时卡片立即正确。
+   * 无课表数据时跳过，避免用「今日已无课」误覆盖既有缓存。
+   */
+  static async refreshCardCache(context: Object): Promise<void> {
+    try {
+      const jsonData: string = await CourseRepository.loadCourseData(context);
+      if (!jsonData) {
+        return;
+      }
+      courseServiceModel.loadFromJson(jsonData);
+      await CourseService.updateNextCourseCache(context);
+    } catch (e) {
+      console.error('[CourseService] refreshCardCache error:', JSON.stringify(e));
+    }
+  }
+
+  /**
+   * 事件驱动的主动刷新：把最新缓存数据推送给本应用当前所有桌面卡片实例。
+   * 卡片实例 ID 由 EntryFormAbility 在 onAddForm/onRemoveForm 时维护于偏好文件，
+   * 此处仅读取；推送返回「ID 不存在」（卡片已被移除）时将该 ID 从列表中剔除。
+   */
+  private static async pushWidgetUpdate(
+    pref: dataPreferences.Preferences,
+    cacheObj: Record<string, Object>
+  ): Promise<void> {
+    try {
+      const idsStr = pref.getSync(WIDGET_FORM_IDS_KEY, '[]') as string;
+      const formIds: string[] = JSON.parse(idsStr) as string[];
+      if (!formIds || formIds.length === 0) {
+        return;
+      }
+
+      const bindingData = formBindingData.createFormBindingData(cacheObj);
+      const aliveIds: string[] = [];
+      for (let i = 0; i < formIds.length; i++) {
+        const formId = formIds[i];
+        try {
+          await formProvider.updateForm(formId, bindingData);
+          aliveIds.push(formId);
+        } catch (err) {
+          const be = err as BusinessError;
+          if (be.code === FORM_ID_NOT_EXIST_CODE) {
+            // 卡片已被移除，剔除失效 ID 即可，无需报错
+            continue;
+          }
+          // 其他错误保留 ID 待下次重试
+          aliveIds.push(formId);
+          console.error(`[CourseService] pushWidgetUpdate failed for form ${formId}: code=${be.code}, message=${be.message}`);
+        }
+      }
+
+      if (aliveIds.length !== formIds.length) {
+        pref.putSync(WIDGET_FORM_IDS_KEY, JSON.stringify(aliveIds));
+        pref.flushSync();
+      }
+    } catch (e) {
+      console.error('[CourseService] pushWidgetUpdate error:', JSON.stringify(e));
     }
   }
 }
