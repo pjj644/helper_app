@@ -39,6 +39,11 @@ import { QuickLinksGrid, HomeToolItem } from '../components/home/QuickLinksGrid'
 import { PreferencesUtil } from '../common/PreferencesUtil';
 import { PrivacyDialogComponent } from '../components/PrivacyDialogComponent';
 
+// 首页时间节拍间隔：本页所有依赖时间的展示（最近考试、未来考试数）均为分钟级文案，
+// 秒级跳动的倒计时数字由 CountdownCard 组件内部定时器自行驱动，不依赖本页节拍，
+// 因此采用低频探测而非每秒空转。
+const HOME_TICK_INTERVAL_MS: number = 30000;
+
 @Entry
 @Component
 struct MainPage {
@@ -75,6 +80,8 @@ struct MainPage {
   private model: CourseTableModel = courseTableModel;
   private appSettings: UISettings = UISettings.getInstance();
   private lastNoFutureExamKey: string = '';
+  // 上一次节拍时“未来考试集合”的指纹，用于判断展示值是否实际变化
+  private lastExamDisplayKey: string = '';
   private privacyDialogController: CustomDialogController | null = new CustomDialogController({
     builder: PrivacyDialogComponent({
       onAgree: () => {
@@ -122,10 +129,12 @@ struct MainPage {
       this.currentBreakpoint = bp;
     });
 
-    console.info(`[HomeDebug] aboutToAppear: nowTick=${this.nowTick} exams=${this.exams.length}`);
+    // 低频节拍 + 按需刷新：仅当未来考试集合实际变化（如某场考试开始）时才更新 @State，
+    // 其余节拍零状态写入、零重绘，替代原先每秒无条件刷新整页的空转实现。
+    this.lastExamDisplayKey = this.examDisplayKey(this.nowTick);
     this.tickTimer = setInterval(() => {
-      this.nowTick = Date.now();
-    }, 1000);
+      this.refreshNowTick();
+    }, HOME_TICK_INTERVAL_MS);
 
     setTimeout(() => {
       animateTo({ curve: curves.springMotion(0.6, 0.8) }, () => {
@@ -259,6 +268,9 @@ struct MainPage {
       } else {
         this.exams = [];
       }
+
+      // 考试数据加载后同步展示值指纹，避免下一次节拍把加载本身误判为“时间流逝导致的变化”
+      this.lastExamDisplayKey = this.examDisplayKey(this.nowTick);
 
       if (!localData) {
         this.hasData = false;
@@ -395,6 +407,35 @@ struct MainPage {
       }
     }
     return result;
+  }
+
+  /**
+   * 计算指定时刻“未来考试集合”的展示值指纹（数量 + 最近一场的开始时间）。
+   * 首页所有随时间变化的文案均由该集合派生，集合不变则展示不变，无需重绘。
+   */
+  private examDisplayKey(now: number): string {
+    let futureCount: number = 0;
+    let nextBeginTime: number = -1;
+    const exams = this.exams;
+    for (let i = 0; i < exams.length; i++) {
+      if (exams[i].beginTime > now) {
+        futureCount++;
+        if (nextBeginTime < 0 || exams[i].beginTime < nextBeginTime) {
+          nextBeginTime = exams[i].beginTime;
+        }
+      }
+    }
+    return `${futureCount}_${nextBeginTime}`;
+  }
+
+  /** 低频节拍回调：仅在展示值实际变化时才写入 @State 触发刷新。 */
+  private refreshNowTick(): void {
+    const candidate: number = Date.now();
+    const nextKey: string = this.examDisplayKey(candidate);
+    if (nextKey !== this.lastExamDisplayKey) {
+      this.lastExamDisplayKey = nextKey;
+      this.nowTick = candidate;
+    }
   }
 
   private getSelectedExamTypeId(): number {
