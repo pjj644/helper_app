@@ -204,6 +204,9 @@
 | B-01 | T8 | M04_SYNC_CLOUD 在 R2 被裁判方差判负（工具选择与全部确定性校验均正确） | 复核确定性校验通过，维度通过率与基线持平（80%） | 🟡 低风险 | 下一轮评测观察；不视为能力回归 |
 | B-02 | 文档 | AGENTS.md 记载的评测命令 `npm run eval` 实际为 `npm run test:eval` | 已确认 package.json 无 eval 脚本 | 🟡 待修正 | 收尾阶段统一修正 AGENTS.md 与计划文档命令 |
 | B-03 | T6a | 校园指南的持久化 last-good 缓存因 Wave 2 并行文件归属限制，本轮先做内存缓存+内置兜底 | 端点契约已定 | 🟡 待补 | 收尾或下一轮补 preferences 持久化 |
+| B-04 | T2 | **确认弹窗真正闸门在 BackendAgentClient.handleToolCall（读后端 SSE 事件 requiresConfirmation 字段），注册表哨兵不覆盖「后端显式下发 false」的场景** | 执行器侧已 fail-closed；需在 handleToolCall 并入端侧裁决：`backend字段 \|\| ToolRegistry.requiresConfirmation(name)` | 🔴 集成必办 | Agent-D 完成后由主 agent 一行补齐并回归验证 |
+| B-05 | 存量 | set_reminder_enabled 实现只消费 type+minutes（enabled 参数无效、minutes≤0 报错），注册已按真实行为写 | 属既有行为缺陷非本轮引入 | 🟢 记录 | 后续轮次决定修行为或改 schema |
+| B-06 | T7a | AssistantPage.ets:314 残留 parse_text_to_schedule 显示名死映射 | 文件被 Agent-D 占用未动 | 🟢 无害 | 集成时顺手删除 |
 
 ---
 
