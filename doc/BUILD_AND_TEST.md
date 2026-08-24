@@ -88,10 +88,13 @@ DevEco 装在 `D:\deveco\DevEco Studio\`（路径含空格），直接在 bash �
       - 导入新课表后验证桌面卡片无感静默更新。
 5. 日志关注：后端打印 session/batch/工具名/等待/恢复/超时/断开；前端关注 `[BackendAgentClient]`、`[CalendarKit]` 与 `[FloatingWindow]`。
 
-## 后端单独验证（不接手机）
+## 后端单独验证与自动化评测 (Automated Eval Harness)
 
-- `test/phone-sim.mjs` - 模拟手机：POST `/api/chat`、解析 SSE、收到 `tool_call` 后 POST `/api/tool-result` 回 mock 数据。覆盖单工具 / 批量工具 / 非工具 / 断开。
-- `npm run typecheck` - `tsc --noEmit`，验证 TypeScript schema 改动。
+- **`npm run eval`** - **自动化评测套件 (Eval Harness)**：全量跑 33 条评测用例（`test/evals/dataset.ts`），执行确定性规则裁判与 LLM-as-a-Judge 5 维度评分，自动生成 `test/evals/EVAL_REPORT.md`。
+- **`npm run typecheck`** - `tsc --noEmit`，验证 TypeScript 类型系统与 Schema 改动。
+- **`test/phone-sim.mjs`** - 模拟手机端：POST `/api/chat`、解析 SSE（含 `thought` 深度思考流与 `text_chunk`）、收到 `tool_call` 后 POST `/api/tool-result` 回传 mock 数据。覆盖单工具 / 批量流水线 / 非工具 / 断线重连。
+- **`test/test-mimo-latency.ts`** - 大模型推理延迟与 TTFT（首字响应时间）压测基准。
+- **`test/test-mimo-breakdown.ts`** - 阶段耗时拆解（预处理、Prompt 动态检索、网络传输、模型解码）。
 
 ## 提交规范
 

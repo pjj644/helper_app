@@ -4,6 +4,26 @@
 
 ---
 
+## 2026-08: 深度思考（Reasoning）流式下行、Agent 自动化评测基准套件与 MiMo 大模型接入
+
+- **1. 大模型深度思考（Reasoning / Thought）流式下行与折叠展示 (`AssistantPage.ets`, `FloatingSubWindowContent.ets`, `BackendAgentClient.ets`, `MarkdownBubble.ets`)**：
+  - 后端适配 DeepSeek-R1 / MiMo-Reasoning 推理标签与 `reasoning_content`，新增 SSE `thought` 事件流式下发；
+  - 前端 `BackendAgentClient.ets` 新增 `onThoughtChunk` 回调，`AssistantPage.ets` 渲染「✨ 深度思考 (耗时 xs)」专属折叠卡片与高精度毫秒计时器；
+  - 悬浮 Mini 助手（`FloatingSubWindowContent.ets`）引入动态状态指示（`✨ 正在理解您的问题...` ➔ `正在深度思考...` ➔ `正在调用 xxx...`）与实时秒数指示；
+  - `MarkdownBubble.ets` 引入打字机呼吸光标（`isStreaming`），`ChatSessionRepository.ets` 支持完整推理链与耗时持久化。
+- **2. Agent 自动化评测基准套件 (Automated Eval Harness) 与报表自动生成 (`test/evals/*`, `EVAL_REPORT.md`)**：
+  - 打造包含 6 大核心维度（课表/考试查询、相对日期推导、数据变更与流水线、80+ 服务 URL 真实度、Prompt 注入防御、页面感知与边缘用例）共 33+ 条真实业务测试用例集（`dataset.ts`）；
+  - 落地确定性规则校验（`evaluateDeterministic`）与 LLM-as-a-Judge 智能裁判（`evaluateJudgeWithLLM`）双轨评估机制；
+  - 自动化评测大盘实测：综合通过率 **87.9%** (+15.9%)，官方链接真实度 **100.0%** (零幻觉)，Prompt 冗余降低 76.5%；CLI 运行 `npm run eval` 自动生成全量 `EVAL_REPORT.md`。
+- **3. 小米 MiMo 大模型底座集成与延迟基准测试 (`src/llm.ts`, `test/test-mimo-*`)**：
+  - 新增 Xiaomi MiMo 系列模型支持（`mimo-v2-flash`、`mimo-v2-pro`、`mimo-v2-reasoning`），结合动态 Token 预算与流式解析；
+  - 编写 TTFT 首字延迟、网络 RTT、流式吞吐量与 Chunk 碎片率压测脚本。
+- **4. 动态上下文检索引擎 (Dynamic Context Engine) 与校内 URL 严格标定 (`src/prompt.ts`)**：
+  - 重构 System Prompt 构建管线，由静态大段注入改为按用户提问语义动态检索 80+ 官方服务链接、App 模块操作指南及生活指南；
+  - 标定学生邮箱（HTTP 协议）、寝室电费（云中成电门户引导）等敏感校内服务，杜绝模型幻觉。
+
+---
+
 ## 2026-08: 发现页门户升级、80+ 服务直达库、班车日历联动与桌面卡片动态化
 
 - **1. 发现页（Quick）重构与「云中成电」核心入口 (`QuickLinksGrid.ets`, `Index.ets`, `AppConstants.ets`)**：

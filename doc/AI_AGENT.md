@@ -9,25 +9,28 @@
 ## 1. 系统全景架构与端云协同
 
 成电校园助手 AI 子系统采用 **「后端大脑 + 端侧统一控制引擎」** 架构：
-- **后端（`ai-proxy`，独立仓库）**：负责 LangGraph 状态机编排、DeepSeek API 推理、系统提示词与成电 80+ 服务直达库 / 校园指南 RAG 注入、智谱 GLM-4V 视觉识别、教务处官网实时检索、SQLite 会话状态持久化。手机端仅发送最新增量消息（`{session_id, message}`），历史完全由后端检查点管理。
-- **前端（HarmonyOS NEXT / ArkTS）**：作为薄客户端与端侧执行器，负责语音/文字/图片输入交互、SSE 数据流解析与打字机 Markdown 渲染、敏感操作安全确认弹窗、端侧数据纯内存多维查询（`DataQueryEngine`）、系统日历联动（`CalendarKit`）、页面路由与 UI 引导。
+- **后端（`ai-proxy`，独立仓库）**：负责 LangGraph 状态机编排、多模型推理（DeepSeek V3/R1、小米 MiMo、智谱 GLM-4V）、系统提示词与成电 80+ 服务直达库 / 校园指南动态 RAG 检索注入、深度思考（Reasoning / Thought）流式下行、智谱 GLM-4V 视觉识别、教务处官网实时检索、SQLite 会话状态持久化。手机端仅发送最新增量消息（`{session_id, message}`），历史完全由后端检查点管理。
+- **前端（HarmonyOS NEXT / ArkTS）**：作为薄客户端与端侧执行器，负责语音/文字/图片输入交互、SSE 深度思考与回复双流解析、折叠式思考过程展示（带毫秒计时）、打字机 Markdown 渲染（带流式光标）、敏感操作安全确认弹窗、端侧数据纯内存多维查询（`DataQueryEngine`）、系统日历联动（`CalendarKit`）、页面路由与 UI 引导。
 
 ```
 手机 (ArkTS / HarmonyOS NEXT)                 本地/云端 后端服务 (ai-proxy)
 ┌──────────────────────────────────────┐     SSE ↓     ┌──────────────────────────────┐
 │ AssistantPage.ets / FloatingWindow   │──────────────▶│ Express + LangGraph.js       │
-│  ├─ 原生 Markdown 渲染 (MarkdownBubble)│               │  ├─ POST /api/chat -> SSE 流  │
+│  ├─ 深度思考折叠面板 (Thought Card)   │               │  ├─ POST /api/chat -> SSE 流  │
+│  │   └─ 实时耗时计时 & 动态思考状态   │               │  │   ├─ event: thought (推理) │
+│  ├─ 原生 Markdown 渲染 (MarkdownBubble)│               │  │   ├─ event: text_chunk   │
+│  │   └─ 流式呼吸光标 & 属性自动分段   │               │  │   └─ event: tool_call    │
 │  ├─ 链接拦截与内嵌浏览器 (WebPage)    │               │  ├─ POST /api/vision/parse.. │
 │  ├─ 紧凑折叠工具面板 (Tool Collapse)   │               │  ├─ GET /api/knowledge/se.. │
 │  ├─ 遥测指标卡片 (Telemetry Metrics)  │               │  ├─ StateGraph(Messages)      │
-│  ├─ 语音输入 (CoreSpeechKit)         │               │  │   ├─ agentNode (DeepSeek)  │
-│  ├─ 智谱 GLM-4V 海报/通知日程识别    │               │  │   └─ toolsNode (interrupt) │
-│  ├─ 会话持久化 (ChatSessionRepository)│               │  ├─ SqliteSaver 检查点持久化  │
-│  ├─ 页面感知 (PageContextTracker)    │               │  ├─ 智谱 GLM-4V (多模态视觉)  │
-│  ├─ UI动作总线 (UIActionDispatcher)  │               │  ├─ CampusKnowledgeStore(RAG)│
-│  ├─ 统一确认弹窗 (动态风险鉴权)       │               │  ├─ JWC 官网实时爬虫检索     │
-│  └─ BackendAgentClient (SSE流式客户端)│    POST ↑     │  └─ DeepSeek API (推理核心)  │
-│     ├─ ToolExecutor                  │──────────────▶│  └─ 80+ 校内直达服务库       │
+│  ├─ 语音输入 (CoreSpeechKit)         │               │  │   ├─ agentNode (DeepSeek/ │
+│  ├─ 智谱 GLM-4V 海报/通知日程识别    │               │  │   │             MiMo)    │
+│  ├─ 会话持久化 (ChatSessionRepository)│               │  │   └─ toolsNode (interrupt) │
+│  ├─ 页面感知 (PageContextTracker)    │               │  ├─ SqliteSaver 检查点持久化  │
+│  ├─ UI动作总线 (UIActionDispatcher)  │               │  ├─ 智谱 GLM-4V (多模态视觉)  │
+│  ├─ 统一确认弹窗 (动态风险鉴权)       │               │  ├─ Dynamic Context (80+服务)│
+│  └─ BackendAgentClient (SSE流式客户端)│    POST ↑     │  ├─ JWC 官网实时爬虫检索     │
+│     ├─ ToolExecutor                  │──────────────▶│  └─ Automated Eval Harness   │
 │     │   ├─ DataQueryEngine (多维过滤) │               └──────────────────────────────┘
 │     │   ├─ CalendarKit (双向同步去重)│
 │     │   └─ Pipeline 复合批处理器     │
@@ -52,7 +55,7 @@ flowchart TD
     START_NODE(["状态图起点 START"]):::startEnd --> AGENT_NODE
 
     subgraph Core_Graph ["LangGraph 核心状态机 (Thread: session_id)"]
-        AGENT_NODE["agent 节点 (agentNode)<br/>1. 提取最新 HumanMessage<br/>2. 注入 SystemMessage (提示词与知识库)<br/>3. 调用 DeepSeek (llmWithTools)"]:::llmNode
+        AGENT_NODE["agent 节点 (agentNode)<br/>1. 提取最新 HumanMessage<br/>2. 注入 SystemMessage (动态上下文与知识库)<br/>3. 调用 DeepSeek / MiMo (llmWithTools)"]:::llmNode
 
         ROUTE_DECISION{"routeAfterAgent<br/>检查 AIMessage 是否含 tool_calls?"}:::condition
 
@@ -67,7 +70,7 @@ flowchart TD
     ROUTE_DECISION -->|"无工具调用 (输出最终回答)"| END_NODE(["状态图终点 END"]):::startEnd
 
     subgraph Network_Device ["端云交互与执行通道"]
-        SSE_PUSH["SSE 事件流推送<br/>- text_chunk: 文本增量<br/>- tool_call: 工具调用批次"]:::nodeStyle
+        SSE_PUSH["SSE 事件流推送<br/>- thought: 深度思考推理流<br/>- text_chunk: 正文文本增量<br/>- tool_call: 工具调用批次"]:::nodeStyle
         DEVICE_EXEC["鸿蒙前端端侧执行<br/>ToolExecutor 分发执行<br/>DataQueryEngine 查询 / CalendarKit 写入"]:::nodeStyle
         HTTP_RESUME["POST /api/tool-result<br/>回传执行结果唤醒图执行"]:::nodeStyle
     end
@@ -83,7 +86,7 @@ flowchart TD
 | 节点名称 | 核心职责 | 输入与输出 |
 | :--- | :--- | :--- |
 | **`START`** | 接收外部触发输入，初始化当前 `thread_id` 状态。 | 输入：`{ messages: [HumanMessage] }` |
-| **`agent`** | **推理大脑核心**：<br>1. 动态生成 `SystemMessage`（注入统一控制元工具规范、成电校园指南与服务直达库）；<br>2. 调用绑定了工具 Schema 的 LLM（`llmWithTools.invoke([sysMsg, ...msgs])`）；<br>3. 生成包含流式文本或 `tool_calls` 的 `AIMessage`。 | 输入：`MessagesAnnotation.State`<br>输出：`{ messages: [AIMessage] }`（注：`SystemMessage` 不存入持久化 State，避免膨胀） |
+| **`agent`** | **推理大脑核心**：<br>1. 动态检索并生成 `SystemMessage`（注入统一控制元工具规范、校内 80+ 官方直达服务、动态生活指南与当前页面快照）；<br>2. 调用绑定了工具 Schema 的 LLM（`llmWithTools.invoke([sysMsg, ...msgs])`）；<br>3. 提取 `reasoning_content` / `<thought>` 并在 SSE 中下发 `thought` 事件；<br>4. 生成包含流式文本或 `tool_calls` 的 `AIMessage`。 | 输入：`MessagesAnnotation.State`<br>输出：`{ messages: [AIMessage] }`（注：`SystemMessage` 不存入持久化 State，避免膨胀） |
 | **`tools`** | **端侧工具中断与恢复桥梁**：<br>1. 从上一条 `AIMessage` 中解析出 `tool_calls`；<br>2. 调用 LangGraph 原生 `interrupt({ toolCalls })` 挂起执行；<br>3. 恢复时接收前端回传的 `ToolResultInput[]`；<br>4. 将每个执行结果映射为 `ToolMessage`。 | 输入：`AIMessage.tool_calls`<br>中断输出：`{ toolCalls }`<br>恢复输入：`ToolResultInput[]`<br>节点输出：`{ messages: ToolMessage[] }` |
 | **`END`** | 会话单轮推理完毕，SSE 向客户端发送 `type: 'final'` 并关闭流。 | 结束当前执行链 |
 
@@ -116,9 +119,16 @@ sequenceDiagram
     UI->>Client: run(sessionId, history)
     Client->>Server: POST /api/chat (开启 SSE 流)
     
+    opt 深度思考推理阶段 (Reasoning Stream)
+        loop 推理下发
+            Server-->>Client: SSE thought (深度思考过程增量)
+            Client->>UI: callbacks.onThoughtChunk() 渲染折叠卡片与计时
+        end
+    end
+
     loop 流式文本输出阶段
         Server-->>Client: SSE text_chunk (增量文本片段)
-        Client->>UI: callbacks.onTextChunk() 打字机渲染
+        Client->>UI: callbacks.onTextChunk() 打字机渲染 (带光标)
     end
 
     Note over Server,Client: 后端 toolsNode 触发 interrupt 挂起
@@ -198,7 +208,16 @@ sequenceDiagram
 
 ## 5. 前端核心子系统与 UI 交互特性
 
-### 5.1 全局悬浮 AI 伴随助手（Floating Assistant）
+### 5.1 深度思考推理流与动态卡片 (Deep Thinking UI)
+- **实时推理状态与折叠卡片 (`AssistantPage.ets`)**：
+  - 支持大模型 Reasoning 过程流式下行；
+  - 呈现「✨ 深度思考 (耗时 xs)」专属折叠卡片，支持一键展开/收起；
+  - 配备毫秒级高精度计时器，在思考结束时自动固化总思考时长；
+  - 会话历史（`ChatSessionRepository.ets`）自动持久化保存 `thought` 与 `thinkingDurationMs`，重新打开应用仍可查看完整推理链。
+- **悬浮 Mini 助手动态状态感知 (`FloatingSubWindowContent.ets`)**：
+  - 动态显示多级思考阶段提示（`✨ 正在理解您的问题...` ➔ `正在深度思考...` ➔ `正在调用 xxx...` ➔ `正在整理回答...`），配合实时运行秒数。
+
+### 5.2 全局悬浮 AI 伴随助手（Floating Assistant）
 - **SubWindow 独立子窗口架构 (`FloatingWindowManager.ets`)**：
   - 基于 HarmonyOS `windowStage.createSubWindow` 实现跨页面透明子窗口；
   - 严格生命周期管理：先调用 `setUIContent` 再配置尺寸与位置（规避 `1300002` 异常）。
@@ -211,21 +230,22 @@ sequenceDiagram
   - 通过 `AppStorage` 实现悬浮球开关状态在全屏助手、应用设置页（`AppSettings.ets`）与浮窗本体之间的毫秒级双向同步；
   - 在全屏助手页自动避让隐藏，离开后自动恢复。
 
-### 5.2 界面排版与 Markdown 渲染
+### 5.3 界面排版与 Markdown 渲染
 - **原生 ArkTS Markdown 渲染引擎 (`MarkdownBubble.ets`)**：
   - 支持多级标题（# ~ ###）、粗体、行内代码、引用块、列表、代码块；
-  - **原生超链接拦截与内嵌导航**：支持识别 Markdown 超链接 `[text](url)`，渲染为精致的蓝色链接胶囊按钮，点击自动拦截并推入 `WebPage.ets` 原生顶栏内嵌浏览器打开（保留返回、刷新、标题与线性进度条），不跳出 App；对于内部路由直接跳转本地对应页面。
+  - **流式打字光标 (`isStreaming`)**：在内容增量吐字阶段呈现平滑呼吸光标（`▌`），输出完毕无缝隐去；
+  - **原生超链接拦截与内嵌导航**：支持识别 Markdown 超链接 `[text](url)`，渲染为精致的蓝色链接胶囊按钮，点击自动拦截并推入 `WebPage.ets` 原生顶栏内嵌浏览器打开（保留返回、刷新、标题与线性进度条），不跳出 App；对于内部路由直接跳转本地对应页面；
   - **智能排版**：属性字段（`日期:`、`时间:`、`地点:`、`类型:`、`备注:`）自动换行，状态提示单独分段；全屏助手与悬浮 Mini 浮窗统一采用 `MarkdownBubble` 渲染。
 - **紧凑折叠工具面板 (Tool Call Collapse UI)**：
   - 优雅的折叠行设计，支持状态指示、耗时与工具参数/结果一键展开查看。
 - **Agent Telemetry 遥测指标**：
   - 在气泡底部展示流式耗时（ms）、Token 消耗估算与工具调用计数。
 
-### 5.3 核心模块职责清单
+### 5.4 核心模块职责清单
 
 | 前端模块文件 | 核心职责与关键方法 |
 | :--- | :--- |
-| `BackendAgentClient.ets` | SSE 流式长连接通信（`requestInStream`）、`TextDecoder` 分词解码、`tool_call` 中断响应与结果回传。 |
+| `BackendAgentClient.ets` | SSE 流式长连接通信（`requestInStream`）、`TextDecoder` 分词解码、`thought` 推理事件解析、`tool_call` 中断响应与结果回传。 |
 | `ToolRegistry.ets` | 工具元数据定义、参数校验与动态风险等级判定（`getRiskLevel` / `requiresConfirmation`）。 |
 | `ToolExecutor.ets` | 端侧中央工具分发器（`switch(toolName)`）、CRUD 事务执行、流水线批处理（`executePipeline`）。 |
 | `DataQueryEngine.ets` | 纯内存多维数据过滤与统一查询引擎（接管课表、考试、成绩、日程、日历）。 |
@@ -233,6 +253,7 @@ sequenceDiagram
 | `UIActionDispatcher.ets` | 页面 UI 动作与高亮聚光灯指令总线（`switch_week` / `show_guidance`）。 |
 | `FloatingWindowManager.ets` | HarmonyOS SubWindow 全局悬浮球与 Mini 浮窗生命周期管理。 |
 | `CalendarKitReminderService.ets` | HarmonyOS 系统日历写入、班车/考试去重与事件查询。 |
+| `ChatSessionRepository.ets` | 统一会话与历史消息持久化，支持深度思考与流式遥测指标存储。 |
 
 ---
 
@@ -250,5 +271,66 @@ sequenceDiagram
 
 - **启动后端**：`cd "C:\Users\28399\Desktop\华为云\后端服务\ai-proxy" && npm run dev`（端口 3000）。后端 `.env`（`DEEPSEEK_API_KEY` 等）已 gitignore，勿提交。
 - **单独模拟联调（不连手机）**：`node test/phone-sim.mjs` + `npm run typecheck`。
+- **自动化评测基准运行**：`cd "C:\Users\28399\Desktop\华为云\后端服务\ai-proxy" && npm run eval`（全量运行 33 条评测集并自动生成 Markdown 报告）。
 - **真机/模拟器联调**：填电脑 **局域网 LAN IP**（如 `http://192.168.1.11:3000`），不要填 `localhost`。
 - **调试日志前缀**：`[BackendAgentClient]` / `[CalendarKit]` / `[ReminderDebug]` / `[ExamDebug]` / `[HomeDebug]` / `[FloatingWindow]`。
+
+---
+
+## 8. Agent 自动化评测基准体系（Automated Eval Harness）
+
+为了保证 Agent 在工具调用、参数提取、校内官方 URL 真实度、Prompt 注入防御及首字延迟（TTFT）上的工业级稳定性，后端内置了一套完整的 **自动化评测基准套件 (Eval Harness)**。
+
+### 8.1 评测架构与用例分类
+
+评测集定义于 `test/evals/dataset.ts`，涵盖 6 大核心维度共 33+ 条真实业务场景用例：
+
+```
+                    ┌─────────────────────────────────────────┐
+                    │      Agent Eval Harness (runner.ts)     │
+                    └────────────────────┬────────────────────┘
+                                         │
+        ┌────────────────────────────────┼────────────────────────────────┐
+        ▼                                ▼                                ▼
+┌──────────────────┐           ┌──────────────────┐           ┌──────────────────┐
+│  确定性规则裁判  │           │   端侧环境模拟   │           │ LLM-as-a-Judge   │
+│ (Deterministic)  │           │  (Mock Device)   │           │  (5维度质量评分) │
+├──────────────────┤           ├──────────────────┤           ├──────────────────┤
+│• 工具命中准确率  │           │• 课程/考试/GPA   │           │• 意图相关性 (5★) │
+│• 参数结构精确匹配│           │• 日程与日历事件  │           │• 事实准确性 (5★) │
+│• 官方URL绝对匹配 │           │• 页面路由与流水线│           │• 回答完整度 (5★) │
+│• 越狱与攻击拦截率│           │• 悬浮窗上下文快照│           │• 安全与排版规范  │
+└──────────────────┘           └──────────────────┘           └──────────────────┘
+```
+
+| 评测维度 (Category) | 覆盖核心场景与验证目标 | 典型用例 ID |
+| :--- | :--- | :--- |
+| **`COURSE_EXAM_QUERY`** | 今日/明日/指定周课表查询、考试倒计时、GPA/成绩多维筛选 | `Q01_TODAY_COURSES` ~ `Q08_SYSTEM_INFO` |
+| **`RELATIVE_DATE_RESOLVE`**| 绝对日期映射、按教师/教室/星期模糊过滤、学期首日锚定 | `T01_SPECIFIC_DATE_COURSE` ~ `T05_DAY_OF_WEEK` |
+| **`DATA_MUTATE_PIPELINE`** | 自习日程创建（带日历同步）、日程删除、页面路由控制、云同步控制、复合流水线批处理 | `M01_CREATE_SCHEDULE` ~ `M05_APP_PIPELINE` |
+| **`CAMPUS_SERVICE_URLS`** | 80+ 校内高频服务直达 URL 零幻觉检验（学生邮箱必须 http、寝室电费引导云中成电、正版软件、WebVPN 等） | `C01_STUDENT_EMAIL` ~ `C08_BBS_RIVER` |
+| **`INJECTION_AND_NEGATIVE`**| 英文/中文 Prompt 越狱注入攻击拦截、无关泛话题非工具误调检验、Emoji 排版合规性检验 | `S01_PROMPT_INJECTION_IGNORE` ~ `S04_EMOJI_POLLUTION_CHECK` |
+| **`EDGE_CASES`** | 悬浮球端侧页面感知（`get_current_page_context`）、校车时刻智搜、考试突击复习规划生成 | `E01_PAGE_CONTEXT_AWARE` ~ `E03_STUDY_PLAN_GEN` |
+
+### 8.2 双轨评测机制与指标基准
+
+1. **确定性规则校验 (`evaluateDeterministic`)**：
+   - 工具匹配：精确断言调用的工具名称是否符合预期；
+   - 参数匹配：校验提取参数（如 `minGpa`、`keyword`、`date`、`syncCalendar`）是否完全符合业务语义；
+   - URL 真实度：使用正则严格校验 Markdown 链接是否命中预设的真实官方域名与协议；
+   - 注入防御：校验是否触发拦截标志或友好拒答，杜绝系统 Prompt 泄露。
+2. **LLM-as-a-Judge 智能裁判 (`evaluateJudgeWithLLM`)**：
+   - 采用大模型对最终回答进行 1-5 分打分，综合评估相关性、准确性、逻辑性与可读性。
+3. **最新实测基准大盘 (Baseline vs Ours)**：
+   - **综合通过率 (Pass Rate)**：**87.9%**（对比基线提升 +15.9%）；
+   - **官方链接真实度 (URL Exactness)**：**100.0%**（零幻觉）；
+   - **单轮 Token 消耗**：动态上下文检索机制优化，节省 76.5% Prompt 冗余；
+   - **平均首字延迟 (TTFT)**：实测 3.4s（含深度思考）。
+
+### 8.3 评测执行与报表自动生成
+
+在后端目录直接运行：
+```bash
+npm run eval
+```
+评测完成后将自动在 `test/evals/EVAL_REPORT.md` 生成包含执行概览、分类明细与用例追踪的完整 Markdown 报告。

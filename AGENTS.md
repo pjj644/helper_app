@@ -68,8 +68,8 @@ DevEco 安装在 `D:\deveco\DevEco Studio\`（路径含空格）。**严禁直�
 ## 5. AI 助手开发（加工具必须三处同步）
 
 ### 架构模式
-- **后端大脑**：LangGraph 编排 + DeepSeek 推理 + 智谱 GLM-4V 视觉识别 + 成电 80+ 服务直达库与生活指南 RAG 知识库（`campus_services.json`）+ 教务处官网实时检索 + SQLite 会话持久化。
-- **端侧统一控制引擎**：`BackendAgentClient`（SSE 长连接客户端）+ `DataQueryEngine`（纯内存多维查询）+ `ToolExecutor`（5 大元工具、流水线批处理、系统日历联动）+ `FloatingWindowManager`（SubWindow 全局伴随悬浮窗）+ `MarkdownBubble`（原生 Markdown 解析、超链接拦截与内嵌 `WebPage.ets` 浏览器打开）。
+- **后端大脑**：LangGraph 编排 + 多模型推理（DeepSeek / 小米 MiMo / 智谱 GLM-4V）+ 深度思考（Reasoning / Thought）流式下行 + 成电 80+ 服务直达库与生活指南动态 RAG 知识库（`campus_services.json`）+ 教务处官网实时检索 + SQLite 会话持久化 + 自动化评测基准体系（Eval Harness）。
+- **端侧统一控制引擎**：`BackendAgentClient`（SSE 长连接客户端）+ `DataQueryEngine`（纯内存多维查询）+ `ToolExecutor`（5 大元工具、流水线批处理、系统日历联动）+ `FloatingWindowManager`（SubWindow 全局伴随悬浮窗）+ `MarkdownBubble`（原生 Markdown 解析、流式打字光标、超链接拦截与内嵌 `WebPage.ets` 浏览器打开）+ 深度思考折叠卡片（毫秒计时）。
 
 ### 加工具的三处同步铁律（名称与参数必须完全一致）
 1. **后端 Schema 与元数据**：`ai-proxy/src/tools.ts`（定义 schema 与 `toolMeta`：`requiresConfirmation` / `riskLevel`）；
@@ -79,6 +79,7 @@ DevEco 安装在 `D:\deveco\DevEco Studio\`（路径含空格）。**严禁直�
 ### 后端开发与验证
 - **启动后端**：`cd "C:\Users\28399\Desktop\华为云\后端服务\ai-proxy" && npm run dev`（端口 3000）。后端 `.env`（`DEEPSEEK_API_KEY` 等）已 gitignore，勿提交。
 - **单独模拟联调**（不连手机）：`node test/phone-sim.mjs` + `npm run typecheck`。
+- **自动化评测基准**：`cd "C:\Users\28399\Desktop\华为云\后端服务\ai-proxy" && npm run eval`（33 条用例回归评测并生成 `test/evals/EVAL_REPORT.md`）。
 - **真机/模拟器联调**：填电脑 **局域网 LAN IP**（如 `http://192.168.1.11:3000`），不要填 `localhost`。
 - **调试日志前缀**：`[BackendAgentClient]` / `[CalendarKit]` / `[ReminderDebug]` / `[ExamDebug]` / `[HomeDebug]` / `[FloatingWindow]`。
 
@@ -92,6 +93,7 @@ DevEco 安装在 `D:\deveco\DevEco Studio\`（路径含空格）。**严禁直�
 | `/commit` | 按规范提交改动（`type: what & why` + `Co-Authored-By`） |
 | `/add-tool` | AI 助手加工具三处同步流程（后端 `tools.ts` + 前端 `ToolExecutor.ets` + `ToolRegistry.ets`） |
 | `/dev-backend` | 启动 `ai-proxy` 后端开发服务（端口 3000）并进行健康检查 |
+| `/eval` | 运行 AI Agent 自动化评测基准套件（`npm run eval`，生成 `EVAL_REPORT.md`） |
 
 ## 7. 按需查阅详细文档
 
