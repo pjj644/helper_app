@@ -390,6 +390,48 @@ export class ReminderService {
     }
   }
 
+  /** 云端自动同步主开关（P2-7a）：默认关闭，用户显式开启后才自动上传课表/考试到云端 */
+  static async getCloudAutoSyncEnabled(context: Context): Promise<boolean> {
+    try {
+      const pref = preferences.getPreferencesSync(context, { name: AppConstants.COURSE_TABLE_PREF_NAME });
+      const value = pref.getSync(AppConstants.SETTING_CLOUD_AUTO_SYNC_KEY, false);
+      return value as boolean;
+    } catch {
+      return false;
+    }
+  }
+
+  static async saveCloudAutoSyncEnabled(context: Context, enabled: boolean): Promise<void> {
+    try {
+      const pref = preferences.getPreferencesSync(context, { name: AppConstants.COURSE_TABLE_PREF_NAME });
+      pref.putSync(AppConstants.SETTING_CLOUD_AUTO_SYNC_KEY, enabled);
+      pref.flushSync();
+    } catch (e) {
+      console.error('[ReminderService] saveCloudAutoSyncEnabled error:', JSON.stringify(e));
+    }
+  }
+
+  /** 允许蜂窝网络自动同步的副开关：默认关闭，仅 WiFi 自动上传时不受影响 */
+  static async getCloudSyncCellularEnabled(context: Context): Promise<boolean> {
+    try {
+      const pref = preferences.getPreferencesSync(context, { name: AppConstants.COURSE_TABLE_PREF_NAME });
+      const value = pref.getSync(AppConstants.SETTING_CLOUD_SYNC_CELLULAR_KEY, false);
+      return value as boolean;
+    } catch {
+      return false;
+    }
+  }
+
+  static async saveCloudSyncCellularEnabled(context: Context, enabled: boolean): Promise<void> {
+    try {
+      const pref = preferences.getPreferencesSync(context, { name: AppConstants.COURSE_TABLE_PREF_NAME });
+      pref.putSync(AppConstants.SETTING_CLOUD_SYNC_CELLULAR_KEY, enabled);
+      pref.flushSync();
+    } catch (e) {
+      console.error('[ReminderService] saveCloudSyncCellularEnabled error:', JSON.stringify(e));
+    }
+  }
+
   private static applyEventTime(date: Date, event: ScheduleEvent): void {
     if (event.startTime) {
       const match = event.startTime.match(/^(\d{1,2}):(\d{2})$/);

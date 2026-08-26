@@ -28,6 +28,13 @@ export class AppConstants {
   static readonly SETTING_SCHEDULE_REMINDER_CUSTOM_KEY: string = 'setting_schedule_reminder_custom';
   static readonly SETTING_SCHEDULE_REMINDER_ASSIGNMENT_KEY: string = 'setting_schedule_reminder_assignment';
   static readonly SETTING_AUTO_SYNC_SCHEDULE_KEY: string = 'setting_auto_sync_schedule';
+  // ==================== 云端自动同步（P2-7a） ====================
+  /** 云端自动同步主开关（默认关闭，用户显式开启后才自动上传课表/考试到 CloudDB） */
+  static readonly SETTING_CLOUD_AUTO_SYNC_KEY: string = 'setting_cloud_auto_sync';
+  /** 允许蜂窝网络下自动同步的副开关（默认关闭，仅主开关开启时可操作） */
+  static readonly SETTING_CLOUD_SYNC_CELLULAR_KEY: string = 'setting_cloud_sync_cellular';
+  /** 云端自动同步运行状态 JSON（lastSuccessAtMs/pending/attempts/nextAttemptAtMs，见 SyncService） */
+  static readonly CLOUD_AUTO_SYNC_STATE_JSON_KEY: string = 'cloud_auto_sync_state_json';
   static readonly SETTING_SCHEDULE_REMIND_MINUTES_EXAM_KEY: string = 'setting_schedule_remind_minutes_exam';
   static readonly SETTING_SCHEDULE_REMIND_MINUTES_COURSE_KEY: string = 'setting_schedule_remind_minutes_course';
   static readonly SETTING_SCHEDULE_REMIND_MINUTES_CUSTOM_KEY: string = 'setting_schedule_remind_minutes_custom';

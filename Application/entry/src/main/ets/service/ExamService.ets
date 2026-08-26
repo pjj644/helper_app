@@ -1,7 +1,9 @@
+import { Context } from '@kit.AbilityKit';
 import { ExamItem } from '../model/classTableModel/ExamModel';
 import { ExamRepository, ExamSelectionPreference } from '../repository/ExamRepository';
 import { ExamUtils } from '../common/utils/ExamUtils';
 import { DateUtils } from '../common/utils/DateUtils';
+import { SyncService } from './SyncService';
 import {
   getExamTypeIdByIndex,
   getExamTypeIndexById,
@@ -30,6 +32,7 @@ export class ExamService {
   static async saveExams(context: Object, exams: ExamItem[]): Promise<void> {
     const sorted = ExamUtils.sortExams(exams);
     await ExamRepository.saveExamData(context, JSON.stringify(sorted));
+    SyncService.triggerAutoSyncIfEnabled(context as Context);
   }
 
   static async clearExamData(context: Object): Promise<void> {

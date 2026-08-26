@@ -6,6 +6,7 @@ import dataPreferences from '@ohos.data.preferences';
 import { formBindingData, formProvider } from '@kit.FormKit';
 import { BusinessError } from '@kit.BasicServicesKit';
 import { Context } from '@kit.AbilityKit';
+import { SyncService } from './SyncService';
 
 // 桌面卡片实例 ID 列表在偏好文件中的存储键。
 // 注意：与 entryformability/EntryFormAbility.ets 中的同名常量保持成对一致（写入方在彼处）。
@@ -40,17 +41,20 @@ export class CourseService {
     const rawData = CourseService.coursesToRawData(courses);
     await CourseRepository.saveCourseData(context, JSON.stringify(rawData));
     CourseService.updateNextCourseCache(context).catch(() => {});
+    SyncService.triggerAutoSyncIfEnabled(context as Context);
   }
 
   static async saveCoursesForSemester(context: Object, semesterId: number, courses: Course[]): Promise<void> {
     const rawData = CourseService.coursesToRawData(courses);
     await CourseRepository.saveCourseDataBySemester(context, semesterId, JSON.stringify(rawData));
     CourseService.updateNextCourseCache(context).catch(() => {});
+    SyncService.triggerAutoSyncIfEnabled(context as Context);
   }
 
   static async saveRawCourseData(context: Object, rawData: RawCourseTableData): Promise<void> {
     await CourseRepository.saveCourseData(context, JSON.stringify(rawData));
     CourseService.updateNextCourseCache(context).catch(() => {});
+    SyncService.triggerAutoSyncIfEnabled(context as Context);
   }
 
   static async hasCourseData(context: Object): Promise<boolean> {

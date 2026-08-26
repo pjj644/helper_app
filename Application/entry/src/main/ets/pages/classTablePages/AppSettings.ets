@@ -34,6 +34,8 @@ struct AppSettings {
     courseRemindMinutes: 30,
   };
   @State autoSyncSchedule: boolean = true;
+  @State cloudAutoSyncEnabled: boolean = false;
+  @State cloudSyncCellularAllowed: boolean = false;
   @State isLoggedIn: boolean = false;
   @State loginEmail: string = '';
   @State syncingToCloud: boolean = false;
@@ -131,6 +133,8 @@ struct AppSettings {
       const context = getContext(this);
       this.settings = await CourseTableStorage.loadSettings(context);
       this.autoSyncSchedule = await ReminderService.getAutoSyncScheduleEnabled(context);
+      this.cloudAutoSyncEnabled = await ReminderService.getCloudAutoSyncEnabled(context);
+      this.cloudSyncCellularAllowed = await ReminderService.getCloudSyncCellularEnabled(context);
     } catch (error) {
       console.error(`[AppSettings] 加载设置失败: ${JSON.stringify(error)}`);
     }
@@ -559,6 +563,60 @@ struct AppSettings {
           .onChange(async (isOn: boolean) => {
             this.autoSyncSchedule = isOn;
             await ReminderService.saveAutoSyncScheduleEnabled(getContext(this), isOn);
+          })
+      }
+      .width('100%')
+      .padding({ bottom: 16 })
+
+      Divider().color($r('app.color.divider_color')).margin({ top: 16, bottom: 16 })
+
+      Row() {
+        Column({ space: 4 }) {
+          Text('云端自动同步')
+            .fontSize(15)
+            .fontColor($r('app.color.text_primary'))
+          Text('课程或考试数据变更后自动上传到云端；仅 WiFi 自动上传，蜂窝需另行开启')
+            .fontSize(12)
+            .fontColor($r('app.color.text_tertiary'))
+        }
+        .layoutWeight(1)
+        .alignItems(HorizontalAlign.Start)
+
+        Toggle({ type: ToggleType.Switch, isOn: this.cloudAutoSyncEnabled })
+          .selectedColor($r('app.color.primary_color'))
+          .onChange(async (isOn: boolean) => {
+            this.cloudAutoSyncEnabled = isOn;
+            await ReminderService.saveCloudAutoSyncEnabled(getContext(this), isOn);
+            if (!isOn && this.cloudSyncCellularAllowed) {
+              this.cloudSyncCellularAllowed = false;
+              await ReminderService.saveCloudSyncCellularEnabled(getContext(this), false);
+            }
+          })
+      }
+      .width('100%')
+      .padding({ bottom: 16 })
+
+      Row() {
+        Column({ space: 4 }) {
+          Text('允许蜂窝网络同步')
+            .fontSize(15)
+            .fontColor(this.cloudAutoSyncEnabled ? $r('app.color.text_primary') : $r('app.color.text_tertiary'))
+          Text('关闭时仅在 WiFi 网络下自动上传')
+            .fontSize(12)
+            .fontColor($r('app.color.text_tertiary'))
+        }
+        .layoutWeight(1)
+        .alignItems(HorizontalAlign.Start)
+
+        Toggle({ type: ToggleType.Switch, isOn: this.cloudSyncCellularAllowed })
+          .selectedColor($r('app.color.primary_color'))
+          .enabled(this.cloudAutoSyncEnabled)
+          .onChange(async (isOn: boolean) => {
+            if (!this.cloudAutoSyncEnabled) {
+              return;
+            }
+            this.cloudSyncCellularAllowed = isOn;
+            await ReminderService.saveCloudSyncCellularEnabled(getContext(this), isOn);
           })
       }
       .width('100%')

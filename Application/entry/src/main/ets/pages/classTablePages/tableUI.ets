@@ -16,6 +16,7 @@ import { ThemeManager } from '../../common/utils/ThemeManager';
 import { getSemesterOptions, SemesterOptionSet, getSemesterLabelById, calculateSemesterId } from '../../model/classTableModel/ExamAccessRules';
 import { CourseRepository } from '../../repository/CourseRepository';
 import { CourseService } from '../../service/CourseService';
+import { SyncService } from '../../service/SyncService';
 import { PageContextTracker } from '../../common/agent/PageContextTracker';
 import { UIActionDispatcher } from '../../common/agent/UIActionDispatcher';
 
@@ -238,6 +239,7 @@ struct TableUI {
     try {
       const context = getContext(this);
       await CourseRepository.saveCourseDataBySemester(context, this.selectedSemesterId, courseData);
+      SyncService.triggerAutoSyncIfEnabled(context);
     } catch (error) {
       console.error('[TableUI] 保存课表本地数据失败:', error);
     }
