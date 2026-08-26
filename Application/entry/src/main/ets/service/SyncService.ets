@@ -558,8 +558,9 @@ export class SyncService {
   /**
    * 网络门控：WiFi 直接放行；蜂窝仅在「允许蜂窝网络同步」副开关开启时放行；
    * 无网络或其他承载类型不满足。拿不到网络状态时保守视为不满足并记录日志。
+   * public（P2-7d 起）：AI 会话云同步（SessionSyncService）复用同一 WiFi/蜂窝判定。
    */
-  private static async isCloudAutoSyncNetworkAllowed(context: Context): Promise<boolean> {
+  static async isCloudAutoSyncNetworkAllowed(context: Context): Promise<boolean> {
     try {
       const netHandle = await connection.getDefaultNet();
       if (!netHandle || netHandle.netId === 0) {

@@ -13,6 +13,7 @@ import { AnimatedCard } from '../../components/AnimatedComponents';
 import { DisplaySettings } from '../../model/classTableModel/CourseTableStorage';
 import { CourseTableStorage } from '../../model/classTableModel/CourseTableStorage';
 import { SyncService, CloudSyncConflictEntry } from '../../service/SyncService';
+import { SessionSyncService } from '../../service/SessionSyncService';
 import { AuthService } from '../../service/AuthService';
 import { AppConstants, RouterConstants } from '../../common/constants/AppConstants';
 import { ReminderService } from '../../service/ReminderService';
@@ -36,6 +37,8 @@ struct AppSettings {
   @State autoSyncSchedule: boolean = true;
   @State cloudAutoSyncEnabled: boolean = false;
   @State cloudSyncCellularAllowed: boolean = false;
+  // P2-7d：AI 会话云同步开关（默认关闭）
+  @State sessionCloudSyncEnabled: boolean = false;
   @State isLoggedIn: boolean = false;
   @State loginEmail: string = '';
   @State syncingToCloud: boolean = false;
@@ -101,6 +104,8 @@ struct AppSettings {
       }, async (err, data) => {
         if (!err && data.index === 1) {
           const context = getContext(this);
+          // P2-7d：注销前取消挂起的会话云同步任务并清除派生密钥缓存
+          SessionSyncService.stopAndClear(context);
           const success = await AuthService.deleteAccount(context);
           if (success) {
             this.isLoggedIn = false;
@@ -139,6 +144,7 @@ struct AppSettings {
       this.autoSyncSchedule = await ReminderService.getAutoSyncScheduleEnabled(context);
       this.cloudAutoSyncEnabled = await ReminderService.getCloudAutoSyncEnabled(context);
       this.cloudSyncCellularAllowed = await ReminderService.getCloudSyncCellularEnabled(context);
+      this.sessionCloudSyncEnabled = await SessionSyncService.getSessionCloudSyncEnabled(context);
     } catch (error) {
       console.error(`[AppSettings] 加载设置失败: ${JSON.stringify(error)}`);
     }
@@ -680,6 +686,35 @@ struct AppSettings {
         .onClick(() => this.downloadFromCloud())
       }
       .width('100%')
+
+      // ==================== AI 会话云同步（P2-7d） ====================
+      Divider().color($r('app.color.divider_color')).margin({ top: 16, bottom: 16 })
+
+      Row() {
+        Column({ space: 4 }) {
+          Text('AI 会话云同步')
+            .fontSize(15)
+            .fontColor(this.isLoggedIn ? $r('app.color.text_primary') : $r('app.color.text_tertiary'))
+          Text('会话以 AES-GCM 加密后上云，仅本账号可解密；密钥由登录账号派生，密钥丢失则云端历史不可恢复')
+            .fontSize(12)
+            .fontColor($r('app.color.text_tertiary'))
+        }
+        .layoutWeight(1)
+        .alignItems(HorizontalAlign.Start)
+
+        Toggle({ type: ToggleType.Switch, isOn: this.sessionCloudSyncEnabled })
+          .selectedColor($r('app.color.primary_color'))
+          .enabled(this.isLoggedIn)
+          .onChange(async (isOn: boolean) => {
+            if (!this.isLoggedIn) {
+              return;
+            }
+            this.sessionCloudSyncEnabled = isOn;
+            await SessionSyncService.setSessionCloudSyncEnabled(getContext(this), isOn);
+          })
+      }
+      .width('100%')
+      .padding({ bottom: 16 })
 
       // ==================== 同步状态折叠区（P2-7b） ====================
       Divider().color($r('app.color.divider_color')).margin({ top: 16, bottom: 4 })

@@ -1,5 +1,6 @@
 import { preferences } from '@kit.ArkData';
 import { AppConstants } from '../common/constants/AppConstants';
+import { SessionSyncService } from '../service/SessionSyncService';
 
 export interface ChatMessage {
   role: 'system' | 'user' | 'assistant';
@@ -64,8 +65,30 @@ export class ChatSessionRepository {
       const pref = preferences.getPreferencesSync(context, { name: AppConstants.COURSE_TABLE_PREF_NAME });
       pref.putSync(AppConstants.AI_CHAT_SESSIONS_KEY, JSON.stringify(trimmed));
       pref.flushSync();
+      // P2-7d：落盘成功后触发 AI 会话云同步（开关关闭/未登录/无网时在服务内部短路，软降不抛出）
+      try {
+        SessionSyncService.triggerSessionSyncIfEnabled(context);
+      } catch (syncErr) {
+        console.warn(`[ChatSessionRepository] 触发会话云同步失败: ${String(syncErr)}`);
+      }
     } catch (error) {
       console.error('[ChatSessionRepository] saveSessions error:', JSON.stringify(error));
+    }
+  }
+
+  /**
+   * 云同步下载合并写回专用内部通道（P2-7d）：跳过同步钩子，
+   * 防止「下载合并 → 写回 → 再次触发上传」的回环。
+   * 参照 CourseRepository.saveCourseDataBySemesterRaw 的做法，仅限 SessionSyncService 调用。
+   */
+  static saveSessionsRaw(context: Context, sessions: ChatSession[]): void {
+    try {
+      const trimmed = sessions.slice(0, AppConstants.AI_CHAT_MAX_SESSIONS);
+      const pref = preferences.getPreferencesSync(context, { name: AppConstants.COURSE_TABLE_PREF_NAME });
+      pref.putSync(AppConstants.AI_CHAT_SESSIONS_KEY, JSON.stringify(trimmed));
+      pref.flushSync();
+    } catch (error) {
+      console.error('[ChatSessionRepository] saveSessionsRaw error:', JSON.stringify(error));
     }
   }
 

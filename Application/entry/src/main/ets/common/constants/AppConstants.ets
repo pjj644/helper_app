@@ -78,6 +78,8 @@ export class AppConstants {
 
   static readonly AI_CHAT_SESSIONS_KEY: string = 'ai_chat_sessions';
   static readonly AI_CHAT_MAX_SESSIONS: number = 20;
+  /** AI 会话云同步开关（P2-7d，默认关闭；读写见 SessionSyncService，存于 COURSE_TABLE_PREF_NAME） */
+  static readonly SETTING_SESSION_CLOUD_SYNC_KEY: string = 'setting_session_cloud_sync';
   static readonly AI_AGENT_MAX_TOOL_ROUNDS: number = 5;
   static readonly AI_AGENT_TOOL_TIMEOUT_MS: number = 30000;
 
