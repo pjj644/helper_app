@@ -123,7 +123,7 @@
 |---|---|---|
 | U-P2-1 | P2-7d 验收前 | AGC 控制台创建并导出对象类型 **ChatSessionRecord**——schema 已提交至 `CloudProgram/clouddb/objecttype/ChatSessionRecord.json`（每会话一条记录，非按消息拆表；创建时直接导入该 JSON 或按字段抄录），并部署到云数据库后端侧方可联调 |
 | U-P2-2 | P2-7 验收 | 启动两个模拟器实例互同步：A 改 → B 拉、断网补传、双写冲突 LWW、会话密文核验 |
-| U-P2-3 | 各 Wave 后 | 模拟器冒烟复测（按任务增量出新清单，格式沿用已归档的 U2 清单） |
+| U-P2-3 | 现在 | 按增量冒烟清单 [`SMOKE_CHECKLIST_P2.md`](./SMOKE_CHECKLIST_P2.md) 逐例复测（§1–§5 可先行，§4 待 U-P2-1） |
 
 ## 6. 验收标准汇总
 
