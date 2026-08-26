@@ -556,9 +556,10 @@ export class SyncService {
   }
 
   /**
-   * 网络门控：WiFi 直接放行；蜂窝仅在「允许蜂窝网络同步」副开关开启时放行；
+   * 网络门控：WiFi/以太网直接放行（模拟器 NAT 网络上报为以太网，桌面有线场景同理，均视为非计费网络）；
+   * 蜂窝仅在「允许蜂窝网络同步」副开关开启时放行；
    * 无网络或其他承载类型不满足。拿不到网络状态时保守视为不满足并记录日志。
-   * public（P2-7d 起）：AI 会话云同步（SessionSyncService）复用同一 WiFi/蜂窝判定。
+   * public（P2-7d 起）：AI 会话云同步（SessionSyncService）复用同一判定。
    */
   static async isCloudAutoSyncNetworkAllowed(context: Context): Promise<boolean> {
     try {
@@ -569,7 +570,8 @@ export class SyncService {
       }
       const capabilities = await connection.getNetCapabilities(netHandle);
       const bearerTypes: connection.NetBearType[] = capabilities ? capabilities.bearerTypes : [];
-      if (bearerTypes.includes(connection.NetBearType.BEARER_WIFI)) {
+      if (bearerTypes.includes(connection.NetBearType.BEARER_WIFI) ||
+        bearerTypes.includes(connection.NetBearType.BEARER_ETHERNET)) {
         return true;
       }
       if (bearerTypes.includes(connection.NetBearType.BEARER_CELLULAR)) {
@@ -579,7 +581,7 @@ export class SyncService {
         }
         return cellularAllowed;
       }
-      console.info('[SyncService] 自动同步网络检查：当前承载非 WiFi/蜂窝，保守跳过');
+      console.info('[SyncService] 自动同步网络检查：当前承载非 WiFi/以太网/蜂窝，保守跳过');
       return false;
     } catch (e) {
       console.warn(`[SyncService] 自动同步网络检查失败，保守视为不满足: ${String(e)}`);
