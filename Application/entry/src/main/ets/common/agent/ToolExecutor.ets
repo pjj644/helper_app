@@ -501,6 +501,10 @@ export class ToolExecutor {
         return { success: false, data: '更新提醒配置失败：缺少必要参数 type' }
       }
       const categoryType = typeStr as ScheduleEventType
+      const key = ReminderService.getCategoryReminderKey(categoryType)
+      if (!key) {
+        return { success: false, data: `未知提醒类别: ${typeStr}，支持类型：course/exam/custom/assignment` }
+      }
       const hasEnabled: boolean = payload['enabled'] !== undefined
       const enabled: boolean = hasEnabled ? this.getBooleanArg(payload, 'enabled', true) : true
       const hasMinutes: boolean = payload['minutes'] !== undefined
@@ -511,6 +515,12 @@ export class ToolExecutor {
       }
       if (enabled && hasMinutes && minutes > 0) {
         await ReminderService.saveCategoryRemindMinutes(this.context, categoryType, minutes)
+      }
+
+      try {
+        await ReminderService.refreshScheduleReminders(this.context)
+      } catch (e) {
+        console.warn(`[ToolExecutor] refreshScheduleReminders after mutate error: ${String(e)}`)
       }
 
       const statusDesc: string = enabled ? `已开启${minutes > 0 ? `（提前 ${minutes} 分钟）` : ''}` : '已关闭'

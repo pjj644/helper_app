@@ -373,7 +373,7 @@ export class ToolRegistry {
         },
         required: ['type'],
         requiresConfirmation: true,
-        riskLevel: 'medium'
+        riskLevel: 'low'
       },
       {
         name: 'set_remind_minutes',
@@ -384,7 +384,7 @@ export class ToolRegistry {
         },
         required: [],
         requiresConfirmation: true,
-        riskLevel: 'medium'
+        riskLevel: 'low'
       },
       {
         name: 'sync_courses_to_cloud',
