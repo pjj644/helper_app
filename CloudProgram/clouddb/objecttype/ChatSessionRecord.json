@@ -24,7 +24,7 @@
       "fieldType": "Text",
       "isNeedEncrypt": false,
       "notNull": true,
-      "isSensitive": true,
+      "isSensitive": false,
       "belongPrimaryKey": false
     },
     {
