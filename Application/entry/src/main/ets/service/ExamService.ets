@@ -20,22 +20,6 @@ export class ExamService {
       const parsed = JSON.parse(dataText) as ExamItem[];
       console.info(`[ExamDebug] loadExams: parsedCount=${parsed.length}`);
       const normalized = parsed.map(item => ExamUtils.normalizeStoredExam(item));
-      let withBeginTime = 0;
-      let zeroBeginTime = 0;
-      for (let i = 0; i < normalized.length; i++) {
-        if (normalized[i].beginTime > 0) {
-          withBeginTime++;
-          if (i < 3) {
-            console.info(`[ExamDebug] loadExams: exam[${i}] name=${normalized[i].courseName} date=${normalized[i].examDate} timeRange=${normalized[i].examTimeRange} beginTime=${normalized[i].beginTime} semesterLabel=${normalized[i].semesterLabel}`);
-          }
-        } else {
-          zeroBeginTime++;
-          if (i < 5) {
-            console.info(`[ExamDebug] loadExams: exam[${i}] name=${normalized[i].courseName} date=${normalized[i].examDate} timeRange=${normalized[i].examTimeRange} beginTime=0 (MISSING)`);
-          }
-        }
-      }
-      console.info(`[ExamDebug] loadExams: total=${normalized.length} withBeginTime=${withBeginTime} zeroBeginTime=${zeroBeginTime}`);
       return normalized;
     } catch (error) {
       console.error('[ExamDebug] loadExams parse error:', JSON.stringify(error));

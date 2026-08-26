@@ -68,36 +68,44 @@ export class DateUtils {
       .replace(/—/g, '-')
       .replace(/－/g, '-');
 
-    const timeMatch: RegExpMatchArray | null = range.match(/(\d{1,2}:\d{2})-(\d{1,2}:\d{2})/);
+    const dateObj = DateUtils.parseExamDate(date);
+    if (!dateObj) {
+      return { begin: 0, end: 0 };
+    }
+    const year = dateObj.getFullYear();
+    const month = dateObj.getMonth();
+    const day = dateObj.getDate();
+
+    const timeMatch: RegExpMatchArray | null = range.match(/(\d{1,2}):(\d{2})-(\d{1,2}):(\d{2})/);
     if (timeMatch) {
-      const begin = new Date(`${date} ${timeMatch[1]}`).getTime();
-      const end = new Date(`${date} ${timeMatch[2]}`).getTime();
-      const result: DateTimeRange = {
+      const startH = parseInt(timeMatch[1], 10);
+      const startM = parseInt(timeMatch[2], 10);
+      const endH = parseInt(timeMatch[3], 10);
+      const endM = parseInt(timeMatch[4], 10);
+      const begin = new Date(year, month, day, startH, startM).getTime();
+      const end = new Date(year, month, day, endH, endM).getTime();
+      return {
         begin: Number.isNaN(begin) ? 0 : begin,
         end: Number.isNaN(end) ? 0 : end,
       };
-      if (result.begin === 0) {
-        console.info(`[ExamDebug] parseDateTime NaN after regex: date="${date}" timeRange="${timeRange}" extracted="${timeMatch[1]}-${timeMatch[2]}"`);
-      }
-      return result;
     }
 
     const parts: string[] = range.split('-');
     if (parts.length !== 2) {
-      console.info(`[ExamDebug] parseDateTime FAILED: dateText="${dateText}" timeRange="${timeRange}" date="${date}" range="${range}" parts=${parts.length}`);
       return { begin: 0, end: 0 };
     }
 
-    const begin = new Date(`${date} ${parts[0]}`).getTime();
-    const end = new Date(`${date} ${parts[1]}`).getTime();
-    const result: DateTimeRange = {
-      begin: Number.isNaN(begin) ? 0 : begin,
-      end: Number.isNaN(end) ? 0 : end,
-    };
-    if (result.begin === 0) {
-      console.info(`[ExamDebug] parseDateTime NaN: date="${date}" timeRange="${timeRange}" parts=[${parts[0]}, ${parts[1]}]`);
+    const startParts = parts[0].split(':').map(Number);
+    const endParts = parts[1].split(':').map(Number);
+    if (startParts.length === 2 && endParts.length === 2) {
+      const begin = new Date(year, month, day, startParts[0], startParts[1]).getTime();
+      const end = new Date(year, month, day, endParts[0], endParts[1]).getTime();
+      return {
+        begin: Number.isNaN(begin) ? 0 : begin,
+        end: Number.isNaN(end) ? 0 : end,
+      };
     }
-    return result;
+    return { begin: 0, end: 0 };
   }
 
   static getCountdownParts(now: number, beginTime: number): CountdownParts {
