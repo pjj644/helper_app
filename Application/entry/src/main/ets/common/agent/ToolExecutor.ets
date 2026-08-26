@@ -737,7 +737,8 @@ export class ToolExecutor {
               source: 'backend'
             }
             ToolExecutor.cacheGuideResult(cacheKey, resultData)
-            this.persistGuidesLastGood(parsed.data, parsed.generatedAt)
+            const isFullDataset: boolean = (category === 'all' || category === '') && keyword.length === 0
+            this.persistGuidesLastGood(parsed.data, parsed.generatedAt, isFullDataset)
             return { success: true, data: JSON.stringify(resultData) }
           }
         } else {
@@ -817,13 +818,35 @@ export class ToolExecutor {
     ToolExecutor.guideCache.set(key, value)
   }
 
-  /** 写入校园指南 last-good 到 Preferences（P2-1a） */
-  private persistGuidesLastGood(items: GuideItem[], generatedAt?: string): void {
+  /** 写入校园指南 last-good 到 Preferences（P2-1a：支持全量与增量合并） */
+  private persistGuidesLastGood(items: GuideItem[], generatedAt?: string, isFullDataset: boolean = false): void {
     try {
+      let finalItems: GuideItem[] = items
+      if (!isFullDataset) {
+        const existing = this.loadGuidesLastGood()
+        if (existing && Array.isArray(existing.items) && existing.items.length > 0) {
+          const itemMap = new Map<string, GuideItem>()
+          for (let i = 0; i < existing.items.length; i++) {
+            const it = existing.items[i]
+            const key = it.id ? it.id : (it.category + ':' + it.title)
+            itemMap.set(key, it)
+          }
+          for (let i = 0; i < items.length; i++) {
+            const it = items[i]
+            const key = it.id ? it.id : (it.category + ':' + it.title)
+            itemMap.set(key, it)
+          }
+          const merged: GuideItem[] = []
+          itemMap.forEach((val: GuideItem) => {
+            merged.push(val)
+          })
+          finalItems = merged
+        }
+      }
       const envelope: GuideEnvelope = {
         updatedAt: Date.now(),
         generatedAt: generatedAt,
-        items: items
+        items: finalItems
       }
       const text: string = JSON.stringify(envelope)
       const pref = preferences.getPreferencesSync(this.context, { name: AppConstants.COURSE_TABLE_PREF_NAME })
