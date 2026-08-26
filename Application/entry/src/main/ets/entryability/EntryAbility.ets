@@ -8,6 +8,7 @@ import { AuthService } from '../service/AuthService';
 import { CourseService } from '../service/CourseService';
 import { SyncService } from '../service/SyncService';
 import { AppConfigRepository } from '../repository/AppConfigRepository';
+import { CloudDbRepository } from '../repository/CloudDbRepository';
 import { FloatingWindowManager } from '../common/agent/FloatingWindowManager';
 
 const HILOG_DOMAIN = 0x0000;
@@ -25,6 +26,9 @@ export default class EntryAbility extends UIAbility {
       // 合规要求：仅在用户已授权隐私政策后才初始化 AGC 等第三方/云端 SDK
       if (PreferencesUtil.getInstance().hasAgreedPrivacy()) {
         AuthService.initSDK(this.context);
+        CloudDbRepository.initCloudDB().catch((err: Object) => {
+          hilog.warn(HILOG_DOMAIN, TAG, 'CloudDbRepository.initCloudDB async failed: %{public}s', JSON.stringify(err));
+        });
       } else {
         hilog.info(HILOG_DOMAIN, TAG, 'Privacy not agreed yet, delaying AGC SDK initialization.');
       }

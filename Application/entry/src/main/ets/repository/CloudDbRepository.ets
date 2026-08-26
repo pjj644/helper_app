@@ -7,7 +7,10 @@ import { ClassExam } from '../pages/CloudDb/ClassExam';
 let classDatabaseZone: cloudDatabase.DatabaseZone | null = null;
 
 export class CloudDbRepository {
-  static async initCloudDB(): Promise<void> {
+  static async initCloudDB(forceRefresh: boolean = false): Promise<void> {
+    if (classDatabaseZone && !forceRefresh) {
+      return;
+    }
     const cloudDbAuthProvider = auth.getAuthProvider();
     if (cloudDbAuthProvider) {
       try {
@@ -36,8 +39,11 @@ export class CloudDbRepository {
       });
     }
 
-    if (!classDatabaseZone) {
+    try {
       classDatabaseZone = cloudDatabase.zone(AppConstants.CLOUD_DB_ZONE_NAME);
+      console.info('[CloudDbRepository] CloudDB Zone 初始化成功:', AppConstants.CLOUD_DB_ZONE_NAME);
+    } catch (zoneErr) {
+      console.error('[CloudDbRepository] 获取 CloudDB Zone 失败:', JSON.stringify(zoneErr));
     }
   }
 

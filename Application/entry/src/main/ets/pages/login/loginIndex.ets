@@ -4,6 +4,7 @@ import { common } from '@kit.AbilityKit';
 import { BusinessError } from '@kit.BasicServicesKit';
 import auth, { VerifyCodeAction } from '@hw-agconnect/auth';
 import { AppConstants } from '../../common/constants/AppConstants';
+import { CloudDbRepository } from '../../repository/CloudDbRepository';
 
 interface HostContextProvider {
 	getHostContext?: () => common.UIAbilityContext;
@@ -169,6 +170,11 @@ struct LoginIndexPage {
 			});
 
 			await this.saveSession();
+			try {
+				await CloudDbRepository.initCloudDB(true);
+			} catch (cloudInitErr) {
+				console.error('[LoginIndex] 刷新 CloudDB Zone 失败:', JSON.stringify(cloudInitErr));
+			}
 			this.getUIContext().getPromptAction().showToast({ message: '登录成功' });
 			this.jumpBack();
 		} catch (error) {
