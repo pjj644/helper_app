@@ -13,6 +13,7 @@ import { AppConstants, RouterConstants } from '../constants/AppConstants'
 import { router } from '@kit.ArkUI'
 import { common } from '@kit.AbilityKit'
 import { http } from '@kit.NetworkKit'
+import { preferences } from '@kit.ArkData'
 import { AgentEndpointConfig, AgentEndpoint } from './AgentEndpointConfig'
 import { ToolRegistry, LEGACY_TOOL_NAMES } from './ToolRegistry'
 import { ScheduleRepository } from '../../repository/ScheduleRepository'
@@ -42,6 +43,12 @@ interface GuideResultData {
   generatedAt?: string
   /** 数据来源：backend=后端知识库 / cache=进程内缓存 / fallback=内置离线兜底 */
   source?: string
+}
+
+interface GuideEnvelope {
+  updatedAt: number;
+  generatedAt?: string;
+  items: GuideItem[];
 }
 
 /** 后端 GET /api/v1/knowledge/guides 的响应形状（T6a），data 即 GuideItem 形态 */
@@ -674,7 +681,7 @@ export class ToolExecutor {
     return String(err)
   }
 
-  // === 校园指南检索（T6a：数据源切换为后端知识库，本地仅保留缓存与最小离线兜底） ===
+  // === 校园指南检索（T6a/P2-1a：四级降级：后端 -> 内存 -> Preferences last-good -> 内置最小离线兜底） ===
   private async queryCampusGuide(args: Record<string, Object>): Promise<ToolResult> {
     const category: string = this.getStringArg(args, 'category', 'all')
     const keyword: string = this.getStringArg(args, 'keyword', '').toLowerCase()
@@ -710,6 +717,7 @@ export class ToolExecutor {
               source: 'backend'
             }
             ToolExecutor.cacheGuideResult(cacheKey, resultData)
+            this.persistGuidesLastGood(parsed.data, parsed.generatedAt)
             return { success: true, data: JSON.stringify(resultData) }
           }
         } else {
@@ -722,7 +730,7 @@ export class ToolExecutor {
       }
     }
 
-    // 2) 降级一：复用进程内缓存的上次成功结果（本轮不做持久化，见阻塞表 B-03）
+    // 2) 降级一：复用进程内缓存的上次成功结果
     const cached: GuideResultData | undefined = ToolExecutor.guideCache.get(cacheKey)
     if (cached !== undefined) {
       const cachedResult: GuideResultData = {
@@ -737,7 +745,31 @@ export class ToolExecutor {
       return { success: true, data: JSON.stringify(cachedResult) }
     }
 
-    // 3) 降级二：内置最小离线兜底集（离线兜底，完整数据由后端下发）
+    // 3) 降级二：从 preferences 读取持久化 last-good 缓存（P2-1a 清偿 B-03）
+    const lastGood = this.loadGuidesLastGood()
+    if (lastGood !== null) {
+      let matched: GuideItem[] = lastGood.items
+      if (category !== 'all') {
+        matched = matched.filter((g: GuideItem) => g.category === category)
+      }
+      if (keyword.length > 0) {
+        matched = matched.filter((g: GuideItem) => g.title.toLowerCase().includes(keyword) || g.content.toLowerCase().includes(keyword) || (g.details !== undefined && g.details.toLowerCase().includes(keyword)))
+      }
+      if (matched.length > 0) {
+        const lastGoodData: GuideResultData = {
+          category: category,
+          keyword: keyword,
+          count: matched.length,
+          guides: matched,
+          generatedAt: lastGood.generatedAt,
+          source: 'last_good'
+        }
+        console.warn(`[ToolExecutor] 校园指南后端不可用，命中 preferences last-good 缓存（source=last_good, count=${matched.length}）`)
+        return { success: true, data: JSON.stringify(lastGoodData) }
+      }
+    }
+
+    // 4) 降级三：内置最小离线兜底集（离线兜底，完整数据由后端下发）
     let matched: GuideItem[] = ToolExecutor.builtinGuides
     if (category !== 'all') {
       matched = matched.filter((g: GuideItem) => g.category === category)
@@ -763,6 +795,44 @@ export class ToolExecutor {
       ToolExecutor.guideCache.clear()
     }
     ToolExecutor.guideCache.set(key, value)
+  }
+
+  /** 写入校园指南 last-good 到 Preferences（P2-1a） */
+  private persistGuidesLastGood(items: GuideItem[], generatedAt?: string): void {
+    try {
+      const envelope: GuideEnvelope = {
+        updatedAt: Date.now(),
+        generatedAt: generatedAt,
+        items: items
+      }
+      const text: string = JSON.stringify(envelope)
+      const pref = preferences.getPreferencesSync(this.context, { name: AppConstants.COURSE_TABLE_PREF_NAME })
+      const existing: string = pref.getSync(AppConstants.PREF_CAMPUS_GUIDES_JSON_KEY, '') as string
+      if (existing !== text) {
+        pref.putSync(AppConstants.PREF_CAMPUS_GUIDES_JSON_KEY, text)
+        pref.flushSync()
+      }
+    } catch (e) {
+      console.warn(`[ToolExecutor] persistGuidesLastGood error: ${String(e)}`)
+    }
+  }
+
+  /** 从 Preferences 读取校园指南 last-good 缓存（P2-1a） */
+  private loadGuidesLastGood(): GuideEnvelope | null {
+    try {
+      const pref = preferences.getPreferencesSync(this.context, { name: AppConstants.COURSE_TABLE_PREF_NAME })
+      const text: string = pref.getSync(AppConstants.PREF_CAMPUS_GUIDES_JSON_KEY, '') as string
+      if (!text) {
+        return null
+      }
+      const envelope = JSON.parse(text) as GuideEnvelope
+      if (envelope && Array.isArray(envelope.items) && envelope.items.length > 0) {
+        return envelope
+      }
+    } catch (e) {
+      console.warn(`[ToolExecutor] loadGuidesLastGood error: ${String(e)}`)
+    }
+    return null
   }
 
   private async searchJwcNews(args: Record<string, Object>): Promise<ToolResult> {

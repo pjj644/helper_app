@@ -154,6 +154,8 @@ export class AppConstants {
   static readonly PREF_APP_CONFIG_JSON_KEY: string = 'app_config_last_good_json';
   /** 班车时刻 last-good JSON 偏好键（见 service/BusDataService） */
   static readonly PREF_BUS_SCHEDULE_JSON_KEY: string = 'bus_schedule_last_good_json';
+  /** 校园指南 last-good JSON 偏好键（见 common/agent/ToolExecutor） */
+  static readonly PREF_CAMPUS_GUIDES_JSON_KEY: string = 'campus_guides_last_good_json';
   /** 班车数据后台刷新最小间隔：6 小时 */
   static readonly BUS_SCHEDULE_REFRESH_MIN_INTERVAL_MS: number = 6 * 60 * 60 * 1000;
 }
