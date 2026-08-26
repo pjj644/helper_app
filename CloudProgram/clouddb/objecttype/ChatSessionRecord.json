@@ -1,0 +1,98 @@
+{
+  "objectTypeName": "ChatSessionRecord",
+  "fields": [
+    {
+      "fieldName": "id",
+      "fieldType": "String",
+      "isNeedEncrypt": false,
+      "notNull": true,
+      "isSensitive": false,
+      "belongPrimaryKey": true,
+      "defaultValue": ""
+    },
+    {
+      "fieldName": "userId",
+      "fieldType": "String",
+      "isNeedEncrypt": false,
+      "notNull": true,
+      "isSensitive": false,
+      "belongPrimaryKey": false,
+      "defaultValue": ""
+    },
+    {
+      "fieldName": "payload",
+      "fieldType": "Text",
+      "isNeedEncrypt": false,
+      "notNull": true,
+      "isSensitive": true,
+      "belongPrimaryKey": false
+    },
+    {
+      "fieldName": "payloadVersion",
+      "fieldType": "Integer",
+      "isNeedEncrypt": false,
+      "notNull": true,
+      "isSensitive": false,
+      "belongPrimaryKey": false,
+      "defaultValue": "1"
+    },
+    {
+      "fieldName": "updatedAt",
+      "fieldType": "Date",
+      "isNeedEncrypt": false,
+      "notNull": true,
+      "isSensitive": false,
+      "belongPrimaryKey": false
+    }
+  ],
+  "indexes": [
+    {
+      "indexName": "userId",
+      "indexList": [
+        {
+          "fieldName": "userId",
+          "sortType": "ASC"
+        }
+      ]
+    },
+    {
+      "indexName": "userUpdated",
+      "indexList": [
+        {
+          "fieldName": "userId",
+          "sortType": "ASC"
+        },
+        {
+          "fieldName": "updatedAt",
+          "sortType": "DESC"
+        }
+      ]
+    }
+  ],
+  "permissions": [
+    {
+      "role": "Authenticated",
+      "rights": [
+        "Read",
+        "Upsert",
+        "Delete"
+      ]
+    },
+    {
+      "role": "Creator",
+      "rights": [
+        "Read",
+        "Upsert",
+        "Delete"
+      ]
+    },
+    {
+      "role": "Administrator",
+      "rights": [
+        "Read",
+        "Upsert",
+        "Delete"
+      ]
+    }
+  ]
+}
