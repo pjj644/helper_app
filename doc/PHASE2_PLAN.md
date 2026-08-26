@@ -38,11 +38,11 @@
 
 | 编号 | 任务 | 优先级 | 规模 | 依赖 | 交付形态 |
 |---|---|---|---|---|---|
-| P2-7a | 云端自动同步（debounce 上传队列 + 断网补传） | P0 | 中 | 无 | 前端代码 |
-| P2-7b | 条目级 LWW 下载合并 | P0 | 中 | 无（可与 a 并行） | 前端代码 |
-| P2-7c | ID 治理：维持现状 + 新实体本地 UUID 约定 | P1 | 小 | 无（决策已定） | 代码约定+轻量改动 |
-| P2-7d | AI 会话加密上云（仅会话，日程不纳入） | P1 | 大 | 7a/7b 合入 | 前端+CloudDB schema |
-| P2-9 | 截图导入入库前预览修正 UI | P1 | 小 | 无 | 前端代码 |
+| P2-7a | 云端自动同步（debounce 上传队列 + 断网补传） | P0 | 中 | 无 | ✅ `aada984` |
+| P2-7b | 条目级 LWW 下载合并 | P0 | 中 | 无（可与 a 并行） | ✅ `c165f9b` |
+| P2-7c | ID 治理：维持现状 + 新实体本地 UUID 约定 | P1 | 小 | 无（决策已定） | ✅ `aada984` |
+| P2-7d | AI 会话加密上云（仅会话，日程不纳入） | P1 | 大 | 7a/7b 合入 | ◐ 进行中（schema 已提交 `a1cce25`） |
+| P2-9 | 截图导入入库前预览修正 UI | P1 | 小 | 无 | ✅ `f02d750` |
 
 **波次安排**：
 - **Wave P2-A**（三路并行）：P2-7a ∥ P2-9 ∥ P2-7c
@@ -53,7 +53,7 @@
 
 ## 3. 任务详单
 
-### P2-7a 云端自动同步 `[待实施]`
+### P2-7a 云端自动同步 `[已完成 · aada984]`
 
 - **方案**：
   1. 设置页「数据同步」卡片新增独立的**「云端自动同步」开关**（与现有本地日历自动同步开关并存，互不干扰），持久化新偏好键；
@@ -64,7 +64,7 @@
 - **验证**：模拟器改课程数据 → ≤30s 云端可见；断网操作恢复后补传；开关关闭零上传。
 - **提交**：`feat(sync): background auto upload with debounce queue and offline retry`
 
-### P2-7b 条目级 LWW 下载合并 `[待实施]`
+### P2-7b 条目级 LWW 下载合并 `[已完成 · c165f9b]`
 
 - **方案**：
   1. 下载合并从「整包覆盖」改为**条目级比较**：以 `(courseId, semesterId, dayOfWeek, startSection)` / 考试业务键对齐双端条目；
@@ -74,7 +74,7 @@
 - **验证**：双模拟器实例构造双写冲突 → LWW 裁决正确；单端删除/新增场景数据一致。🔴 双实例验收留 U-P2-4。
 - **提交**：`feat(sync): entry-level lww merge on download with conflict log`
 
-### P2-7c ID 治理：维持现状 + 新实体本地 UUID `[已决策 · 待实施]`
+### P2-7c ID 治理：维持现状 + 新实体本地 UUID `[已完成 · aada984]`
 
 > 2026-08-26 用户确认采纳建议方案。
 
@@ -85,7 +85,7 @@
   3. id-generator 云函数**退役**（保留在仓库但不部署、不接入）；`SyncService.generateUniqueId` 若无调用方一并清理。
 - **提交**：`docs/chore(sync): keep deterministic hash ids, retire id-generator function`
 
-### P2-7d AI 会话加密上云 `[已决策 · 仅会话，不含日程]`
+### P2-7d AI 会话加密上云 `[进行中 · schema 已提交 a1cce25，端侧实现中]`
 
 > 2026-08-26 用户确认：日程不同步，只做会话同步。容量评估：本地会话硬顶 20 个（`AI_CHAT_MAX_SESSIONS=20`），单用户全量加密后 ≤7MB，占 CloudDB 免费档 2GB 存储 <0.5%；自动同步频率远低于免费档 10 OPS/s 上限。**容量不是约束，设计约束如下。**
 
@@ -100,7 +100,7 @@
 - **验证**：双实例会话列表一致；抓包/云端控制台确认存储为密文；登出后云端不再新增记录。
 - **提交**：`feat(sync): encrypted ai session sync via clouddb`（schema 变更单独一笔 `feat(cloud): add chat session object types`）
 
-### P2-9 截图导入入库前预览修正 UI `[待实施]`
+### P2-9 截图导入入库前预览修正 UI `[已完成 · f02d750]`
 
 - **背景**：P2-2 当前为解析结果直接入库，识别错漏无法在落库前修正（子 agent 收尾建议，原 v1.0 计划本就有此项）。
 - **方案**：课表/成绩两处「截图导入」在解析完成后插入**预览确认表格**：识别条目列表（课程名/教师/教室/节次周次 或 成绩/学分/GPA）逐行可编辑，低置信度字段高亮提示，支持整行剔除；确认后才走 `CourseService`/`GradeService` 入库。复用现有导入预览组件风格，不引入新依赖。
@@ -119,7 +119,7 @@
 
 | # | 时机 | 内容 |
 |---|---|---|
-| U-P2-1 | P2-7d 前 | AGC 控制台创建并导出新的 ChatSession/ChatMessage 对象类型（我会给出 schema 与操作步骤） |
+| U-P2-1 | P2-7d 验收前 | AGC 控制台创建并导出对象类型 **ChatSessionRecord**——schema 已提交至 `CloudProgram/clouddb/objecttype/ChatSessionRecord.json`（每会话一条记录，非按消息拆表；创建时直接导入该 JSON 或按字段抄录），并部署到云数据库后端侧方可联调 |
 | U-P2-2 | P2-7 验收 | 启动两个模拟器实例互同步：A 改 → B 拉、断网补传、双写冲突 LWW、会话密文核验 |
 | U-P2-3 | 各 Wave 后 | 模拟器冒烟复测（按任务增量出新清单，格式沿用已归档的 U2 清单） |
 
@@ -134,7 +134,7 @@
 
 ## 7. Git 约定
 
-延续现状：前端继续在 `opt/phase01` 分支叠加提交（Phase 2 已在此分支推进）；后端同在 `opt/phase01-backend`。每任务至少一个独立 commit，消息 `type: what & why` + 尾行 `Co-Authored-By: Claude <noreply@anthropic.com>`；不 push 待审。
+延续现状：前端在 `opt/phase02` 分支叠加提交（Phase 2 中段自 `opt/phase01` 切出）；后端同在 `opt/phase01-backend`。每任务至少一个独立 commit，消息 `type: what & why` + 尾行 `Co-Authored-By: Claude <noreply@anthropic.com>`；不 push 待审。
 
 ## 8. 后续观察项（不入本轮验收）
 
