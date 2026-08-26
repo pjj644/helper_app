@@ -20,6 +20,7 @@
 | `devecocli check lint` | 跑 `code-linter.json5` lint（0 error 才算过） |
 | `devecocli check compat` | 扫描跨 SDK 版本 API 兼容性 |
 | `devecocli device list` / `emulator list` / `run` / `log` / `ui screenshot` | 设备/模拟器/运行/日志/UI |
+| `devecocli auth login` / `auth status` | 登录/查看华为开发者账号（模拟器云服务依赖此登录态；登录走浏览器 OAuth，本机浏览器已有 AGC 会话时自动完成） |
 | `devecocli docs search <关键词>` | 检索本地官方文档（2000+ 万字） |
 | `devecocli signature generate` | 自动生成调试签名 |
 | `devecocli init --mcp --agent opencode --project ./` | 向 AI 智能体注入 MCP 配置 |
@@ -59,6 +60,21 @@ devecocli check lint                                         # 代码检查 (0 e
 3. 模拟器走 NAT，**访问本机后端用真实 LAN IP**，不是 `localhost`。优先用真机联调。
 4. 所需权限：`INTERNET`（抓取/云）、`NOTIFICATION`（提醒）、`READ_CALENDAR` / `WRITE_CALENDAR`（Calendar Kit）。
 5. 调试日志：DevEco Logcat 面板或 `hilog` CLI。关键前缀：`[CalendarKit]` / `[ReminderDebug]` / `[ExamDebug]` / `[HomeDebug]` / `[BackendAgentClient]` / `[FloatingWindow]`。
+
+### 模拟器云服务（CloudDB / 云函数）401 "verify signature failed" 排查
+
+模拟器不是可信设备，CloudFoundationKit 的云请求由系统 `clouddevelopproxy` 服务用**模拟器调试凭据**签名，该凭据必须注册到 AGC 才有效。凭据随模拟器镜像/实例更新而变化，**换镜像或重装模拟器后必须重新注册**（2026-08-26 云同步中断即此原因）。
+
+典型报错：`BaseResponse fail. retCode:1008200003, httpCode:401` + `Error: 401:205525007:verify signature failed`。
+
+排查顺序（先排除廉价假设再动控制台）：
+
+1. **时钟**：`hdc shell date` 与本机 `date` 对比（偏移会导致签名失败）。
+2. **调试凭据**：hilog 搜 `clouddevelopproxy.debugToken=`（`PrintEmulatorCredentialDebugToken` 行）拿到 UUID；到 **AGC 控制台 → 证书、APP ID和Profile → 模拟器调试凭据**，核对列表里是否注册了当前 token。没有则「注册凭据」→ 选应用 → 粘贴 token。**注册后立即生效**（官方说最长等 30 分钟，实测即时）；过期旧凭据可删。
+3. **app 内 AGC Auth 会话**：AGC 控制台 → 认证服务 → 用户，看最后登录时间；会话死掉时在 app 内退出重登（邮箱验证码）。注意：app 内登录态（`pjj644@users.noreply.github.com 已登录`）只是本地偏好记录，不代表 AGC Auth token 有效。
+4. **DevEco 登录态**：`devecocli auth status`，未登录则 `devecocli auth login`（非根因但属前置健康项）。
+
+注意区分两层认证：**模拟器调试凭据**（设备级，签所有云请求，注册制）与 **AGC Auth 用户 token**（应用级，邮箱验证码登录，自动续期）。前者失效报 verify signature failed，与用户是否登录无关。
 
 ## AI 助手与系统联调测试用例
 
