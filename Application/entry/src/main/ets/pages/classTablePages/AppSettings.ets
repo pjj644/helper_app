@@ -542,6 +542,29 @@ struct AppSettings {
       .width('100%')
       .padding({ bottom: 16 })
 
+      Row() {
+        Column({ space: 4 }) {
+          Text('自动同步课表与日程')
+            .fontSize(15)
+            .fontColor($r('app.color.text_primary'))
+          Text('保存设置或导入数据后自动同步到日历和日程')
+            .fontSize(12)
+            .fontColor($r('app.color.text_tertiary'))
+        }
+        .layoutWeight(1)
+        .alignItems(HorizontalAlign.Start)
+
+        Toggle({ type: ToggleType.Switch, isOn: this.autoSyncSchedule })
+          .selectedColor($r('app.color.primary_color'))
+          .onChange((isOn: boolean) => {
+            this.autoSyncSchedule = isOn;
+          })
+      }
+      .width('100%')
+      .padding({ bottom: 16 })
+
+      Divider().color($r('app.color.divider_color')).margin({ bottom: 16 })
+
       Row({ space: 12 }) {
         Button() {
           Text(this.syncingToCloud ? '上传中...' : '上传到云端')

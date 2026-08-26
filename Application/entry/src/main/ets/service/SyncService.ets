@@ -392,6 +392,11 @@ export class SyncService {
            existing.examStatus !== current.examStatus;
   }
 
+  static generateUniqueId(prefix: string = 'id'): string {
+    const randStr: string = Math.random().toString(36).substring(2, 9);
+    return `${prefix}_${Date.now()}_${randStr}`;
+  }
+
   private static buildId(seed: string): number {
     let hash: number = 0;
     for (let i = 0; i < seed.length; i++) {
@@ -417,6 +422,7 @@ export class SyncService {
     record.duration = Number(course.time.duration) || 1;
     record.validWeeks = course.validWeeks || '';
     record.colorIndex = Number(course.colorIndex) || 0;
+    record.updatedAt = new Date();
     return record;
   }
 
