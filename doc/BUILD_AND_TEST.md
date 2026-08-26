@@ -80,7 +80,7 @@ devecocli check lint                                         # 代码检查 (0 e
       - 点击展开 Mini 浮窗，输入 `这学期几门课`，验证流式 Markdown 排版与打字机效果；
       - 点击 Mini 浮窗顶部「➕」重置会话，验证 Toast 提示与历史会话同步；
       - 进入全屏「AI助手」Tab，验证悬浮球自动避让隐藏；切出后自动恢复。
-    - **多模态提取**：在助手页点击相册选择讲座通知海报，验证 GLM-4V 自动提取时间地点并生成日程卡片。
+    - **多模态提取与截图导入**：在助手页点击相册选择讲座通知海报，验证 GLM-4V 自动提取时间地点并生成日程卡片；在课表管理页 / 成绩页点击「截图导入」，选一张课表或成绩单截图，验证解析结果正确入库、模糊图或非课表图有明确报错。
     - **桌面万能服务卡片 (Widget)**：
       - 在鸿蒙桌面添加 2x2 服务卡片，验证下一节课倒计时、教室地点展示与点击跳转课表；
       - 添加 2x4 服务卡片，验证全天 1-12 节课表排期与「上课中/未开始/已结束」实时状态；
@@ -89,7 +89,7 @@ devecocli check lint                                         # 代码检查 (0 e
 
 ## 后端单独验证与自动化评测 (Automated Eval Harness)
 
-- **`npm run eval`** - **自动化评测套件 (Eval Harness)**：全量跑 33 条评测用例（`test/evals/dataset.ts`），执行确定性规则裁判与 LLM-as-a-Judge 5 维度评分，自动生成 `test/evals/EVAL_REPORT.md`。
+- **`npm run test:eval`** - **自动化评测套件 (Eval Harness)**：全量跑 34 条评测用例（`test/evals/dataset.ts`，当前基线综合通过率 97%），执行确定性规则裁判与 LLM-as-a-Judge 5 维度评分，自动生成 `test/evals/EVAL_REPORT.md`。
 - **`npm run typecheck`** - `tsc --noEmit`，验证 TypeScript 类型系统与 Schema 改动。
 - **`test/phone-sim.mjs`** - 模拟手机端：POST `/api/chat`、解析 SSE（含 `thought` 深度思考流与 `text_chunk`）、收到 `tool_call` 后 POST `/api/tool-result` 回传 mock 数据。覆盖单工具 / 批量流水线 / 非工具 / 断线重连。
 - **`test/test-mimo-latency.ts`** - 大模型推理延迟与 TTFT（首字响应时间）压测基准。

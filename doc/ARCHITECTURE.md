@@ -19,8 +19,8 @@ HarmonyOS（ArkTS，stage model，API 6.0.2/22）端云一体应用。通过 Web
 ```
 pages/          -> UI 页面（@Entry / @Component）
                    ├─ Index.ets (主框架：五 Tab 结构)
-                   ├─ classTablePages/ (课表网格 tableUI, 考试 ExamPage, 导入, 设置 AppSettings, 内嵌网页 WebPage)
-                   ├─ gradePages/ (成绩 GradePage, 导入 GradeImport)
+                   ├─ classTablePages/ (课表网格 tableUI, 考试 ExamPage, 导入与管理 CourseManage 含 GLM-4V 截图导入, 设置 AppSettings, 内嵌网页 WebPage)
+                   ├─ gradePages/ (成绩 GradePage 含 GLM-4V 截图导入, 导入 GradeImport)
                    ├─ schedulePages/ (日历 CalendarPage, 班车时刻表 BusSchedulePage, 新建/编辑日程)
                    ├─ quick/ (发现门户 quickIndex, AI 助手全屏页 AssistantPage)
                    └─ login/ (登录与统一身份认证 loginIndex)
@@ -39,8 +39,8 @@ service/        -> 业务逻辑（auth / scrape / sync / reminder / 各数据服
                    ├─ CourseService.ets / ExamService.ets / GradeService.ets
                    ├─ ScheduleService.ets (日程管理与系统日历双向联动删除)
                    ├─ CalendarKitReminderService.ets (HarmonyOS 系统日历写入、班车/考试去重与事件查询)
-                   ├─ ReminderService.ets (应用内通知代理与日历兜底)
-                   ├─ SyncService.ets (Cloud DB 双向同步)
+                   ├─ ReminderService.ets (应用内通知代理、提醒分类开关/提前量与日历兜底)
+                   ├─ SyncService.ets (Cloud DB 双向同步，云端记录带 updatedAt 支持 LWW 冲突裁决)
                    └─ WebScrapeService.ets (EAMS 教务系统 WebView JS 注入抓取)
 repository/     -> 数据持久化（Preferences 键值存储、Cloud DB、会话仓库）
                    ├─ CourseRepository (多学期归档查询、多学期独立存储与删除)
@@ -57,12 +57,12 @@ common/         -> 共享基础设施
                    ├─ agent/ (统一控制引擎与智能体端侧执行层)
                    │  ├─ BackendAgentClient.ets (SSE 流式长连接、安全请求头注入与事件分发)
                    │  ├─ DataQueryEngine.ets (纯内存多维数据过滤与统一查询引擎)
-                   │  ├─ ToolExecutor.ets (5 大元工具、流水线批处理与日历一致性执行)
+                   │  ├─ ToolExecutor.ets (5 大元工具、流水线批处理、日历一致性执行与校园指南四级降级缓存)
                    │  ├─ ToolRegistry.ets (元数据定义与动态风险判定)
                    │  ├─ FloatingWindowManager.ets (HarmonyOS SubWindow 全局悬浮球与 Mini 浮窗生命周期)
                    │  ├─ PageContextTracker.ets (全局页面活跃状态与数据快照感知中心)
                    │  ├─ UIActionDispatcher.ets (页面 UI 动作与高亮聚光灯指令总线)
-                   │  └─ VisionScheduleHelper.ets (智谱 GLM-4V 视觉海报/通知日程识别)
+                   │  └─ VisionScheduleHelper.ets (智谱 GLM-4V 视觉识别：海报日程提取 + 课表/成绩单截图导入)
                    ├─ speech/ (CoreSpeechKit 原生语音转写 SpeechRecognizerHelper)
                    ├─ constants/AppConstants.ets (所有偏好键 / URL / 魔法数字的唯一来源)
                    └─ utils/ (PermissionHelper, Logger, ThemeManager, DateUtils, BreakpointUtils)

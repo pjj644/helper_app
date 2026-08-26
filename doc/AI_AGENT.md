@@ -192,7 +192,9 @@ sequenceDiagram
 1. **`get_current_page_context`**（Low 风险，免确认）：由 `PageContextTracker` 提供，感知用户当前停留在哪个页面（课表/考试/成绩/首页）及当前页面的数据快照与可用操作。
 2. **`execute_page_action`**（Low 风险，免确认）：由 `UIActionDispatcher` 事件总线驱动，在当前页面直接触发 UI 动作（如切周 `switch_week`、切换 Tab 或展示聚光灯高亮引导 `show_guidance`）。
 3. **`generate_study_plan`**（Low 风险，免确认）：分析用户即将到来的所有考试，根据倒计时剩余天数加权生成考前每日突击复习规划。
-4. **`parse_text_to_schedule`**（Low 风险，免确认）：从讲座、比赛、作业等非结构化通知文本中提取时间、地点并格式化为日程入参。
+4. **`ask_user_clarification`**（Low 风险，免确认）：意图歧义或参数缺失时向用户发起澄清提问，端侧以交互卡片呈现选项并回传选择结果。
+
+> 历史注记：原第 4 项 `parse_text_to_schedule`（非结构化文本提取日程）为空壳实现，已于优化轮 T7 按三处同步铁律全链路移除；相关解析由后端 LLM 内联完成。
 
 ### 4.3 向后兼容工具映射
 
@@ -202,6 +204,7 @@ sequenceDiagram
 - `query_next_exam` / `query_all_exams` ➔ `queryEngine.executeQuery('exam', ...)`
 - `query_grades` / `query_gpa` ➔ `queryEngine.executeQuery('grade', ...)`
 - `create_schedule` / `update_schedule` / `delete_schedule` ➔ `executeDataMutate(...)`
+- `set_reminder_enabled` / `set_remind_minutes` ➔ 提醒分类开关与提前量偏好读写
 - `sync_all_to_cloud` / `download_all_from_cloud` ➔ `executeAppControl(...)`
 
 ---
@@ -271,7 +274,7 @@ sequenceDiagram
 
 - **启动后端**：`cd "C:\Users\28399\Desktop\华为云\后端服务\ai-proxy" && npm run dev`（端口 3000）。后端 `.env`（`DEEPSEEK_API_KEY` 等）已 gitignore，勿提交。
 - **单独模拟联调（不连手机）**：`node test/phone-sim.mjs` + `npm run typecheck`。
-- **自动化评测基准运行**：`cd "C:\Users\28399\Desktop\华为云\后端服务\ai-proxy" && npm run eval`（全量运行 33 条评测集并自动生成 Markdown 报告）。
+- **自动化评测基准运行**：`cd "C:\Users\28399\Desktop\华为云\后端服务\ai-proxy" && npm run test:eval`（全量运行 34 条评测集并自动生成 Markdown 报告）。
 - **真机/模拟器联调**：填电脑 **局域网 LAN IP**（如 `http://192.168.1.11:3000`），不要填 `localhost`。
 - **调试日志前缀**：`[BackendAgentClient]` / `[CalendarKit]` / `[ReminderDebug]` / `[ExamDebug]` / `[HomeDebug]` / `[FloatingWindow]`。
 
@@ -283,7 +286,7 @@ sequenceDiagram
 
 ### 8.1 评测架构与用例分类
 
-评测集定义于 `test/evals/dataset.ts`，涵盖 6 大核心维度共 33+ 条真实业务场景用例：
+评测集定义于 `test/evals/dataset.ts`，涵盖 6 大核心维度共 34 条真实业务场景用例：
 
 ```
                     ┌─────────────────────────────────────────┐
@@ -307,7 +310,7 @@ sequenceDiagram
 | :--- | :--- | :--- |
 | **`COURSE_EXAM_QUERY`** | 今日/明日/指定周课表查询、考试倒计时、GPA/成绩多维筛选 | `Q01_TODAY_COURSES` ~ `Q08_SYSTEM_INFO` |
 | **`RELATIVE_DATE_RESOLVE`**| 绝对日期映射、按教师/教室/星期模糊过滤、学期首日锚定 | `T01_SPECIFIC_DATE_COURSE` ~ `T05_DAY_OF_WEEK` |
-| **`DATA_MUTATE_PIPELINE`** | 自习日程创建（带日历同步）、日程删除、页面路由控制、云同步控制、复合流水线批处理 | `M01_CREATE_SCHEDULE` ~ `M05_APP_PIPELINE` |
+| **`DATA_MUTATE_PIPELINE`** | 自习日程创建（带日历同步）、日程删除、提醒开关设置、页面路由控制、云同步控制、复合流水线批处理 | `M01_CREATE_SCHEDULE` ~ `M06_SET_REMINDER_OFF` |
 | **`CAMPUS_SERVICE_URLS`** | 80+ 校内高频服务直达 URL 零幻觉检验（学生邮箱必须 http、寝室电费引导云中成电、正版软件、WebVPN 等） | `C01_STUDENT_EMAIL` ~ `C08_BBS_RIVER` |
 | **`INJECTION_AND_NEGATIVE`**| 英文/中文 Prompt 越狱注入攻击拦截、无关泛话题非工具误调检验、Emoji 排版合规性检验 | `S01_PROMPT_INJECTION_IGNORE` ~ `S04_EMOJI_POLLUTION_CHECK` |
 | **`EDGE_CASES`** | 悬浮球端侧页面感知（`get_current_page_context`）、校车时刻智搜、考试突击复习规划生成 | `E01_PAGE_CONTEXT_AWARE` ~ `E03_STUDY_PLAN_GEN` |
@@ -322,7 +325,7 @@ sequenceDiagram
 2. **LLM-as-a-Judge 智能裁判 (`evaluateJudgeWithLLM`)**：
    - 采用大模型对最终回答进行 1-5 分打分，综合评估相关性、准确性、逻辑性与可读性。
 3. **最新实测基准大盘 (Baseline vs Ours)**：
-   - **综合通过率 (Pass Rate)**：**87.9%**（对比基线提升 +15.9%）；
+   - **综合通过率 (Pass Rate)**：**97.0%**（优化轮 T8 定向修复后，基线 87.9%）；
    - **官方链接真实度 (URL Exactness)**：**100.0%**（零幻觉）；
    - **单轮 Token 消耗**：动态上下文检索机制优化，节省 76.5% Prompt 冗余；
    - **平均首字延迟 (TTFT)**：实测 3.4s（含深度思考）。
@@ -331,6 +334,6 @@ sequenceDiagram
 
 在后端目录直接运行：
 ```bash
-npm run eval
+npm run test:eval
 ```
-评测完成后将自动在 `test/evals/EVAL_REPORT.md` 生成包含执行概览、分类明细与用例追踪的完整 Markdown 报告。
+评测完成后将自动在 `test/evals/EVAL_REPORT.md` 生成包含执行概览、分类明细与用例追踪的完整 Markdown 报告。回归标准：综合通过率 ≥97% 且无维度回退。

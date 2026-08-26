@@ -1,6 +1,53 @@
 # 变更日志 (CHANGES.md)
 
 记录 UESTC Helper（成电校园助手）的重大演进、功能重构、架构演进与特性落地记录。
+当前执行计划见 [`PHASE2_PLAN.md`](./PHASE2_PLAN.md)；历史阶段计划（Phase 0/1 优化轮）完成后已归档删除，其结果摘要保留于下方条目。
+
+---
+
+## 2026-08: Phase 2 进行中——截图导入、同步增强与遗留清偿
+
+> 执行模型延续 Phase 0/1：主 agent 整合验证提交，子 agent 并行实现。分支 `opt/phase01` / 后端 `opt/phase01-backend`。
+
+- **1. 校园指南 preferences 持久化 last-good 缓存 (`ToolExecutor.ets`, `AppConstants.ets`)**：
+  - 指南降级链路升级为四级：后端实时检索（成功落盘）→ 内存缓存 → **preferences 持久化 last-good** → 内置最小兜底集；
+  - 解决冷启动断网时指南只剩最小集的问题（清偿 Phase 0/1 遗留阻塞项 B-03）。
+- **2. `set_reminder_enabled` 行为修复 (`ReminderService.ets`, `ToolExecutor.ets`, `ToolRegistry.ets` + 后端 `tools.ts`)**：
+  - 端侧真正消费 `enabled` 参数：关闭对应分类提醒开关；`enabled=true` 且 `minutes>0` 时一并更新提前量；
+  - 修复课程提醒提前分钟数存储键误指开关键的存量 bug；后端 schema 与端侧行为对齐（清偿 B-05）；
+  - eval 数据集新增 `M06_SET_REMINDER_OFF` 用例覆盖「关闭课程提醒」意图。
+- **3. 日志降噪与 Date 卫生 (`CountdownCard.ets`, `CalendarKitReminderService.ets`, `ScheduleService.ets`)**：
+  - 移除生产卡片渲染路径的 `[CountdownDebug]` 刷屏日志；共享 Date 实例原地改写改为显式新构造。
+- **4. 课表/成绩单截图一键导入（GLM-4V 视觉多模态）(`VisionScheduleHelper.ets`, `CourseManage.ets`, `GradePage.ets` + 后端 `vision.ts`, `index.ts`)**：
+  - 后端 `POST /api/vision/parse-schedule` 支持 `mode: schedule | course_table | grade_report` 三种识别模式与专用 System Prompt；
+  - 课表管理页与成绩页新增「截图导入」入口：选图 → GLM-4V 解析 → 结构化转换 → 自动入库刷新；
+  - 真图实测：课表格 20 门/置信度 0.95，微信截屏 7 门全部识别。遗留优化：入库前预览确认 UI（见 PHASE2_PLAN）。
+- **5. 云同步增强（部分完成）(`SyncService.ets`, `AppSettings.ets`)**：
+  - 设置页「自动同步」开关绑定既有常量真正生效并持久化；
+  - 云端实体映射注入 `updatedAt` 时间戳，为 LWW 冲突裁决提供时序依据；新增带随机熵的 `generateUniqueId`；
+  - 未竟事项（自动上传队列、下载合并 LWW、id-generator 云函数接入、范围扩展至日程与会话）移交新一轮计划。
+
+---
+
+## 2026-08: Phase 0 + Phase 1 优化轮完成（安全修复 + 质量债清偿）
+
+> 完整任务书见当时版本历史（原 `doc/OPTIMIZATION_PLAN.md`，v1.3，已完成归档）。评测基线 87.9% → **97.0%**，U2 模拟器冒烟 7/7 通过。
+
+**Phase 0 —— 安全与正确性（T1–T4）**：
+- 密钥与端点治理：消灭硬编码代理地址/密钥，新增 `AgentEndpointConfig.ets` 统一从设置页解析，未配置出引导卡片与「测试连接」（T1）；
+- 工具风险评级 fail-closed：未注册工具一律最高风险需确认，16 个别名工具补齐注册表，导出 `LEGACY_TOOL_NAMES` 防漂移（T2）；
+- SSE 可靠性：首包 watchdog 45s、连接失败指数退避重试、中断态「重新发送」按钮、缺 final 帧警告、tool-result 回传本地重试（T3）;
+- 页面跳转失败如实回报模型而非假成功（T4）。
+
+**Phase 1 —— 质量债与维护性（T5–T10）**：
+- 学期参数云端化：`GET /api/v1/config/app-config` 下发学期锚点，端侧纯 TS `SemesterConfig` 注入式换算 + last-good 缓存兜底（T5）；
+- 校园数据单一来源化：班车时刻与校园指南改由 `/api/v1/knowledge/*` 端点下发，前端删硬编码副本留最小内置兜底（T6）；
+- 移除空壳工具 `parse_text_to_schedule` 三处同步全链路清理（T7）；
+- 评测定向修复：prompt few-shot 强化路由与参数抽取，综合通过率 87.9% → 97.0%，EDGE_CASES 66.7% → 100%（T8）；
+- 性能与整洁：首页秒级 setInterval 改指纹门控节拍、提醒批量预载、模板死代码清理净删 475 行（T9）；
+- 桌面卡片事件驱动即时推送刷新 + T10b 调研结论：API 22 卡片秒级倒计时不可行（updateDuration 最小 30 分钟粒度），Live View Kit 为替代通道但需资质申请（T10）。
+
+**U2 冒烟回归修复**：悬浮球浮窗高危操作零确认短路 + 后端未知工具 meta fail-open 两处补为 fail-closed（真弹窗）；`ask_user_clarification` 补端侧实现与注册表登记及交互澄清卡片。
 
 ---
 
