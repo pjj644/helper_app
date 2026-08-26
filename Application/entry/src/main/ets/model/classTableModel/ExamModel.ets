@@ -12,6 +12,40 @@ export interface ExamItem {
   semesterLabel: string;
   beginTime: number;
   endTime: number;
+  // P2-7b：本地最后变更时间（epoch ms），由 ExamRepository 集中盖章维护；缺失/0 表示未知（旧数据）
+  updatedAt?: number;
+}
+
+// ==================== 条目级 LWW / 盖章共用工具（P2-7b，纯 TS） ====================
+
+/**
+ * 考试业务键。任务口径为 (courseNo, examDate, examTimeRange, examType)；
+ * 额外并入 normalizedSemesterId：云端记录 ID 的确定性哈希含学期维度，
+ * 不同学期可能出现同 (courseNo+日期+时段+类型) 的两场考试，不并学期会互相误覆盖。
+ */
+export function getExamBizKey(
+  semesterId: number,
+  courseNo: string,
+  examDate: string,
+  examTimeRange: string,
+  examType: string
+): string {
+  return `${semesterId}|${courseNo}|${examDate}|${examTimeRange}|${examType}`;
+}
+
+/**
+ * 考试内容比较键：与 SyncService.examChanged 的比较维度对齐
+ * （examDate/examTimeRange 属业务键维度不重复参与；courseName/remark 虽不在
+ * examChanged 中，但属于用户可见内容，变化也应触发盖章/LWW）。
+ */
+export function getExamContentKey(
+  courseName: string,
+  examLocation: string,
+  seatNo: string,
+  examStatus: string,
+  remark: string
+): string {
+  return [courseName, examLocation, seatNo, examStatus, remark].join('#@#');
 }
 
 export function createEmptyExam(): ExamItem {

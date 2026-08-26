@@ -35,6 +35,8 @@ export class AppConstants {
   static readonly SETTING_CLOUD_SYNC_CELLULAR_KEY: string = 'setting_cloud_sync_cellular';
   /** 云端自动同步运行状态 JSON（lastSuccessAtMs/pending/attempts/nextAttemptAtMs，见 SyncService） */
   static readonly CLOUD_AUTO_SYNC_STATE_JSON_KEY: string = 'cloud_auto_sync_state_json';
+  /** 云同步条目级 LWW 冲突裁决日志 JSON（最新在前，上限 50 条，见 SyncService.loadConflictLog/appendConflictLog） */
+  static readonly CLOUD_SYNC_CONFLICT_LOG_JSON_KEY: string = 'cloud_sync_conflict_log_json';
   static readonly SETTING_SCHEDULE_REMIND_MINUTES_EXAM_KEY: string = 'setting_schedule_remind_minutes_exam';
   static readonly SETTING_SCHEDULE_REMIND_MINUTES_COURSE_KEY: string = 'setting_schedule_remind_minutes_course';
   static readonly SETTING_SCHEDULE_REMIND_MINUTES_CUSTOM_KEY: string = 'setting_schedule_remind_minutes_custom';

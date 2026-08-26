@@ -12,7 +12,7 @@ import { PreferencesUtil } from '../../common/PreferencesUtil';
 import { AnimatedCard } from '../../components/AnimatedComponents';
 import { DisplaySettings } from '../../model/classTableModel/CourseTableStorage';
 import { CourseTableStorage } from '../../model/classTableModel/CourseTableStorage';
-import { SyncService } from '../../service/SyncService';
+import { SyncService, CloudSyncConflictEntry } from '../../service/SyncService';
 import { AuthService } from '../../service/AuthService';
 import { AppConstants, RouterConstants } from '../../common/constants/AppConstants';
 import { ReminderService } from '../../service/ReminderService';
@@ -40,6 +40,10 @@ struct AppSettings {
   @State loginEmail: string = '';
   @State syncingToCloud: boolean = false;
   @State downloadingFromCloud: boolean = false;
+  // P2-7b：数据同步卡片内的「同步状态」折叠区
+  @State syncStatusExpanded: boolean = false;
+  @State lastAutoSyncSuccessText: string = '';
+  @State conflictPreview: CloudSyncConflictEntry[] = [];
 
   @State immersiveEnabled: boolean = true;
   @State darkModeType: DarkModeType = DarkModeType.FOLLOW_SYSTEM;
@@ -302,6 +306,7 @@ struct AppSettings {
           message: `云端同步完成：课表${courseCount}条，考试${examCount}条`
         });
         ReminderService.refreshAllReminders(getContext(this));
+        this.refreshSyncStatus();
       } else {
         const errorMsg: string = result.courses.error || result.exams.error || '未知错误';
         this.getUIContext().getPromptAction().showToast({ message: `云端同步失败: ${errorMsg}` });
@@ -313,13 +318,17 @@ struct AppSettings {
     }
   }
 
+  /**
+   * 手动「从云端合并」（P2-7b）：下载行为为条目级 LWW 合并而非整包覆盖，
+   * 双端都有且内容不同的条目按 updatedAt 裁决并记入冲突日志。
+   */
   private async downloadFromCloud(): Promise<void> {
     if (this.downloadingFromCloud) { return; }
     this.downloadingFromCloud = true;
     try {
       const userId: string | undefined = await AuthService.getLoginUserId(getContext(this));
       if (!userId) {
-        this.getUIContext().getPromptAction().showToast({ message: '请先登录后再下载' });
+        this.getUIContext().getPromptAction().showToast({ message: '请先登录后再合并' });
         return;
       }
       const result = await SyncService.downloadAllFromCloud(getContext(this), userId);
@@ -327,18 +336,39 @@ struct AppSettings {
         const courseCount: number = result.courses.courseCount || 0;
         const examCount: number = result.exams.examCount || 0;
         this.getUIContext().getPromptAction().showToast({
-          message: `云端下载完成：课表${courseCount}条，考试${examCount}条`
+          message: `云端合并完成：课表${courseCount}条，考试${examCount}条`
         });
         ReminderService.refreshAllReminders(getContext(this));
+        this.refreshSyncStatus();
       } else {
         const errorMsg: string = result.courses.error || result.exams.error || '未知错误';
-        this.getUIContext().getPromptAction().showToast({ message: `云端下载失败: ${errorMsg}` });
+        this.getUIContext().getPromptAction().showToast({ message: `云端合并失败: ${errorMsg}` });
       }
     } catch (error) {
-      this.getUIContext().getPromptAction().showToast({ message: `云端下载失败: ${String(error)}` });
+      this.getUIContext().getPromptAction().showToast({ message: `云端合并失败: ${String(error)}` });
     } finally {
       this.downloadingFromCloud = false;
     }
+  }
+
+  /** 刷新「同步状态」折叠区数据：上次自动同步成功时间 + 最近冲突裁决记录（≤5 条） */
+  private async refreshSyncStatus(): Promise<void> {
+    try {
+      const context = getContext(this);
+      const state = await SyncService.loadCloudAutoSyncState(context);
+      this.lastAutoSyncSuccessText =
+        state.lastSuccessAtMs > 0 ? AppSettings.formatTimeMs(state.lastSuccessAtMs) : '从未成功';
+      const logs = await SyncService.loadConflictLog(context);
+      this.conflictPreview = logs.slice(0, 5);
+    } catch (error) {
+      console.error(`[AppSettings] 加载同步状态失败: ${JSON.stringify(error)}`);
+    }
+  }
+
+  private static formatTimeMs(ms: number): string {
+    const d = new Date(ms);
+    const pad = (value: number): string => (value < 10 ? `0${value}` : `${value}`);
+    return `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())} ${pad(d.getHours())}:${pad(d.getMinutes())}`;
   }
 
   private async selectBackgroundImage(): Promise<void> {
@@ -443,7 +473,7 @@ struct AppSettings {
 
       LoadingOverlay({
         isVisible: this.syncingToCloud || this.downloadingFromCloud,
-        message: this.syncingToCloud ? '正在上传到云端...' : '正在从云端下载...'
+        message: this.syncingToCloud ? '正在上传到云端...' : '正在从云端合并...'
       });
     }
     .width('100%')
@@ -638,7 +668,7 @@ struct AppSettings {
         .onClick(() => this.syncLocalDataToCloud())
 
         Button() {
-          Text(this.downloadingFromCloud ? '下载中...' : '从云端下载')
+          Text(this.downloadingFromCloud ? '合并中...' : '从云端合并')
             .fontSize(14)
             .fontColor('#FFFFFF')
         }
@@ -650,6 +680,100 @@ struct AppSettings {
         .onClick(() => this.downloadFromCloud())
       }
       .width('100%')
+
+      // ==================== 同步状态折叠区（P2-7b） ====================
+      Divider().color($r('app.color.divider_color')).margin({ top: 16, bottom: 4 })
+
+      Row() {
+        Column({ space: 4 }) {
+          Text('同步状态')
+            .fontSize(15)
+            .fontColor($r('app.color.text_primary'))
+          Text('上次自动同步时间与最近冲突裁决记录')
+            .fontSize(12)
+            .fontColor($r('app.color.text_tertiary'))
+        }
+        .alignItems(HorizontalAlign.Start)
+        .layoutWeight(1)
+
+        Text(this.syncStatusExpanded ? '收起' : '展开 >')
+          .fontSize(13)
+          .fontColor($r('app.color.primary_color'))
+      }
+      .width('100%')
+      .padding({ top: 8, bottom: 8 })
+      .onClick(() => {
+        this.syncStatusExpanded = !this.syncStatusExpanded;
+        if (this.syncStatusExpanded) {
+          this.refreshSyncStatus();
+        }
+      })
+
+      if (this.syncStatusExpanded) {
+        Column({ space: 10 }) {
+          Row() {
+            Text('上次自动同步成功')
+              .fontSize(13)
+              .fontColor($r('app.color.text_secondary'))
+              .layoutWeight(1)
+
+            Text(this.lastAutoSyncSuccessText)
+              .fontSize(13)
+              .fontColor($r('app.color.primary_color'))
+              .fontWeight(FontWeight.Medium)
+          }
+          .width('100%')
+
+          Divider().color($r('app.color.divider_color'))
+
+          if (this.conflictPreview.length === 0) {
+            Text('暂无同步冲突')
+              .fontSize(13)
+              .fontColor($r('app.color.text_tertiary'))
+              .width('100%')
+              .textAlign(TextAlign.Center)
+              .padding({ top: 6, bottom: 6 })
+          } else {
+            ForEach(this.conflictPreview, (entry: CloudSyncConflictEntry) => {
+              Column({ space: 2 }) {
+                Row({ space: 8 }) {
+                  Text(entry.entity === 'exam' ? '考试' : '课程')
+                    .fontSize(12)
+                    .fontColor($r('app.color.primary_color'))
+                    .backgroundColor($r('app.color.primary_light_color'))
+                    .borderRadius(6)
+                    .padding({ left: 6, right: 6, top: 2, bottom: 2 })
+
+                  Text(AppSettings.formatTimeMs(entry.timeMs))
+                    .fontSize(12)
+                    .fontColor($r('app.color.text_secondary'))
+
+                  Blank()
+                  Text(entry.winner === 'cloud' ? '云端胜' : '本地胜')
+                    .fontSize(12)
+                    .fontWeight(FontWeight.Medium)
+                    .fontColor(entry.winner === 'cloud'
+                      ? $r('app.color.danger_color')
+                      : $r('app.color.success_color'))
+                }
+                .width('100%')
+
+                Text(`${entry.bizKey}（${entry.reason}）`)
+                  .fontSize(11)
+                  .fontColor($r('app.color.text_tertiary'))
+                  .maxLines(1)
+                  .textOverflow({ overflow: TextOverflow.Ellipsis })
+                  .width('100%')
+              }
+              .alignItems(HorizontalAlign.Start)
+              .width('100%')
+              .padding({ top: 4, bottom: 4 })
+            }, (entry: CloudSyncConflictEntry) => `${entry.timeMs}_${entry.entity}_${entry.bizKey}`)
+          }
+        }
+        .width('100%')
+        .padding({ top: 4, bottom: 8 })
+      }
     }
     .width('100%')
     .padding(16)

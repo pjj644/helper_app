@@ -10,6 +10,8 @@ import {
 } from '../SemesterConfig';
 
 // 原始活动数据接口（从教务系统获取的原始格式）
+// updatedAt（epoch ms）为 P2-7b 新增的可选字段：由 repository 集中盖章维护，
+// 随 JSON 持久化，供云同步上传映射与条目级 LWW 合并使用；0 表示未知（旧数据）。
 export interface RawActivity {
   teacherId: string;
   teacherName: string;
@@ -18,6 +20,7 @@ export interface RawActivity {
   roomId: string;
   roomName: string;
   vaildWeeks: string;
+  updatedAt?: number;
 }
 
 // 原始课表数据接口
@@ -42,6 +45,31 @@ export interface Course {
   time: CourseTime;       // 课程时间
   validWeeks: string;     // 有效周次字符串
   colorIndex: number;     // 颜色索引，用于UI显示
+  updatedAt?: number;     // 本地最后变更时间（epoch ms），由 repository 集中盖章维护；缺失/0 表示未知
+}
+
+// ==================== 条目级 LWW / 盖章共用工具（P2-7b，纯 TS） ====================
+
+/**
+ * 课程业务键（槽位级）：同一学期文件内唯一定位一个课程条目。
+ * 学期维度由「按学期分片存储」天然隔离，不进键。
+ */
+export function getCourseBizKey(courseId: string, dayOfWeek: number, startSection: number): string {
+  return `${courseId}|${dayOfWeek}|${startSection}`;
+}
+
+/**
+ * 课程内容比较键：拼接参与内容比较的字段（与 SyncService.courseChanged 的比较维度对齐；
+ * dayOfWeek/startSection 属于业务键维度、duration 在本地以槽位展开存储不可比，故均不参与）。
+ * 任一字段变化即视为内容变化 → 盖章/LWW 裁决生效。
+ */
+export function getCourseContentKey(
+  courseName: string,
+  teacherName: string,
+  roomName: string,
+  validWeeks: string
+): string {
+  return [courseName, teacherName, roomName, validWeeks].join('#@#');
 }
 
 // 时间段信息接口
