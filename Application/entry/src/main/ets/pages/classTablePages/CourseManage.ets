@@ -4,6 +4,7 @@ import { CourseService } from '../../service/CourseService';
 import { CourseRepository } from '../../repository/CourseRepository';
 import { ThemeManager } from '../../common/utils/ThemeManager';
 import { getSemesterOptions, SemesterOptionSet, getSemesterLabelById, calculateSemesterId } from '../../model/classTableModel/ExamAccessRules';
+import { VisionScheduleHelper, VisionCourseTableResult, VisionCourseItem } from '../../common/agent/VisionScheduleHelper';
 
 @Entry
 @Component
@@ -23,6 +24,8 @@ struct CourseManage {
   @State formStartSection: number = 1;
   @State formDuration: number = 2;
   @State formWeeks: string = '1-20';
+
+  @State isImportingVision: boolean = false;
 
   aboutToAppear(): void {
     this.initSemesterOptions();
@@ -54,6 +57,64 @@ struct CourseManage {
     } catch (error) {
       console.error('[CourseManage] 加载本地课程失败:', error);
       this.courses = [];
+    }
+  }
+
+  private async importFromScreenshot(): Promise<void> {
+    if (this.isImportingVision) {
+      return;
+    }
+    try {
+      const uri = await VisionScheduleHelper.pickImage();
+      if (!uri) {
+        return;
+      }
+      this.isImportingVision = true;
+      this.getUIContext().getPromptAction().showToast({ message: '正在通过 AI 识别课表截图...' });
+
+      const base64 = await VisionScheduleHelper.convertUriToBase64(uri);
+      if (!base64) {
+        this.getUIContext().getPromptAction().showToast({ message: '读取图片失败' });
+        this.isImportingVision = false;
+        return;
+      }
+
+      const result: VisionCourseTableResult | null = await VisionScheduleHelper.parseCourseTableFromImage(getContext(this), base64);
+      if (!result || !result.courses || result.courses.length === 0) {
+        this.getUIContext().getPromptAction().showToast({ message: '未能识别出课表，请确保图片清晰' });
+        this.isImportingVision = false;
+        return;
+      }
+
+      const newCourses: Course[] = [];
+      for (let i = 0; i < result.courses.length; i++) {
+        const vc: VisionCourseItem = result.courses[i];
+        const courseId = `vision_${Date.now()}_${i}`;
+        const course: Course = {
+          id: courseId,
+          name: vc.name || '未命名课程',
+          teacherName: vc.teacher || '',
+          roomName: vc.room || '',
+          time: {
+            dayOfWeek: (vc.dayOfWeek >= 1 && vc.dayOfWeek <= 7) ? vc.dayOfWeek : 1,
+            startSection: (vc.startSection >= 1 && vc.startSection <= 12) ? vc.startSection : 1,
+            duration: (vc.duration >= 1 && vc.duration <= 5) ? vc.duration : 2
+          },
+          validWeeks: this.buildValidWeeksFromText(vc.validWeeks || '1-16'),
+          colorIndex: (this.courses.length + i) % 8
+        };
+        newCourses.push(course);
+      }
+
+      const merged = [...this.courses, ...newCourses];
+      await CourseService.saveCoursesForSemester(getContext(this), this.selectedSemesterId, merged);
+      await this.loadCourseList();
+      this.getUIContext().getPromptAction().showToast({ message: `成功识别并导入 ${newCourses.length} 门课程` });
+    } catch (e) {
+      console.error('[CourseManage] 截图识别导入失败:', JSON.stringify(e));
+      this.getUIContext().getPromptAction().showToast({ message: '截图识别导入失败' });
+    } finally {
+      this.isImportingVision = false;
     }
   }
 
@@ -326,6 +387,9 @@ struct CourseManage {
           })
           .layoutWeight(1);
 
+        Button(this.isImportingVision ? '识别中...' : '截图导入')
+          .enabled(!this.isImportingVision)
+          .onClick(() => this.importFromScreenshot());
         Button('新增课程')
           .onClick(() => this.openAddEditor());
         Button('刷新')

@@ -6,6 +6,7 @@ import { ThemeManager } from '../../common/utils/ThemeManager';
 import { EmptyState } from '../../components/EmptyState';
 import { PageContextTracker } from '../../common/agent/PageContextTracker';
 import { UIActionDispatcher } from '../../common/agent/UIActionDispatcher';
+import { VisionScheduleHelper, VisionGradeReportResult, VisionGradeItem } from '../../common/agent/VisionScheduleHelper';
 
 @Entry
 @Component
@@ -67,6 +68,8 @@ struct GradePage {
     return this.semesterOptions[this.selectedSemesterIndex]?.semesterId || 0;
   }
 
+  @State isImportingVision: boolean = false;
+
   private openGradeImport(): void {
     const currentSemId: number = this.getSelectedSemesterId();
     const targetSemId: number = currentSemId > 0 ? currentSemId : getPreviousSemesterId();
@@ -74,6 +77,65 @@ struct GradePage {
       url: 'pages/gradePages/GradeImport',
       params: { semesterId: targetSemId }
     });
+  }
+
+  private async importGradesFromScreenshot(): Promise<void> {
+    if (this.isImportingVision) {
+      return;
+    }
+    try {
+      const uri = await VisionScheduleHelper.pickImage();
+      if (!uri) {
+        return;
+      }
+      this.isImportingVision = true;
+      this.getUIContext().getPromptAction().showToast({ message: '正在通过 AI 识别成绩单截图...' });
+
+      const base64 = await VisionScheduleHelper.convertUriToBase64(uri);
+      if (!base64) {
+        this.getUIContext().getPromptAction().showToast({ message: '读取图片失败' });
+        this.isImportingVision = false;
+        return;
+      }
+
+      const result: VisionGradeReportResult | null = await VisionScheduleHelper.parseGradeReportFromImage(getContext(this), base64);
+      if (!result || !result.grades || result.grades.length === 0) {
+        this.getUIContext().getPromptAction().showToast({ message: '未能识别出成绩数据，请确保图片清晰' });
+        this.isImportingVision = false;
+        return;
+      }
+
+      const currentSemId = this.getSelectedSemesterId() > 0 ? this.getSelectedSemesterId() : getPreviousSemesterId();
+      const newGrades: GradeItem[] = [];
+      for (let i = 0; i < result.grades.length; i++) {
+        const vg: VisionGradeItem = result.grades[i];
+        const item: GradeItem = {
+          academicYear: vg.semester || '2025-2026-1',
+          courseCode: vg.courseCode || `VIS_${Date.now()}_${i + 1}`,
+          courseSeq: '01',
+          courseName: vg.courseName || '未知课程',
+          courseCategory: vg.courseCategory || '必修',
+          credit: Number(vg.credit) || 0,
+          finalExamScore: String(vg.score || ''),
+          totalScore: String(vg.score || ''),
+          makeupScore: '',
+          finalScore: String(vg.score || ''),
+          gradePoint: Number(vg.gradePoint) || 0,
+          semesterId: currentSemId
+        };
+        newGrades.push(item);
+      }
+
+      const merged = GradeService.mergeGrades(this.grades, newGrades);
+      await GradeService.saveGrades(getContext(this), merged);
+      await this.loadGrades();
+      this.getUIContext().getPromptAction().showToast({ message: `成功识别并导入 ${newGrades.length} 门课程成绩` });
+    } catch (e) {
+      console.error('[GradePage] 截图识别成绩失败:', JSON.stringify(e));
+      this.getUIContext().getPromptAction().showToast({ message: '截图识别成绩失败' });
+    } finally {
+      this.isImportingVision = false;
+    }
   }
 
   private applyFilter(): void {
@@ -127,6 +189,20 @@ struct GradePage {
           .margin({ left: 4 })
 
         Blank();
+
+        Button(this.isImportingVision ? '识别中...' : '截图导入')
+          .fontSize(13)
+          .fontWeight(FontWeight.Medium)
+          .fontColor(ThemeManager.getAccentColor())
+          .backgroundColor(ThemeManager.getAccentBgColor())
+          .borderRadius(16)
+          .height(32)
+          .padding({ left: 12, right: 12 })
+          .margin({ right: 8 })
+          .enabled(!this.isImportingVision)
+          .onClick(() => {
+            this.importGradesFromScreenshot();
+          });
 
         Button('在线导入')
           .fontSize(13)
