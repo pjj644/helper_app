@@ -125,8 +125,7 @@ export class ScheduleService {
       const monday: Date = ScheduleService.getMonday(new Date());
       for (let i = 0; i < courses.length; i++) {
         const c: Course = courses[i];
-        const targetDate: Date = new Date(monday);
-        targetDate.setDate(monday.getDate() + c.time.dayOfWeek - 1);
+        const targetDate: Date = new Date(monday.getTime() + (c.time.dayOfWeek - 1) * 24 * 60 * 60 * 1000);
         const endSection: number = c.time.startSection + c.time.duration - 1;
         const startTime: string = SECTION_TIMES[c.time.startSection - 1]?.startTime || '8:30';
         const endTime: string = SECTION_TIMES[endSection - 1]?.endTime || '9:15';

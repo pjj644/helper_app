@@ -400,9 +400,9 @@ export class CalendarKitReminderService {
       const startHour = timeParts[0] || 0;
       const startMinute = timeParts[1] || 0;
 
-      const startDate = new Date(now.getFullYear(), now.getMonth(), now.getDate(), startHour, startMinute);
+      let startDate = new Date(now.getFullYear(), now.getMonth(), now.getDate(), startHour, startMinute);
       if (!targetDate && startDate.getTime() < Date.now() - 10 * 60 * 1000) {
-        startDate.setDate(startDate.getDate() + 1);
+        startDate = new Date(now.getFullYear(), now.getMonth(), now.getDate() + 1, startHour, startMinute);
       }
 
       const endDate = new Date(startDate.getTime() + 45 * 60 * 1000);

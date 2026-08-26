@@ -16,19 +16,13 @@ export struct CountdownCard {
 
   aboutToAppear(): void {
     this.parts = DateUtils.getCountdownParts(Date.now(), this.beginTime);
-    console.info(`[CountdownDebug] aboutToAppear: beginTime=${this.beginTime} examDate="${this.examDate}" days=${this.parts.days} h=${this.parts.hours} m=${this.parts.minutes} s=${this.parts.seconds}`);
     this.timer = setInterval(() => {
       const now = Date.now();
       this.parts = DateUtils.getCountdownParts(now, this.beginTime);
-      if (this.parts.totalSeconds % 5 === 0) {
-        console.info(`[CountdownDebug] tick: remaining=${this.parts.totalSeconds}s d=${this.parts.days} h=${this.parts.hours} m=${this.parts.minutes} s=${this.parts.seconds}`);
-      }
     }, 1000);
-    console.info(`[CountdownDebug] timer started: id=${this.timer}`);
   }
 
   aboutToDisappear(): void {
-    console.info(`[CountdownDebug] aboutToDisappear: timer=${this.timer}`);
     if (this.timer >= 0) {
       clearInterval(this.timer);
       this.timer = -1;
