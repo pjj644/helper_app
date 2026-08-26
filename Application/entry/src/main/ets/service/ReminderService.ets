@@ -332,7 +332,7 @@ export class ReminderService {
       case 'exam':
         return AppConstants.SETTING_SCHEDULE_REMIND_MINUTES_EXAM_KEY;
       case 'course':
-        return AppConstants.SETTING_SCHEDULE_REMINDER_COURSE_KEY;
+        return AppConstants.SETTING_SCHEDULE_REMIND_MINUTES_COURSE_KEY;
       case 'custom':
         return AppConstants.SETTING_SCHEDULE_REMIND_MINUTES_CUSTOM_KEY;
       case 'assignment':

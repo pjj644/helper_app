@@ -497,11 +497,31 @@ export class ToolExecutor {
       }
     } else if (domain === 'reminder_setting') {
       const typeStr: string = this.getStringArg(payload, 'type')
+      if (typeStr.length === 0) {
+        return { success: false, data: '更新提醒配置失败：缺少必要参数 type' }
+      }
+      const categoryType = typeStr as ScheduleEventType
+      const hasEnabled: boolean = payload['enabled'] !== undefined
+      const enabled: boolean = hasEnabled ? this.getBooleanArg(payload, 'enabled', true) : true
+      const hasMinutes: boolean = payload['minutes'] !== undefined
       const minutes: number = this.getNumberArg(payload, 'minutes', 0)
 
-      if (typeStr.length > 0 && minutes > 0) {
-        await ReminderService.saveCategoryRemindMinutes(this.context, typeStr as ScheduleEventType, minutes)
-        return { success: true, data: JSON.stringify({ message: `提醒时间已更新: ${typeStr} 提前 ${minutes} 分钟` }) }
+      if (hasEnabled) {
+        await ReminderService.saveCategoryReminderEnabled(this.context, categoryType, enabled)
+      }
+      if (enabled && hasMinutes && minutes > 0) {
+        await ReminderService.saveCategoryRemindMinutes(this.context, categoryType, minutes)
+      }
+
+      const statusDesc: string = enabled ? `已开启${minutes > 0 ? `（提前 ${minutes} 分钟）` : ''}` : '已关闭'
+      return {
+        success: true,
+        data: JSON.stringify({
+          message: `提醒配置已更新: ${typeStr} 提醒${statusDesc}`,
+          type: typeStr,
+          enabled: enabled,
+          minutes: (enabled && minutes > 0) ? minutes : undefined
+        })
       }
     }
 

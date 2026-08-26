@@ -365,12 +365,13 @@ export class ToolRegistry {
       },
       {
         name: 'set_reminder_enabled',
-        description: '更新指定类型日程的提醒配置',
+        description: '更新指定类型日程的提醒开关与提前提醒时长',
         parameters: {
-          'type': { type: 'string', description: '日程类型：custom/exam/assignment 等' },
-          'minutes': { type: 'number', description: '提前提醒分钟数' }
+          'type': { type: 'string', description: '日程类型：course/exam/custom/assignment' },
+          'enabled': { type: 'boolean', description: '是否开启该类日程提醒（默认 true）' },
+          'minutes': { type: 'number', description: '提前提醒分钟数（可选）' }
         },
-        required: [],
+        required: ['type'],
         requiresConfirmation: true,
         riskLevel: 'medium'
       },
