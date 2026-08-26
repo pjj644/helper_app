@@ -21,7 +21,9 @@ const SESSION_PAYLOAD_MAX_BYTES: number = 1536 * 1024;
  *
  * - 开关偏好键 SETTING_SESSION_CLOUD_SYNC_KEY（默认关闭），读写自包含在本服务内；
  * - 触发源：ChatSessionRepository.saveSessions 落盘成功后的防抖钩子 + 开关打开时刻的立即触发；
- * - 每轮执行：重校验登录态 → WiFi/蜂窝网络门控（复用课程同步的判定）→ 上传（幂等 upsert +
+ * - 初次拉取保护：开关打开时刻若本地为空且云端有数据（重装/换机场景），首轮只做下载恢复、
+ *   跳过上传与裁剪——否则空本地会把云端全部记录当作「已在别端删除」传播清空（2026-08-26 实测踩坑）；
+ * - 每轮执行：重校验登录态 → 网络门控（复用课程同步的 WiFi/以太网/蜂窝判定）→ 上传（幂等 upsert +
  *   删除云端多余记录）→ 下载解密 LWW 合并回写（经不触发钩子的内部通道，防回环）；
  * - 所有云端操作失败软降：try-catch + 日志，不崩溃、不阻塞本地功能
  *   （对象类型尚未在 AGC 控制台创建时同样只记日志）。
@@ -29,6 +31,8 @@ const SESSION_PAYLOAD_MAX_BYTES: number = 1536 * 1024;
 export class SessionSyncService {
   private static debounceTimer: number = -1;
   private static syncing: boolean = false;
+  /** 开关打开时刻置位：紧随其后的一轮按「初次拉取」处理（本地为空时只恢复不裁剪） */
+  private static pendingInitialPull: boolean = false;
   /** 登录态沿袭标记：从已登录变为未登录时清理密钥缓存 */
   private static lastSeenLoggedIn: boolean = false;
 
@@ -58,7 +62,9 @@ export class SessionSyncService {
       SessionSyncService.cancelPendingDebounce();
       return;
     }
-    // 开关打开的那一刻立即触发一轮（不走 15s 防抖）
+    // 开关打开的那一刻立即触发一轮（不走 15s 防抖），并标记为初次拉取：
+    // 本地可能为空（重装/换机），首轮需保护云端数据不被裁剪清空
+    SessionSyncService.pendingInitialPull = true;
     SessionSyncService.scheduleRun(context, 0);
   }
 
@@ -133,7 +139,23 @@ export class SessionSyncService {
         await SyncService.initCloudDB();
       }
 
+      const isInitialPull = SessionSyncService.pendingInitialPull;
+      SessionSyncService.pendingInitialPull = false;
+
       const sessions = ChatSessionRepository.getSessions(context);
+
+      // 初次拉取保护：开关刚打开且本地为空（重装/换机），只做下载恢复，跳过上传与裁剪
+      if (isInitialPull && sessions.length === 0) {
+        const cloudRecords = await SessionSyncService.queryAllByUser(userId);
+        if (cloudRecords.length > 0) {
+          await SessionSyncService.downloadMerge(context, userId, cloudRecords, new Set<string>());
+          console.info(`[SessionSync] 初次拉取完成：从云端恢复 ${cloudRecords.length} 条会话，已跳过上传与裁剪`);
+        } else {
+          console.info('[SessionSync] 初次拉取：云端无历史会话');
+        }
+        return;
+      }
+
       await SessionSyncService.uploadLocalSessions(userId, sessions);
 
       // 查询云端该用户全部记录，删除与下载合并复用同一份查询结果
@@ -145,7 +167,14 @@ export class SessionSyncService {
           localIds.add(s.id);
         }
       }
-      const removedIds = await SessionSyncService.pruneCloudStale(cloudRecords, localIds);
+      // 如果是初次拉取但本地非空（例如本地已有新会话），也不裁剪云端旧会话，直接双向合并
+      let removedIds: Set<string>;
+      if (isInitialPull) {
+        removedIds = new Set<string>();
+        console.info('[SessionSync] 初次拉取（本地非空）：跳过云端裁剪，执行双向合并');
+      } else {
+        removedIds = await SessionSyncService.pruneCloudStale(cloudRecords, localIds);
+      }
       await SessionSyncService.downloadMerge(context, userId, cloudRecords, removedIds);
       console.info('[SessionSync] 双向同步完成');
     } catch (e) {
