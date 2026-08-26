@@ -5,6 +5,28 @@
 
 ---
 
+## 2026-08: Phase 2 完成——云同步全量落地、会话加密上云与导入预览
+
+> 承接上一条目「Phase 2 进行中」；本轮在 `opt/phase02` 分支推进（自 `opt/phase01` 切出）。范围裁定：晨报卡片 / 实况窗 / 小艺意图均移出本轮（小艺调研归档 [`RESEARCH_XIAOYI.md`](./RESEARCH_XIAOYI.md)）。
+
+- **1. 云端自动同步（P2-7a, `SyncService.ets`, `ReminderService.ets`, `AppSettings.ets`, `tableUI.ets` 等）**：
+  - 课程/考试落盘后 debounce 30s 静默上传，频率上限 5 分钟/轮；失败指数退避（30s×2^n，上限 30min），未成功变更持久化待传队列，启动与回前台补传；
+  - 默认仅 WiFi 自动，蜂窝需显式开关（NetworkKit 连接判定）；设置页新增「云端自动同步」主开关 + 蜂窝子开关；运行状态（上次成功时间）持久化。
+- **2. 条目级 LWW 下载合并（P2-7b, `SyncService.ets`, `CourseRepository.ets`, `ExamRepository.ets`, `CourseModel.ets`, `ExamModel.ets`）**：
+  - 下载合并从整包覆盖改为按业务键条目级裁决：updatedAt 新者胜、相等云端优先；Repository 落盘前集中盖章时间戳（内容未变继承原戳），合并写回走跳过盖章的 Raw 通道防误刷新；
+  - 实际冲突写入本地日志（上限 50），设置页「数据同步」卡片新增「同步状态」折叠区展示上次成功时间与最近 ≤5 条裁决；手动「下载」按钮改为「从云端合并」；
+  - 已知限制：无删除墓碑（单端删除会被另一端本地存量复活）；课程业务键不含 validWeeks（改周次生成新云 ID，LWW 兜底）。
+- **3. ID 治理（P2-7c）**：课程/考试维持确定性哈希 ID（幂等覆盖价值 > 理论碰撞）；id-generator 云函数退役（保留仓库不部署不接入），`generateUniqueId` 清除；新实体约定 String 主键 + 端侧 UUID。
+- **4. AI 会话加密上云（P2-7d, 新增 `SessionCryptoUtil.ets`, `SessionSyncService.ets`, `ChatSessionRecord.ets` + schema `ChatSessionRecord.json`）**：
+  - PBKDF2-HMAC-SHA256×10000 由登录账号 UID 派生 AES-256 密钥，AES-GCM 加密整会话 JSON 后 base64 上行（IV‖密文‖tag + AAD），服务端只见密文；密钥丢失不可恢复已在设置页明示；
+  - 每会话一条 CloudDB 记录（String 主键复用 session.id 幂等 upsert，Text 密文字段），15s 独立防抖双向同步，上传后裁剪云端多余记录（20 条上限语义传播），下载 LWW 合并经无钩子通道回写防循环；未登录全程 no-op；对象类型未建时软降。
+- **5. 截图导入预览修正 UI（P2-9, 新增 `VisionImportModel.ets`, `components/import/VisionImportPreviewDialog.ets`）**：
+  - 课表/成绩截图解析完成后先弹预览确认表：逐行可编辑、勾选剔除、低置信度条目琥珀色高亮，确认后才入库；失败路径行为不变。
+
+**验证**：每任务 commit 前 `devecocli build` 成功 + `devecocli check lint` 0 error（63 条既有 warning 与基线一致）。🔴 用户侧验收项见 [`PHASE2_PLAN.md`](./PHASE2_PLAN.md) §5（AGC 建表、双实例互同步、密文核验）。
+
+---
+
 ## 2026-08: Phase 2 进行中——截图导入、同步增强与遗留清偿
 
 > 执行模型延续 Phase 0/1：主 agent 整合验证提交，子 agent 并行实现。分支 `opt/phase01` / 后端 `opt/phase01-backend`。
