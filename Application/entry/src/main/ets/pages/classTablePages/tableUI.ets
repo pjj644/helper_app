@@ -594,6 +594,11 @@ struct TableUI {
       Row({ space: 8 }) {
         Button('新增课程')
           .onClick(() => this.openAddEditor());
+        Button('截图/全屏管理')
+          .onClick(() => {
+            this.showCourseManage = false;
+            router.pushUrl({ url: 'pages/classTablePages/CourseManage' });
+          });
         Button('刷新')
           .onClick(() => this.loadCourseList());
       }
