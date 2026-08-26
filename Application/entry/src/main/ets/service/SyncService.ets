@@ -6,6 +6,8 @@ import { ExamRepository } from '../repository/ExamRepository';
 import { ClassCourse } from '../pages/CloudDb/ClassCourse';
 import { ClassExam } from '../pages/CloudDb/ClassExam';
 import { calculateSemesterId, getSemesterLabelById } from '../model/classTableModel/ExamAccessRules';
+import { AuthService } from './AuthService';
+import { ReminderService } from './ReminderService';
 
 export interface SyncResult {
   success: boolean;
@@ -344,6 +346,34 @@ export class SyncService {
     const exams = await SyncService.downloadExamsFromCloud(context, userId);
     const result: DownloadAllResult = { courses, exams };
     return result;
+  }
+
+  private static autoSyncDebounceTimer: number = -1;
+
+  /**
+   * 当数据发生变更时调用的防抖自动同步入口（P2-3）
+   */
+  static triggerAutoSyncIfEnabled(context: Context): void {
+    if (SyncService.autoSyncDebounceTimer >= 0) {
+      clearTimeout(SyncService.autoSyncDebounceTimer);
+    }
+    SyncService.autoSyncDebounceTimer = setTimeout(async () => {
+      SyncService.autoSyncDebounceTimer = -1;
+      try {
+        const enabled = await ReminderService.getAutoSyncScheduleEnabled(context);
+        if (!enabled) {
+          return;
+        }
+        const userId = await AuthService.getLoginUserId(context);
+        if (!userId) {
+          return;
+        }
+        console.info('[SyncService] 触发防抖静默自动同步到云端...');
+        await SyncService.syncAllToCloud(context, userId);
+      } catch (e) {
+        console.warn(`[SyncService] 自动同步异常: ${String(e)}`);
+      }
+    }, 30000);
   }
 
   private static delay(ms: number): Promise<void> {

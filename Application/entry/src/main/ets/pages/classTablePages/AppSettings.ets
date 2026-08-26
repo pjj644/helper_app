@@ -556,8 +556,9 @@ struct AppSettings {
 
         Toggle({ type: ToggleType.Switch, isOn: this.autoSyncSchedule })
           .selectedColor($r('app.color.primary_color'))
-          .onChange((isOn: boolean) => {
+          .onChange(async (isOn: boolean) => {
             this.autoSyncSchedule = isOn;
+            await ReminderService.saveAutoSyncScheduleEnabled(getContext(this), isOn);
           })
       }
       .width('100%')
