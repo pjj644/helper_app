@@ -6,7 +6,9 @@ import { ThemeManager } from '../../common/utils/ThemeManager';
 import { EmptyState } from '../../components/EmptyState';
 import { PageContextTracker } from '../../common/agent/PageContextTracker';
 import { UIActionDispatcher } from '../../common/agent/UIActionDispatcher';
-import { VisionScheduleHelper, VisionGradeReportResult, VisionGradeItem } from '../../common/agent/VisionScheduleHelper';
+import { VisionScheduleHelper, VisionGradeReportResult } from '../../common/agent/VisionScheduleHelper';
+import { VisionImportPreviewDialog } from '../../components/import/VisionImportPreviewDialog';
+import { VisionGradePreviewItem, createGradePreviewItems, parseClampedNumber } from '../../model/VisionImportModel';
 
 @Entry
 @Component
@@ -31,6 +33,7 @@ struct GradePage {
   }
 
   aboutToDisappear(): void {
+    this.closeVisionPreviewDialog();
     if (this.unregisterAction) {
       this.unregisterAction();
       this.unregisterAction = null;
@@ -69,6 +72,8 @@ struct GradePage {
   }
 
   @State isImportingVision: boolean = false;
+  @State previewGrades: VisionGradePreviewItem[] = [];
+  private visionPreviewController: CustomDialogController | null = null;
 
   private openGradeImport(): void {
     const currentSemId: number = this.getSelectedSemesterId();
@@ -105,22 +110,72 @@ struct GradePage {
         return;
       }
 
+      // P2-9：解析成功后先进入预览修正，用户确认后再入库；取消则丢弃，不改任何数据
+      this.previewGrades = createGradePreviewItems(result);
+      this.isImportingVision = false;
+      this.getUIContext().getPromptAction().showToast({ message: '识别完成，请核对后确认入库' });
+      this.openVisionPreview();
+    } catch (e) {
+      console.error('[GradePage] 截图识别成绩失败:', JSON.stringify(e));
+      this.getUIContext().getPromptAction().showToast({ message: '截图识别成绩失败' });
+    } finally {
+      this.isImportingVision = false;
+    }
+  }
+
+  private openVisionPreview(): void {
+    this.visionPreviewController = new CustomDialogController({
+      builder: () => {
+        this.visionPreviewBuilder();
+      },
+      autoCancel: true,
+      alignment: DialogAlignment.Center
+    });
+    this.visionPreviewController.open();
+  }
+
+  private closeVisionPreviewDialog(): void {
+    if (this.visionPreviewController) {
+      this.visionPreviewController.close();
+      this.visionPreviewController = null;
+    }
+  }
+
+  @Builder
+  private visionPreviewBuilder(): void {
+    VisionImportPreviewDialog({
+      previewMode: 'grade',
+      gradeItems: this.previewGrades,
+      onConfirmGrades: (items: VisionGradePreviewItem[]): void => {
+        this.closeVisionPreviewDialog();
+        this.confirmVisionImport(items);
+      },
+      onCancel: (): void => {
+        this.closeVisionPreviewDialog();
+      }
+    })
+  }
+
+  // 预览确认后入库：沿用原有"mergeGrades + saveGrades + 刷新"流程，仅数据来源改为修正后的条目
+  private async confirmVisionImport(items: VisionGradePreviewItem[]): Promise<void> {
+    try {
       const currentSemId = this.getSelectedSemesterId() > 0 ? this.getSelectedSemesterId() : getPreviousSemesterId();
       const newGrades: GradeItem[] = [];
-      for (let i = 0; i < result.grades.length; i++) {
-        const vg: VisionGradeItem = result.grades[i];
+      for (let i = 0; i < items.length; i++) {
+        const p: VisionGradePreviewItem = items[i];
+        const score: string = p.score.trim();
         const item: GradeItem = {
-          academicYear: vg.semester || '2025-2026-1',
-          courseCode: vg.courseCode || `VIS_${Date.now()}_${i + 1}`,
+          academicYear: p.semester.trim() || '2025-2026-1',
+          courseCode: p.courseCode.trim() || `VIS_${Date.now()}_${i + 1}`,
           courseSeq: '01',
-          courseName: vg.courseName || '未知课程',
-          courseCategory: vg.courseCategory || '必修',
-          credit: Number(vg.credit) || 0,
-          finalExamScore: String(vg.score || ''),
-          totalScore: String(vg.score || ''),
+          courseName: p.courseName.trim() || '未知课程',
+          courseCategory: p.courseCategory.trim() || '必修',
+          credit: parseClampedNumber(p.creditText, 0, 30, 0),
+          finalExamScore: score,
+          totalScore: score,
           makeupScore: '',
-          finalScore: String(vg.score || ''),
-          gradePoint: Number(vg.gradePoint) || 0,
+          finalScore: score,
+          gradePoint: parseClampedNumber(p.gradePointText, 0, 5, 0),
           semesterId: currentSemId
         };
         newGrades.push(item);
@@ -129,12 +184,10 @@ struct GradePage {
       const merged = GradeService.mergeGrades(this.grades, newGrades);
       await GradeService.saveGrades(getContext(this), merged);
       await this.loadGrades();
-      this.getUIContext().getPromptAction().showToast({ message: `成功识别并导入 ${newGrades.length} 门课程成绩` });
+      this.getUIContext().getPromptAction().showToast({ message: `成功导入 ${newGrades.length} 门课程成绩` });
     } catch (e) {
-      console.error('[GradePage] 截图识别成绩失败:', JSON.stringify(e));
-      this.getUIContext().getPromptAction().showToast({ message: '截图识别成绩失败' });
-    } finally {
-      this.isImportingVision = false;
+      console.error('[GradePage] 预览确认入库失败:', JSON.stringify(e));
+      this.getUIContext().getPromptAction().showToast({ message: '成绩入库失败' });
     }
   }
 

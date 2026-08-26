@@ -4,7 +4,9 @@ import { CourseService } from '../../service/CourseService';
 import { CourseRepository } from '../../repository/CourseRepository';
 import { ThemeManager } from '../../common/utils/ThemeManager';
 import { getSemesterOptions, SemesterOptionSet, getSemesterLabelById, calculateSemesterId } from '../../model/classTableModel/ExamAccessRules';
-import { VisionScheduleHelper, VisionCourseTableResult, VisionCourseItem } from '../../common/agent/VisionScheduleHelper';
+import { VisionScheduleHelper, VisionCourseTableResult } from '../../common/agent/VisionScheduleHelper';
+import { VisionImportPreviewDialog } from '../../components/import/VisionImportPreviewDialog';
+import { VisionCoursePreviewItem, createCoursePreviewItems, parseClampedNumber } from '../../model/VisionImportModel';
 
 @Entry
 @Component
@@ -26,10 +28,16 @@ struct CourseManage {
   @State formWeeks: string = '1-20';
 
   @State isImportingVision: boolean = false;
+  @State previewCourses: VisionCoursePreviewItem[] = [];
+  private visionPreviewController: CustomDialogController | null = null;
 
   aboutToAppear(): void {
     this.initSemesterOptions();
     this.loadCourseList();
+  }
+
+  aboutToDisappear(): void {
+    this.closeVisionPreviewDialog();
   }
 
   private initSemesterOptions(): void {
@@ -86,21 +94,69 @@ struct CourseManage {
         return;
       }
 
+      // P2-9：解析成功后先进入预览修正，用户确认后再入库；取消则丢弃，不改任何数据
+      this.previewCourses = createCoursePreviewItems(result);
+      this.isImportingVision = false;
+      this.getUIContext().getPromptAction().showToast({ message: '识别完成，请核对后确认入库' });
+      this.openVisionPreview();
+    } catch (e) {
+      console.error('[CourseManage] 截图识别导入失败:', JSON.stringify(e));
+      this.getUIContext().getPromptAction().showToast({ message: '截图识别导入失败' });
+    } finally {
+      this.isImportingVision = false;
+    }
+  }
+
+  private openVisionPreview(): void {
+    this.visionPreviewController = new CustomDialogController({
+      builder: () => {
+        this.visionPreviewBuilder();
+      },
+      autoCancel: true,
+      alignment: DialogAlignment.Center
+    });
+    this.visionPreviewController.open();
+  }
+
+  private closeVisionPreviewDialog(): void {
+    if (this.visionPreviewController) {
+      this.visionPreviewController.close();
+      this.visionPreviewController = null;
+    }
+  }
+
+  @Builder
+  private visionPreviewBuilder(): void {
+    VisionImportPreviewDialog({
+      previewMode: 'course',
+      courseItems: this.previewCourses,
+      onConfirmCourses: (items: VisionCoursePreviewItem[]): void => {
+        this.closeVisionPreviewDialog();
+        this.confirmVisionImport(items);
+      },
+      onCancel: (): void => {
+        this.closeVisionPreviewDialog();
+      }
+    })
+  }
+
+  // 预览确认后入库：沿用原有"合并 + 按学期保存 + 刷新"流程，仅数据来源改为修正后的条目
+  private async confirmVisionImport(items: VisionCoursePreviewItem[]): Promise<void> {
+    try {
       const newCourses: Course[] = [];
-      for (let i = 0; i < result.courses.length; i++) {
-        const vc: VisionCourseItem = result.courses[i];
-        const courseId = `vision_${Date.now()}_${i}`;
+      for (let i = 0; i < items.length; i++) {
+        const p: VisionCoursePreviewItem = items[i];
         const course: Course = {
-          id: courseId,
-          name: vc.name || '未命名课程',
-          teacherName: vc.teacher || '',
-          roomName: vc.room || '',
+          id: `vision_${Date.now()}_${i}`,
+          name: p.name.trim() || '未命名课程',
+          teacherName: p.teacher.trim(),
+          roomName: p.room.trim(),
           time: {
-            dayOfWeek: (vc.dayOfWeek >= 1 && vc.dayOfWeek <= 7) ? vc.dayOfWeek : 1,
-            startSection: (vc.startSection >= 1 && vc.startSection <= 12) ? vc.startSection : 1,
-            duration: (vc.duration >= 1 && vc.duration <= 5) ? vc.duration : 2
+            dayOfWeek: parseClampedNumber(p.dayOfWeekText, 1, 7, 1),
+            startSection: parseClampedNumber(p.startSectionText, 1, 12, 1),
+            duration: parseClampedNumber(p.durationText, 1, 5, 2)
           },
-          validWeeks: this.buildValidWeeksFromText(vc.validWeeks || '1-16'),
+          validWeeks: this.buildValidWeeksFromText(p.weeksText.trim() || '1-16'),
           colorIndex: (this.courses.length + i) % 8
         };
         newCourses.push(course);
@@ -109,12 +165,10 @@ struct CourseManage {
       const merged = [...this.courses, ...newCourses];
       await CourseService.saveCoursesForSemester(getContext(this), this.selectedSemesterId, merged);
       await this.loadCourseList();
-      this.getUIContext().getPromptAction().showToast({ message: `成功识别并导入 ${newCourses.length} 门课程` });
+      this.getUIContext().getPromptAction().showToast({ message: `成功导入 ${newCourses.length} 门课程` });
     } catch (e) {
-      console.error('[CourseManage] 截图识别导入失败:', JSON.stringify(e));
-      this.getUIContext().getPromptAction().showToast({ message: '截图识别导入失败' });
-    } finally {
-      this.isImportingVision = false;
+      console.error('[CourseManage] 预览确认入库失败:', JSON.stringify(e));
+      this.getUIContext().getPromptAction().showToast({ message: '课程入库失败' });
     }
   }
 
