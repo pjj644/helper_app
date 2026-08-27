@@ -11,6 +11,7 @@ interface HostContextProvider {
 }
 
 interface LoginSession {
+	userId: string;
 	email: string;
 	loginAt: number;
 }
@@ -65,11 +66,11 @@ struct LoginIndexPage {
 			}
 
 			const session = JSON.parse(text) as LoginSession;
-			if (!session.email) {
+			if (!session.userId) {
 				return;
 			}
 
-			const agcUser = auth.getCurrentUser();
+			const agcUser = await auth.getCurrentUser();
 			if (!agcUser) {
 				await pref.delete(this.SESSION_KEY);
 				await pref.flush();
@@ -82,9 +83,10 @@ struct LoginIndexPage {
 		}
 	}
 
-	private async saveSession(): Promise<void> {
+	private async saveSession(userId: string): Promise<void> {
 		const pref = await this.getPref();
 		const session: LoginSession = {
+			userId: userId,
 			email: this.email,
 			loginAt: Date.now(),
 		};
@@ -161,15 +163,16 @@ struct LoginIndexPage {
 
 		this.isLoading = true;
 		try {
-			await auth.signIn({
+			const signInResult = await auth.signIn({
 				credentialInfo: {
 					kind: 'email',
 					email: this.email,
 					verifyCode: this.verifyCode
 				}
 			});
+			const uid = signInResult.getUser().getUid();
 
-			await this.saveSession();
+			await this.saveSession(uid);
 			try {
 				await CloudDbRepository.initCloudDB(true);
 			} catch (cloudInitErr) {

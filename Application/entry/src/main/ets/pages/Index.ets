@@ -346,9 +346,9 @@ struct MainPage {
 
   private async checkLoginStatus(): Promise<void> {
     try {
-      const userId: string | undefined = await AuthService.getLoginUserId(getContext(this));
-      this.isLoggedIn = !!userId;
-      this.loginEmail = userId || '';
+      const session = await AuthService.getLoginSession(getContext(this));
+      this.isLoggedIn = !!session?.userId;
+      this.loginEmail = session?.email || '';
     } catch (error) {
       this.isLoggedIn = false;
       this.loginEmail = '';

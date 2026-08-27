@@ -10,6 +10,7 @@ import { CourseRepository } from '../repository/CourseRepository';
 import { CalendarKitReminderService } from './CalendarKitReminderService';
 
 export interface LoginSession {
+  userId: string;
   email: string;
   loginAt: number;
 }
@@ -50,10 +51,10 @@ export class AuthService {
       return undefined;
     }
     const session = JSON.parse(text) as LoginSession;
-    if (!session.email) {
+    if (!session.userId) {
       return undefined;
     }
-    return session.email;
+    return session.userId;
   }
 
   static async getLoginSession(context: Object): Promise<LoginSession | undefined> {
@@ -64,7 +65,7 @@ export class AuthService {
       return undefined;
     }
     const session = JSON.parse(text) as LoginSession;
-    if (!session.email) {
+    if (!session.userId && !session.email) {
       return undefined;
     }
     return session;
@@ -75,8 +76,9 @@ export class AuthService {
     return !!userId;
   }
 
-  static async saveSession(context: Object, email: string): Promise<void> {
+  static async saveSession(context: Object, email: string, userId: string): Promise<void> {
     const session: LoginSession = {
+      userId: userId,
       email: email,
       loginAt: Date.now()
     };
