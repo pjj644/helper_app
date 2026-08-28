@@ -47,7 +47,9 @@ devecocli check compat                                       # 跨 SDK API 兼�
 - **桌面万能服务卡片（Form Widget）**：
   - `CourseWidgetCard2x2.ets`：下一节课动态倒计时与教室地点；
   - `CourseWidgetCard2x4.ets`：今日 1-12 节课全天排期与状态时间线；
-  - `EntryFormAbility.ets` + `CourseService.updateNextCourseCache`：全状态动态绑定与静默刷新；
+  - `ExamWidgetCard2x2.ets` / `ExamWidgetCard2x4.ets`：考试倒计时与最近三场考试列表；
+  - `BusWidgetCard2x4.ets`：双校区下一班班车实时倒计时；
+  - `EntryFormAbility.ets` + `CourseService.updateNextCourseCache` + `service/WidgetUpdateService.ets`（唯一事件驱动推送通道）：全状态动态绑定与静默刷新；
 - **本地存储**：基于 `@kit.ArkData` preferences：
   - `classtable_login_pref`：用户认证鉴权；
   - `course_table_local_db`：应用核心业务数据（课表、考试、成绩、日程、设置、桌面卡片缓存）；

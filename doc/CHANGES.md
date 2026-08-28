@@ -5,6 +5,25 @@
 
 ---
 
+## 2026-08: 桌面卡片矩阵扩展、个人信息页与后端简单通知
+
+- **桌面卡片矩阵扩展（3 → 5 张卡片）**：
+  - 新增 **考试倒计时卡 2x2**（最近一场考试名称/时间/地点与天级倒计时，3 天内红色强调）与 **考试日程卡 2x4**（最近三场考试列表）；
+  - 新增 **成电班车卡 2x4**（双校区下一班发车时间与实时倒计时，与 BusDataService「远端 last-good → 内置兜底表」同口径）；
+  - 卡片数据源统一收敛：新增纯 TS `model/widget/WidgetDataModel.ets`（考试/班车倒计时改为读取时基于原始存储数据实时计算，免疫缓存过期）与 `service/WidgetUpdateService.ets`（唯一事件驱动推送通道；CourseService/ExamService/BusDataService/SyncService 数据变更后统一接线，推送全量 formData 避免多卡片互相覆盖字段）；
+  - 卡片点击直达：EntryAbility 消费 postCardAction `targetPage`（考试卡 → 考试页，班车卡 → 班车页，冷启动与热启动 onNewWant 均支持）。
+- **「我的-个人信息」页落地（`pages/mine/PersonalInfoPage.ets`）**：替换占位 toast；展示 AGC 账号信息（邮箱/用户 ID 可复制/登录时间）、本机校园数据概况（课表课程数/待考场次/日程条数）与数据隐私说明。
+- **「消息通知」接通后端简单通知**：
+  - ai-proxy 新增 `GET /api/v1/notifications`（`?since=<id>` 增量）与 `POST/DELETE /api/v1/admin/notifications`（发布/撤回；JSON 文件存储 `data/notifications.json`，x-proxy-key 鉴权）；
+  - 端侧新增 `service/BackendNoticeService.ets`：回前台 1 小时节流轮询 + 开关开启立即拉取，单次最多发布 3 条系统通知（notificationManager）；
+  - 设置页「消息通知」开关从空开关变为真实生效：开启时申请通知授权并立即拉取。
+- **工程治理**：
+  - 清理旧版首页死代码与假数据：`HomeViewModel.ets`/`HomeModel.ets`、`ModelTypes.ets` 冗余类型及 MessageList/TodoList/ServiceGrid/AnnouncementSwiper/ExamCard/CourseCard/StateComponents 等 8 个未引用组件（QuickStatComponent 经核实仍被首页引用，保留）；
+  - 版本号改读 bundle 信息（`bundleManager.getBundleInfoForSelfSync`），移除 Index 两处硬编码 `v1.0.0`；
+  - 后端 `tools.ts` toolMeta 移除端侧不存在的 5 个漂移别名（`check_time_conflict`/`add_to_calendar`/`add_exam_to_calendar`/`add_course_to_calendar`/`remove_calendar_event`），与端侧 ToolRegistry 严格对齐，幻觉工具名继续走 fail-closed 双闸门。
+
+---
+
 ## 2026-08: Phase 2 完成——云同步全量落地、会话加密上云与导入预览
 
 > 承接上一条目「Phase 2 进行中」；本轮在 `opt/phase02` 分支推进（自 `opt/phase01` 切出）。范围裁定：晨报卡片 / 实况窗 / 小艺意图均移出本轮（小艺调研归档 [`RESEARCH_XIAOYI.md`](./RESEARCH_XIAOYI.md)）。

@@ -23,6 +23,7 @@ pages/          -> UI 页面（@Entry / @Component）
                    ├─ gradePages/ (成绩 GradePage 含 GLM-4V 截图导入, 导入 GradeImport)
                    ├─ schedulePages/ (日历 CalendarPage, 班车时刻表 BusSchedulePage, 新建/编辑日程)
                    ├─ quick/ (发现门户 quickIndex, AI 助手全屏页 AssistantPage)
+                   ├─ mine/ (个人信息页 PersonalInfoPage)
                    └─ login/ (登录与统一身份认证 loginIndex)
 components/     -> 可复用 UI 组件
                    ├─ home/ (主页解耦子组件：Header, NextCourseCard, ExamCountdownCard, QuickLinksGrid)
@@ -41,6 +42,9 @@ service/        -> 业务逻辑（auth / scrape / sync / reminder / 各数据服
                    ├─ CalendarKitReminderService.ets (HarmonyOS 系统日历写入、班车/考试去重与事件查询)
                    ├─ ReminderService.ets (应用内通知代理、提醒分类开关/提前量与日历兜底)
                    ├─ SyncService.ets (Cloud DB 双向同步，云端记录带 updatedAt 支持 LWW 冲突裁决)
+                   ├─ BusDataService.ets (班车时刻四级降级：后端→内存→Preferences→内置兜底)
+                   ├─ WidgetUpdateService.ets (桌面卡片统一事件推送通道)
+                   ├─ BackendNoticeService.ets (后端简单通知拉取与系统通知发布)
                    └─ WebScrapeService.ets (EAMS 教务系统 WebView JS 注入抓取)
 repository/     -> 数据持久化（Preferences 键值存储、Cloud DB、会话仓库）
                    ├─ CourseRepository (多学期归档查询、多学期独立存储与删除)
@@ -51,6 +55,7 @@ repository/     -> 数据持久化（Preferences 键值存储、Cloud DB、会�
 model/          -> 数据模型 + 纯数据变换（解析/过滤/排序，严禁 `@kit.*` 导入）
                    ├─ classTableModel/ (CourseModel, ExamModel, ExamAccessRules)
                    ├─ BusScheduleModel.ets (纯 TS 双校区班车时刻与倒计时算法)
+                   ├─ widget/WidgetDataModel.ets (桌面卡片数据源：课程缓存 + 考试/班车读取时实时计算)
                    ├─ GradeModel.ets / ScheduleModel.ets / ReminderModel.ets
                    └─ agent/ (ToolCall, ToolResult, ChatMessage, TelemetryMetrics)
 common/         -> 共享基础设施
@@ -86,10 +91,13 @@ common/         -> 共享基础设施
 
 ## 鸿蒙桌面万能服务卡片（Form Widget）
 
-应用支持两种规格的桌面服务卡片（`form_config.json`）：
+应用支持五种规格的桌面服务卡片（`form_config.json`）：
 - **2x2 卡片 (`CourseWidgetCard2x2.ets`)**：展示最近一门待上课程、教室地点以及距上课实时倒计时，已无课状态自动展示友好提示。
 - **2x4 卡片 (`CourseWidgetCard2x4.ets`)**：全天排期时间线卡片，展示今日 1-12 节多时段课程安排与「上课中 / 未开始 / 已结束」实时状态指示。
-- **生命周期与静默刷新**：`EntryFormAbility.ets` 处理卡片添加与周期更新，`CourseService.updateNextCourseCache` 在课表发生任何增删改或导入时计算富状态并持久化至 `next_course_cache`，支持桌面卡片毫秒级无感静默更新。
+- **2x2 考试倒计时卡 (`ExamWidgetCard2x2.ets`)**：最近一场考试的时间/地点与天级倒计时（3 天内红色强调）。
+- **2x4 考试日程卡 (`ExamWidgetCard2x4.ets`)**：最近三场考试的倒计时列表。
+- **2x4 成电班车卡 (`BusWidgetCard2x4.ets`)**：双校区下一班发车时间与实时倒计时（远端 last-good 与内置兜底表同口径）。
+- **生命周期与统一刷新**：`EntryFormAbility.ets` 处理卡片添加与周期更新（每 30 分钟 + 每日 08:00），所有卡片共享同一份全量 formData；`service/WidgetUpdateService.ets` 是唯一的事件驱动推送通道（课表/考试保存、班车拉取、云端合并后统一接线），数据构建收敛于纯 TS 的 `model/widget/WidgetDataModel.ets`——课程卡沿用 `CourseService.updateNextCourseCache` 预计算的 `next_course_cache`，考试/班车倒计时则在每次刷新时基于原始存储数据实时重算，无缓存过期问题。卡片点击经 EntryAbility 消费 `targetPage` 直达考试/班车页。
 
 ## 双校区班车时刻与日历联动模块
 
