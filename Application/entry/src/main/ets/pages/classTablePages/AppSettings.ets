@@ -1,5 +1,6 @@
 import { router } from '@kit.ArkUI';
 import { http } from '@kit.NetworkKit';
+import { common } from '@kit.AbilityKit';
 import { MaterialLevel } from '../../common/HdsCompat';
 import { photoAccessHelper } from '@kit.MediaLibraryKit';
 import { UISettings } from '../../common/UISettings';
@@ -17,6 +18,7 @@ import { SessionSyncService } from '../../service/SessionSyncService';
 import { AuthService } from '../../service/AuthService';
 import { AppConstants, RouterConstants } from '../../common/constants/AppConstants';
 import { ReminderService } from '../../service/ReminderService';
+import { BackendNoticeService } from '../../service/BackendNoticeService';
 import { ScheduleService } from '../../service/ScheduleService';
 import { LoadingOverlay } from '../../components/LoadingOverlay';
 import { SettingsRepository } from '../../repository/SettingsRepository';
@@ -1934,7 +1936,14 @@ struct AppSettings {
           .selectedColor($r('app.color.primary_color'))
           .onChange((isOn: boolean) => {
             this.notificationEnabled = isOn;
-            PreferencesUtil.getInstance().putBoolean('notification_enabled', isOn);
+            PreferencesUtil.getInstance().putBoolean(AppConstants.SETTING_SYSTEM_NOTIFICATION_KEY, isOn);
+            if (isOn) {
+              // 开启时先确保系统通知授权，再立即拉取一次后端通知（后端未配置时内部静默跳过）
+              const uiContext = getContext(this) as common.UIAbilityContext;
+              ReminderService.requestNotificationPermission(uiContext).then(() => {
+                BackendNoticeService.pollNow(uiContext);
+              });
+            }
           })
       }
       .width('100%')

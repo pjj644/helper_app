@@ -177,6 +177,20 @@ export class AppConstants {
   static readonly PREF_CAMPUS_GUIDES_JSON_KEY: string = 'campus_guides_last_good_json';
   /** 班车数据后台刷新最小间隔：6 小时 */
   static readonly BUS_SCHEDULE_REFRESH_MIN_INTERVAL_MS: number = 6 * 60 * 60 * 1000;
+
+  // ==================== 后端简单通知（「消息通知」开关消费链路） ====================
+  /** GET notifications：客户端拉取后端发布的简单通知 */
+  static readonly BACKEND_NOTIFICATIONS_PATH: string = 'api/v1/notifications';
+  /** 系统级「消息通知」开关偏好键（AppSettings 写入，BackendNoticeService 读取） */
+  static readonly SETTING_SYSTEM_NOTIFICATION_KEY: string = 'notification_enabled';
+  /** 已拉取到的最大通知 ID（偏好键，存于 COURSE_TABLE_PREF_NAME） */
+  static readonly PREF_NOTICE_LAST_SEEN_ID_KEY: string = 'backend_notice_last_seen_id';
+  /** 上次通知拉取时间戳（偏好键），用于到点轮询节流 */
+  static readonly PREF_NOTICE_LAST_POLL_AT_KEY: string = 'backend_notice_last_poll_at';
+  /** 通知轮询最小间隔：1 小时 */
+  static readonly NOTICE_POLL_MIN_INTERVAL_MS: number = 60 * 60 * 1000;
+  /** 单次轮询最多发布的系统通知条数（防止长时间未打开应用后的通知风暴） */
+  static readonly NOTICE_MAX_PUBLISH_PER_POLL: number = 3;
 }
 
 export class RouterConstants {
