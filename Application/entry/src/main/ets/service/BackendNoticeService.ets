@@ -46,7 +46,8 @@ export class BackendNoticeService {
 
   private static async fetchAndPublish(context: Context, force: boolean): Promise<void> {
     try {
-      if (!PreferencesUtil.getInstance().getBoolean(AppConstants.SETTING_SYSTEM_NOTIFICATION_KEY, false)) {
+      // 默认值与 AppSettings 开关初始态（默认开）保持一致，避免「界面显示开但服务按关跳过」
+      if (!PreferencesUtil.getInstance().getBoolean(AppConstants.SETTING_SYSTEM_NOTIFICATION_KEY, true)) {
         return;
       }
       const endpoint: AgentEndpoint = await AgentEndpointConfig.resolve(context);
