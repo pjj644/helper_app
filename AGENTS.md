@@ -97,3 +97,5 @@ devecocli check compat                                       # 跨 SDK API 兼�
 | AI 助手：架构图 / 状态机 / 5大元工具 / 悬浮窗 / Markdown渲染 / 日历联动 | [`doc/AI_AGENT.md`](./doc/AI_AGENT.md) |
 | 构建 / 运行 / 联调 / 签名 / 权限 / 完整测试用例清单 | [`doc/BUILD_AND_TEST.md`](./doc/BUILD_AND_TEST.md) |
 | 逐阶段变更日志（功能演进、重构与修复历史） | [`doc/CHANGES.md`](./doc/CHANGES.md) |
+| 华为应用市场（AGC）上架调查与实操全景报告 | [`doc/评估/AGC_RELEASE_GUIDE.md`](./doc/评估/AGC_RELEASE_GUIDE.md) |
+
