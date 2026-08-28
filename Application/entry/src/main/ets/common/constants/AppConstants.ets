@@ -20,6 +20,14 @@ export class AppConstants {
 
   static readonly GRADE_DATA_KEY: string = 'grade_data_json';
   static readonly SCHEDULE_DATA_KEY: string = 'schedule_data_json';
+  /** 桌面卡片「下一节课」缓存键（CourseService 写入，EntryFormAbility / WidgetUpdateService 读取） */
+  static readonly NEXT_COURSE_CACHE_KEY: string = 'next_course_cache';
+  /** 桌面卡片实例 ID 列表键（EntryFormAbility 维护，WidgetUpdateService 消费） */
+  static readonly WIDGET_FORM_IDS_KEY: string = 'widget_form_ids';
+  /** 卡片 postCardAction 路由目标参数值（EntryAbility 消费） */
+  static readonly WIDGET_TARGET_COURSE: string = 'course_table';
+  static readonly WIDGET_TARGET_EXAM: string = 'exam_page';
+  static readonly WIDGET_TARGET_BUS: string = 'bus_schedule';
   static readonly SETTING_REMINDER_ENABLED_KEY: string = 'setting_reminder_enabled';
   static readonly SETTING_EXAM_REMINDER_ENABLED_KEY: string = 'setting_exam_reminder_enabled';
   static readonly SETTING_SCHEDULE_REMINDER_MASTER_KEY: string = 'setting_schedule_reminder_master';
@@ -184,6 +192,7 @@ export class RouterConstants {
   static readonly PAGE_SETTINGS: string = 'pages/classTablePages/AppSettings';
   static readonly PAGE_LOGIN: string = 'pages/login/loginIndex';
   static readonly PAGE_ACCOUNT_MANAGE: string = 'pages/login/AccountManage';
+  static readonly PAGE_PERSONAL_INFO: string = 'pages/mine/PersonalInfoPage';
   static readonly PAGE_ASSISTANT: string = 'pages/quick/AssistantPage';
   static readonly PAGE_FLOATING_SUBWINDOW: string = 'pages/quick/FloatingSubWindowContent';
   static readonly PAGE_WEB: string = 'pages/classTablePages/WebPage';

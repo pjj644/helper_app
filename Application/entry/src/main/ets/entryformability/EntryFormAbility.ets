@@ -2,97 +2,29 @@ import { formBindingData, formProvider, FormExtensionAbility, formInfo } from '@
 import { Want } from '@kit.AbilityKit';
 import dataPreferences from '@ohos.data.preferences';
 import { AppConstants } from '../common/constants/AppConstants';
-
-// 桌面卡片实例 ID 列表在偏好文件中的存储键。
-// 注意：与 service/CourseService.ets 中的同名常量保持成对一致（读取方在彼处）。
-const WIDGET_FORM_IDS_KEY: string = 'widget_form_ids';
-
-interface NextCourseCacheData {
-  name?: string;
-  courseName?: string;
-  location?: string;
-  time?: string;
-  room?: string;
-  countdownText?: string;
-  hasCourseToday?: boolean;
-  dateStr?: string;
-  courseCount?: number;
-  course1_name?: string;
-  course1_time?: string;
-  course1_room?: string;
-  course1_status?: string;
-  course2_name?: string;
-  course2_time?: string;
-  course2_room?: string;
-  course2_status?: string;
-  course3_name?: string;
-  course3_time?: string;
-  course3_room?: string;
-  course3_status?: string;
-}
+import { WidgetDataModel } from '../model/widget/WidgetDataModel';
 
 export default class EntryFormAbility extends FormExtensionAbility {
-  private getFormData(): Record<string, string | number | boolean> {
-    let formData: Record<string, string | number | boolean> = {
-      'courseName': '暂无待上课程',
-      'location': '教室未定',
-      'time': '--:--',
-      'room': '今日已无课',
-      'countdownText': '今日已无课',
-      'hasCourseToday': false,
-      'dateStr': '今日课表',
-      'courseCount': 0,
-      'course1_name': '',
-      'course1_time': '',
-      'course1_room': '',
-      'course1_status': '',
-      'course2_name': '',
-      'course2_time': '',
-      'course2_room': '',
-      'course2_status': '',
-      'course3_name': '',
-      'course3_time': '',
-      'course3_room': '',
-      'course3_status': ''
-    };
-
+  /**
+   * 构建卡片绑定数据：课程 / 考试 / 班车三张卡片共用同一份全量 formData
+   * （构建逻辑收敛于 model/widget/WidgetDataModel，与 service/WidgetUpdateService
+   * 的事件驱动推送保持同一口径）。
+   */
+  private getFormData(): Record<string, Object> {
     try {
-      let pref = dataPreferences.getPreferencesSync(this.context, { name: AppConstants.PREF_COURSE_DB_NAME });
-      let nextCourseStr = pref.getSync('next_course_cache', '') as string;
-      if (nextCourseStr) {
-        let parsed: NextCourseCacheData = JSON.parse(nextCourseStr) as NextCourseCacheData;
-        formData = {
-          'courseName': parsed.courseName || parsed.name || '暂无待上课程',
-          'location': parsed.location || parsed.room || '教室未定',
-          'time': parsed.time || '--:--',
-          'room': parsed.room || '教室未定',
-          'countdownText': parsed.countdownText || '今日已无课',
-          'hasCourseToday': parsed.hasCourseToday !== undefined ? parsed.hasCourseToday : false,
-          'dateStr': parsed.dateStr || '今日课表',
-          'courseCount': parsed.courseCount !== undefined ? parsed.courseCount : 0,
-          'course1_name': parsed.course1_name || '',
-          'course1_time': parsed.course1_time || '',
-          'course1_room': parsed.course1_room || '',
-          'course1_status': parsed.course1_status || '',
-          'course2_name': parsed.course2_name || '',
-          'course2_time': parsed.course2_time || '',
-          'course2_room': parsed.course2_room || '',
-          'course2_status': parsed.course2_status || '',
-          'course3_name': parsed.course3_name || '',
-          'course3_time': parsed.course3_time || '',
-          'course3_room': parsed.course3_room || '',
-          'course3_status': parsed.course3_status || ''
-        };
-      }
+      const pref = dataPreferences.getPreferencesSync(this.context, { name: AppConstants.PREF_COURSE_DB_NAME });
+      const courseCacheJson = pref.getSync(AppConstants.NEXT_COURSE_CACHE_KEY, '') as string;
+      const examDataJson = pref.getSync(AppConstants.EXAM_DATA_KEY, '') as string;
+      const remoteBusJson = pref.getSync(AppConstants.PREF_BUS_SCHEDULE_JSON_KEY, '') as string;
+      return WidgetDataModel.buildFullWidgetData(courseCacheJson, examDataJson, remoteBusJson, new Date());
     } catch (e) {
       console.error('[EntryFormAbility] getFormData error:', JSON.stringify(e));
+      return WidgetDataModel.buildFullWidgetData('', '', '', new Date());
     }
-
-    return formData;
   }
 
   onAddForm(want: Want): formBindingData.FormBindingData {
-    // 记录卡片实例 ID：应用侧事件驱动主动刷新（CourseService.pushWidgetUpdate）
+    // 记录卡片实例 ID：应用侧事件驱动主动刷新（WidgetUpdateService.pushAllFromCaches）
     // 依赖该列表定位需要推送的卡片
     const params: Record<string, Object> | undefined = want.parameters;
     if (params) {
@@ -112,12 +44,12 @@ export default class EntryFormAbility extends FormExtensionAbility {
   /** 将新添加的卡片实例 ID 追加进持久化列表（去重）。 */
   private rememberFormId(formId: string): void {
     try {
-      let pref = dataPreferences.getPreferencesSync(this.context, { name: AppConstants.PREF_COURSE_DB_NAME });
-      const idsStr = pref.getSync(WIDGET_FORM_IDS_KEY, '[]') as string;
+      const pref = dataPreferences.getPreferencesSync(this.context, { name: AppConstants.PREF_COURSE_DB_NAME });
+      const idsStr = pref.getSync(AppConstants.WIDGET_FORM_IDS_KEY, '[]') as string;
       const ids: string[] = JSON.parse(idsStr) as string[];
       if (ids.indexOf(formId) < 0) {
         ids.push(formId);
-        pref.putSync(WIDGET_FORM_IDS_KEY, JSON.stringify(ids));
+        pref.putSync(AppConstants.WIDGET_FORM_IDS_KEY, JSON.stringify(ids));
         pref.flushSync();
       }
     } catch (e) {
@@ -128,8 +60,8 @@ export default class EntryFormAbility extends FormExtensionAbility {
   /** 从持久化列表中移除已被删除的卡片实例 ID。 */
   private forgetFormId(formId: string): void {
     try {
-      let pref = dataPreferences.getPreferencesSync(this.context, { name: AppConstants.PREF_COURSE_DB_NAME });
-      const idsStr = pref.getSync(WIDGET_FORM_IDS_KEY, '[]') as string;
+      const pref = dataPreferences.getPreferencesSync(this.context, { name: AppConstants.PREF_COURSE_DB_NAME });
+      const idsStr = pref.getSync(AppConstants.WIDGET_FORM_IDS_KEY, '[]') as string;
       const ids: string[] = JSON.parse(idsStr) as string[];
       const remaining: string[] = [];
       for (let i = 0; i < ids.length; i++) {
@@ -138,7 +70,7 @@ export default class EntryFormAbility extends FormExtensionAbility {
         }
       }
       if (remaining.length !== ids.length) {
-        pref.putSync(WIDGET_FORM_IDS_KEY, JSON.stringify(remaining));
+        pref.putSync(AppConstants.WIDGET_FORM_IDS_KEY, JSON.stringify(remaining));
         pref.flushSync();
       }
     } catch (e) {

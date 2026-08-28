@@ -4,6 +4,7 @@ import { ExamRepository, ExamSelectionPreference } from '../repository/ExamRepos
 import { ExamUtils } from '../common/utils/ExamUtils';
 import { DateUtils } from '../common/utils/DateUtils';
 import { SyncService } from './SyncService';
+import { WidgetUpdateService } from './WidgetUpdateService';
 import {
   getExamTypeIdByIndex,
   getExamTypeIndexById,
@@ -32,11 +33,14 @@ export class ExamService {
   static async saveExams(context: Object, exams: ExamItem[]): Promise<void> {
     const sorted = ExamUtils.sortExams(exams);
     await ExamRepository.saveExamData(context, JSON.stringify(sorted));
+    // 考试数据变更后刷新桌面卡片（考试倒计时/考试日程卡），失败静默
+    WidgetUpdateService.pushAllFromCachesSilently(context);
     SyncService.triggerAutoSyncIfEnabled(context as Context);
   }
 
   static async clearExamData(context: Object): Promise<void> {
     await ExamRepository.clearExamData(context);
+    WidgetUpdateService.pushAllFromCachesSilently(context);
   }
 
   static filterExams(exams: ExamItem[], examTypeId: number, semesterId: number): ExamItem[] {

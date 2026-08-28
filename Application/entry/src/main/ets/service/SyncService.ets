@@ -17,6 +17,7 @@ import { calculateSemesterId, getSemesterLabelById } from '../model/classTableMo
 import { AppConstants } from '../common/constants/AppConstants';
 import { AuthService } from './AuthService';
 import { ReminderService } from './ReminderService';
+import { WidgetUpdateService } from './WidgetUpdateService';
 
 export interface SyncResult {
   success: boolean;
@@ -410,6 +411,8 @@ export class SyncService {
       const mergedItems = Array.from(merged.values());
       // 合并写回走「跳过盖章」的内部通道，避免裁决后的时间戳被集中盖章刷新成 now
       await ExamRepository.saveExamDataRaw(context, JSON.stringify(mergedItems));
+      // 云端合并结果同样会改变考试卡片展示内容，刷新桌面卡片，失败静默
+      WidgetUpdateService.pushAllFromCachesSilently(context);
 
       const result: DownloadResult = {
         success: true,

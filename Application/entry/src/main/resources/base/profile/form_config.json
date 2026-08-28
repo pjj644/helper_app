@@ -34,6 +34,60 @@
       "updateDuration": 1,
       "defaultDimension": "2*4",
       "supportDimensions": ["2*4"]
+    },
+    {
+      "name": "ExamWidgetCard2x2",
+      "displayName": "考试倒计时",
+      "description": "展示最近一场考试的时间地点与天级倒计时",
+      "src": "./ets/widget/pages/ExamWidgetCard2x2.ets",
+      "uiSyntax": "arkts",
+      "window": {
+        "designWidth": 720,
+        "autoDesignWidth": true
+      },
+      "colorMode": "auto",
+      "isDefault": false,
+      "updateEnabled": true,
+      "scheduledUpdateTime": "08:00",
+      "updateDuration": 1,
+      "defaultDimension": "2*2",
+      "supportDimensions": ["2*2"]
+    },
+    {
+      "name": "ExamWidgetCard2x4",
+      "displayName": "考试日程",
+      "description": "展示最近三场考试的时间地点与倒计时列表",
+      "src": "./ets/widget/pages/ExamWidgetCard2x4.ets",
+      "uiSyntax": "arkts",
+      "window": {
+        "designWidth": 720,
+        "autoDesignWidth": true
+      },
+      "colorMode": "auto",
+      "isDefault": false,
+      "updateEnabled": true,
+      "scheduledUpdateTime": "08:00",
+      "updateDuration": 1,
+      "defaultDimension": "2*4",
+      "supportDimensions": ["2*4"]
+    },
+    {
+      "name": "BusWidgetCard2x4",
+      "displayName": "成电班车",
+      "description": "展示双校区下一班发车时间与实时倒计时",
+      "src": "./ets/widget/pages/BusWidgetCard2x4.ets",
+      "uiSyntax": "arkts",
+      "window": {
+        "designWidth": 720,
+        "autoDesignWidth": true
+      },
+      "colorMode": "auto",
+      "isDefault": false,
+      "updateEnabled": true,
+      "scheduledUpdateTime": "08:00",
+      "updateDuration": 1,
+      "defaultDimension": "2*4",
+      "supportDimensions": ["2*4"]
     }
   ]
 }

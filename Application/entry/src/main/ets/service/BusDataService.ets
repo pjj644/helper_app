@@ -10,6 +10,7 @@ import {
   NextBusInfo,
   parseBusSchedulePayload
 } from '../model/BusScheduleModel';
+import { WidgetUpdateService } from './WidgetUpdateService';
 
 /** preferences 中持久化的班车 last-good 数据包（本服务自有格式） */
 interface BusScheduleEnvelope {
@@ -172,5 +173,7 @@ export class BusDataService {
     }
     BusDataService.memoryList = items;
     BusDataService.memoryUpdatedAt = envelope.updatedAt;
+    // 班车数据更新后刷新桌面卡片（成电班车卡），失败静默
+    WidgetUpdateService.pushAllFromCachesSilently(context);
   }
 }
