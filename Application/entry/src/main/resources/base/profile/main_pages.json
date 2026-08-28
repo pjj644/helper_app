@@ -12,6 +12,7 @@
     "pages/quick/AssistantPage",
     "pages/login/loginIndex",
     "pages/login/AccountManage",
+    "pages/mine/PersonalInfoPage",
     "pages/gradePages/GradePage",
     "pages/gradePages/GradeImport",
     "pages/schedulePages/CalendarPage",

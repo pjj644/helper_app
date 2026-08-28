@@ -1,5 +1,6 @@
 import { router, curves, promptAction } from '@kit.ArkUI';
 import { pasteboard } from '@kit.BasicServicesKit';
+import { bundleManager } from '@kit.AbilityKit';
 import { AssistantPage } from '../pages/quick/AssistantPage';
 import { CalendarPage } from '../pages/schedulePages/CalendarPage';
 import {
@@ -51,6 +52,7 @@ struct MainPage {
   @State currentTabIndex: number = 2;
   @State currentWeek: number = getCurrentWeek();
   @State hasData: boolean = false;
+  @State versionName: string = '';
   @State todayCourses: Course[] = [];
   @State tomorrowCourses: Course[] = [];
   @State settings: DisplaySettings = {
@@ -121,6 +123,7 @@ struct MainPage {
     this.loadQuickInfo();
     this.checkLoginStatus();
     this.nowTick = Date.now();
+    this.versionName = this.loadVersionName();
 
     if (!PreferencesUtil.getInstance().hasAgreedPrivacy()) {
       this.privacyDialogController?.open();
@@ -522,10 +525,22 @@ struct MainPage {
     });
   }
 
+  /** 从应用包信息读取版本号（aboutToAppear 时调用），读取失败回退空串 */
+  private loadVersionName(): string {
+    try {
+      const info = bundleManager.getBundleInfoForSelfSync(bundleManager.BundleFlag.GET_BUNDLE_INFO_DEFAULT);
+      return info.versionName ? info.versionName : '';
+    } catch (e) {
+      console.error('[Index] 读取版本号失败:', JSON.stringify(e));
+      return '';
+    }
+  }
+
   private showAboutDialog(): void {
+    const versionText = this.versionName ? ` v${this.versionName}` : '';
     this.getUIContext().getPromptAction().showDialog({
       title: '关于应用',
-      message: '成电校园助手 v1.0.0\n\n一站式校园学习生活工具，集成课表、考试、日程、成绩查询与 AI 智能助手，助力每一天的校园生活。\n\n如有问题建议请通过「意见反馈」联系开发团队。',
+      message: `成电校园助手${versionText}\n\n一站式校园学习生活工具，集成课表、考试、日程、成绩查询与 AI 智能助手，助力每一天的校园生活。\n\n如有问题建议请通过「意见反馈」联系开发团队。`,
       buttons: [
         { text: '知道了', color: '#007AFF', primary: true }
       ]
@@ -817,7 +832,9 @@ struct MainPage {
 
         Column({ space: 0 }) {
           this.MineMenuItem('个人信息', $r('app.media.ic_public_edit'), () => {
-            this.showToast('个人信息功能开发中');
+            router.pushUrl({ url: RouterConstants.PAGE_PERSONAL_INFO }).catch((error: Error) => {
+              console.error('[Index] 跳转个人信息页面失败:', error);
+            });
           });
           this.MineMenuItem('账号设置', $r('app.media.settings_icon'), () => {
             router.pushUrl({ url: RouterConstants.PAGE_ACCOUNT_MANAGE }).catch((error: Error) => {
@@ -838,7 +855,7 @@ struct MainPage {
         .borderRadius(14)
         .backgroundColor($r('app.color.card_background'));
 
-        Text('v1.0.0')
+        Text(this.versionName ? `v${this.versionName}` : '')
           .fontSize(12)
           .fontColor($r('app.color.text_tertiary'))
           .margin({ top: 8 });
