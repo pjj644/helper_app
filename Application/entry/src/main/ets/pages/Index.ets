@@ -1,4 +1,4 @@
-import { router, curves, promptAction } from '@kit.ArkUI';
+import { router, curves, promptAction, display } from '@kit.ArkUI';
 import { pasteboard } from '@kit.BasicServicesKit';
 import { bundleManager } from '@kit.AbilityKit';
 import { AssistantPage } from '../pages/quick/AssistantPage';
@@ -30,7 +30,8 @@ import { ScheduleService } from '../service/ScheduleService';
 import { AuthService } from '../service/AuthService';
 import { PageContextTracker } from '../common/agent/PageContextTracker';
 import { FloatingWindowManager } from '../common/agent/FloatingWindowManager';
-import { UIActionDispatcher } from '../common/agent/UIActionDispatcher';
+import { UIActionDispatcher, UIActionHandler, GuidanceState } from '../common/agent/UIActionDispatcher';
+import { SpotlightIds } from '../common/agent/SpotlightRegistry';
 import { BreakpointUtils } from '../common/utils/BreakpointUtils';
 import { HomeHeaderComponent } from '../components/home/HomeHeaderComponent';
 import { NextCourseCardComponent } from '../components/home/NextCourseCardComponent';
@@ -85,6 +86,34 @@ struct MainPage {
   private lastNoFutureExamKey: string = '';
   // 上一次节拍时“未来考试集合”的指纹，用于判断展示值是否实际变化
   private lastExamDisplayKey: string = '';
+  // 已注册页面动作的反注册函数列表（页面销毁时统一清理，避免重复触发）
+  private actionUnregisterList: (() => void)[] = [];
+  // 主窗口侧引导监听：测量目标组件相对窗口矩形(px)并换算 vp 写入 AppStorage，供子窗口引导层挖孔
+  private guidanceRectListener: (state: GuidanceState | null) => void =
+    (state: GuidanceState | null): void => {
+      if (!state) {
+        // 引导结束：清空矩形缓存
+        AppStorage.setOrCreate(AppConstants.GUIDANCE_RECT_X_KEY, 0);
+        AppStorage.setOrCreate(AppConstants.GUIDANCE_RECT_Y_KEY, 0);
+        AppStorage.setOrCreate(AppConstants.GUIDANCE_RECT_W_KEY, 0);
+        AppStorage.setOrCreate(AppConstants.GUIDANCE_RECT_H_KEY, 0);
+        return;
+      }
+      try {
+        // componentUtils 返回的 size/windowOffset 单位为 px，需按屏幕密度换算为 vp
+        const info = this.getUIContext().getComponentUtils().getRectangleById(state.targetElementId);
+        const disp = display.getDefaultDisplaySync();
+        const density: number = disp.densityPixels || 3.0;
+        AppStorage.setOrCreate(AppConstants.GUIDANCE_RECT_X_KEY, info.windowOffset.x / density);
+        AppStorage.setOrCreate(AppConstants.GUIDANCE_RECT_Y_KEY, info.windowOffset.y / density);
+        AppStorage.setOrCreate(AppConstants.GUIDANCE_RECT_W_KEY, info.size.width / density);
+        AppStorage.setOrCreate(AppConstants.GUIDANCE_RECT_H_KEY, info.size.height / density);
+      } catch (e) {
+        console.error('[Index] 解析引导目标组件矩形失败:', JSON.stringify(e));
+        // 组件未挂载或页面已切换：撤除引导兜底
+        UIActionDispatcher.getInstance().clearGuidance();
+      }
+    };
   private privacyDialogController: CustomDialogController | null = new CustomDialogController({
     builder: PrivacyDialogComponent({
       onAgree: () => {
@@ -97,15 +126,15 @@ struct MainPage {
   });
 
   private tools: HomeToolItem[] = [
-    { title: '云中成电', icon: '☁️', color: '#0A59F7', url: AppConstants.ONLINE_URL },
-    { title: '成电班车', icon: '🚌', color: '#10B981', route: RouterConstants.PAGE_BUS_SCHEDULE },
-    { title: 'AI 助手', icon: '🤖', color: '#6366F1', route: RouterConstants.PAGE_ASSISTANT, iconImage: $r('app.media.ic_ai_assistant') },
-    { title: '成绩查询', icon: '📊', color: '#EC4899', route: RouterConstants.PAGE_GRADE },
-    { title: '校园地图', icon: '🗺️', color: '#3B82FF', url: AppConstants.GIS_MAP_URL, iconImage: $r('app.media.ic_campus_map') },
-    { title: '图书馆', icon: '📚', color: '#06B6D4', url: AppConstants.LIB_FULL_URL },
-    { title: '校园日历', icon: '📅', color: '#84CC16', route: RouterConstants.PAGE_CALENDAR },
-    { title: '清水河畔', icon: '🌊', color: '#0EA5E9', url: AppConstants.QINGSHUI_RIVER_URL, iconImage: $r('app.media.ic_qingshui_river') },
-    { title: '一卡通余额', icon: '💰', color: '#F97316', url: AppConstants.CARD_BALANCE_URL, iconImage: $r('app.media.ic_card_balance') }
+    { title: '云中成电', icon: '☁️', color: '#0A59F7', url: AppConstants.ONLINE_URL, spotlightId: SpotlightIds.DISCOVER_TOOL_CLOUD_PORTAL },
+    { title: '成电班车', icon: '🚌', color: '#10B981', route: RouterConstants.PAGE_BUS_SCHEDULE, spotlightId: SpotlightIds.DISCOVER_TOOL_BUS },
+    { title: 'AI 助手', icon: '🤖', color: '#6366F1', route: RouterConstants.PAGE_ASSISTANT, iconImage: $r('app.media.ic_ai_assistant'), spotlightId: SpotlightIds.DISCOVER_TOOL_AI },
+    { title: '成绩查询', icon: '📊', color: '#EC4899', route: RouterConstants.PAGE_GRADE, spotlightId: SpotlightIds.DISCOVER_TOOL_GRADES },
+    { title: '校园地图', icon: '🗺️', color: '#3B82FF', url: AppConstants.GIS_MAP_URL, iconImage: $r('app.media.ic_campus_map'), spotlightId: SpotlightIds.DISCOVER_TOOL_MAP },
+    { title: '图书馆', icon: '📚', color: '#06B6D4', url: AppConstants.LIB_FULL_URL, spotlightId: SpotlightIds.DISCOVER_TOOL_LIBRARY },
+    { title: '校园日历', icon: '📅', color: '#84CC16', route: RouterConstants.PAGE_CALENDAR, spotlightId: SpotlightIds.DISCOVER_TOOL_CALENDAR },
+    { title: '清水河畔', icon: '🌊', color: '#0EA5E9', url: AppConstants.QINGSHUI_RIVER_URL, iconImage: $r('app.media.ic_qingshui_river'), spotlightId: SpotlightIds.DISCOVER_TOOL_RIVERSIDE },
+    { title: '一卡通余额', icon: '💰', color: '#F97316', url: AppConstants.CARD_BALANCE_URL, iconImage: $r('app.media.ic_card_balance'), spotlightId: SpotlightIds.DISCOVER_TOOL_CARD_BALANCE }
   ];
 
   private normalizeExamTypeIndex(index: number): number {
@@ -147,12 +176,8 @@ struct MainPage {
       this.updateCurrentTabContext();
     }, 40);
 
-    UIActionDispatcher.getInstance().registerHandler('switch_tab', (params: Record<string, Object>) => {
-      const idx = Number(params['tabIndex'] !== undefined ? params['tabIndex'] : 2);
-      this.currentTabIndex = idx;
-      this.updateCurrentTabContext();
-      return true;
-    });
+    this.registerActionHandlers();
+    UIActionDispatcher.getInstance().addGuidanceListener(this.guidanceRectListener);
   }
 
   aboutToDisappear(): void {
@@ -160,6 +185,53 @@ struct MainPage {
       clearInterval(this.tickTimer);
       this.tickTimer = -1;
     }
+    for (let i = 0; i < this.actionUnregisterList.length; i++) {
+      this.actionUnregisterList[i]();
+    }
+    this.actionUnregisterList = [];
+    UIActionDispatcher.getInstance().removeGuidanceListener(this.guidanceRectListener);
+  }
+
+  /** 注册动作 handler 并记录反注册函数，页面销毁时统一清理 */
+  private registerAction(action: string, handler: UIActionHandler): void {
+    this.actionUnregisterList.push(UIActionDispatcher.getInstance().registerHandler(action, handler));
+  }
+
+  /**
+   * 页面动作 handler 注册：updateCurrentTabContext 快照 availableActions 声明的
+   * 每个动作（含各 Tab 活跃时的声明）都必须在此有对应实现，避免 AI 指令落空。
+   */
+  private registerActionHandlers(): void {
+    this.registerAction('switch_tab', (params: Record<string, Object>) => {
+      const idx = Number(params['tabIndex'] !== undefined ? params['tabIndex'] : 2);
+      this.currentTabIndex = idx;
+      this.updateCurrentTabContext();
+      return true;
+    });
+    this.registerAction('open_map', (): Promise<boolean> => {
+      return this.dispatchNavigate(RouterConstants.PAGE_WEB, this.buildWebPageParams('校园地图', AppConstants.GIS_MAP_URL));
+    });
+    this.registerAction('open_grades', (): Promise<boolean> => {
+      return this.dispatchNavigate(RouterConstants.PAGE_GRADE);
+    });
+    this.registerAction('open_library', (): Promise<boolean> => {
+      return this.dispatchNavigate(RouterConstants.PAGE_WEB, this.buildWebPageParams('图书馆', AppConstants.LIB_FULL_URL));
+    });
+    this.registerAction('open_full_table', (): Promise<boolean> => {
+      return this.dispatchNavigate(RouterConstants.PAGE_TABLE_UI);
+    });
+    this.registerAction('open_calendar', (): Promise<boolean> => {
+      return this.dispatchNavigate(RouterConstants.PAGE_CALENDAR);
+    });
+    this.registerAction('open_settings', (): Promise<boolean> => {
+      return this.dispatchNavigate(RouterConstants.PAGE_SETTINGS);
+    });
+    this.registerAction('open_login', (): Promise<boolean> => {
+      return this.dispatchNavigate(RouterConstants.PAGE_LOGIN);
+    });
+    this.registerAction('open_course_import', (): Promise<boolean> => {
+      return this.openImporter();
+    });
   }
 
   onPageShow(): void {
@@ -185,7 +257,8 @@ struct MainPage {
         { 'latestGpa': this.latestGpa, 'todayEvents': this.todayEventCount },
         [
           { actionId: 'open_map', label: '打开校园地图', description: '导航至校园GIS地图' },
-          { actionId: 'open_grades', label: '查成绩', description: '进入成绩查询页面' }
+          { actionId: 'open_grades', label: '查成绩', description: '进入成绩查询页面' },
+          { actionId: 'open_library', label: '打开图书馆', description: '打开图书馆官网' }
         ]
       );
     } else if (this.currentTabIndex === 1) {
@@ -212,7 +285,7 @@ struct MainPage {
         dataSnap,
         [
           { actionId: 'open_full_table', label: '查看完整周课表', description: '跳转至全周课表网格页面' },
-          { actionId: 'import_courses', label: '导入教务课表', description: '从教务系统导入课表' },
+          { actionId: 'open_course_import', label: '导入教务课表', description: '从教务系统导入课表' },
           { actionId: 'open_calendar', label: '打开日历', description: '进入日程日历' }
         ]
       );
@@ -222,9 +295,8 @@ struct MainPage {
         '校园日历',
         '日程管理与系统日历事件',
         { 'todayEvents': this.todayEventCount },
-        [
-          { actionId: 'add_schedule', label: '新建日程', description: '创建新的待办或日程' }
-        ]
+        // 无已注册 handler 的动作不做声明（原 add_schedule 无真实能力承接，已移除）
+        []
       );
     } else if (this.currentTabIndex === 4) {
       PageContextTracker.getInstance().updateSnapshot(
@@ -336,6 +408,8 @@ struct MainPage {
         }
       }
       this.todayEventCount = count;
+      // GPA/日程数加载完成后快照可能已过期，主动刷新一次页面上下文
+      this.updateCurrentTabContext();
     } catch (error) {
       console.error('[Index] loadQuickInfo error:', JSON.stringify(error));
     }
@@ -358,16 +432,39 @@ struct MainPage {
     }
   }
 
-  private openImporter(): void {
-    router.pushUrl({
+  private openImporter(): Promise<boolean> {
+    return router.pushUrl({
       url: RouterConstants.PAGE_COURSE_IMPORT,
       params: {
         returnHome: '1',
         semesterId: String(calculateSemesterId())
       }
-    }).catch((error: Error) => {
+    }).then((): boolean => {
+      return true;
+    }).catch((error: Error): boolean => {
       console.error('[Index] 跳转导入页面失败:', error);
+      return false;
     });
+  }
+
+  /** 页面动作路由跳转统一封装：成功返回 true，失败记录日志并返回 false */
+  private dispatchNavigate(url: string, params?: Record<string, string>): Promise<boolean> {
+    const options: router.RouterOptions = { url: url };
+    if (params !== undefined) {
+      options.params = params;
+    }
+    return router.pushUrl(options).then((): boolean => {
+      return true;
+    }).catch((error: Error): boolean => {
+      console.error(`[Index] 页面动作跳转 ${url} 失败:`, JSON.stringify(error));
+      return false;
+    });
+  }
+
+  /** 构造 WebPage 路由参数（在普通方法中创建 Record，规避箭头函数内的未类型化对象字面量检查） */
+  private buildWebPageParams(title: string, url: string): Record<string, string> {
+    const navParams: Record<string, string> = { 'title': title, 'url': url };
+    return navParams;
   }
 
   private openTable(): void {

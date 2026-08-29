@@ -7,6 +7,7 @@ import { getSemesterOptions, SemesterOptionSet, getSemesterLabelById, calculateS
 import { VisionScheduleHelper, VisionCourseTableResult } from '../../common/agent/VisionScheduleHelper';
 import { VisionImportPreviewDialog } from '../../components/import/VisionImportPreviewDialog';
 import { VisionCoursePreviewItem, createCoursePreviewItems, parseClampedNumber } from '../../model/VisionImportModel';
+import { PageContextTracker } from '../../common/agent/PageContextTracker';
 
 @Entry
 @Component
@@ -32,6 +33,14 @@ struct CourseManage {
   private visionPreviewController: CustomDialogController | null = null;
 
   aboutToAppear(): void {
+    // 上报页面感知快照，供 AI 助手识别当前所在页面
+    PageContextTracker.getInstance().updateSnapshot(
+      'course_manage',
+      '课程管理',
+      '手动管理本地课程，支持 AI 截图识别导入课表',
+      { 'semesterId': this.selectedSemesterId },
+      []
+    );
     this.initSemesterOptions();
     this.loadCourseList();
   }

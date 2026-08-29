@@ -102,6 +102,8 @@ export class AppConstants {
   static readonly SETTING_AI_SHOW_TOOL_CALLS_KEY: string = 'setting_ai_show_tool_calls';
   static readonly SETTING_FLOATING_BALL_ENABLED_KEY: string = 'setting_floating_ball_enabled';
   static readonly FLOATING_SUBWINDOW_NAME: string = 'ai_floating_subwindow';
+  /** 悬浮窗形态 AppStorage 键（BALL/PANEL/GUIDANCE），FloatingWindowManager 与子窗口内容共用 */
+  static readonly FLOATING_WINDOW_MODE_KEY: string = 'floating_window_mode';
   /** AI 助手 SSE 首包 watchdog 阈值（毫秒）：超时未收到任何事件按首事件前失败处理 */
   static readonly AI_FIRST_PACKET_WATCHDOG_MS: number = 45000;
   /** AI 助手首事件前失败的指数退避重试间隔（毫秒），共重试 2 次 */
@@ -191,6 +193,21 @@ export class AppConstants {
   static readonly NOTICE_POLL_MIN_INTERVAL_MS: number = 60 * 60 * 1000;
   /** 单次轮询最多发布的系统通知条数（防止长时间未打开应用后的通知风暴） */
   static readonly NOTICE_MAX_PUBLISH_PER_POLL: number = 3;
+
+  // ==================== AI 悬浮窗引导聚光灯（GUIDANCE 模式） ====================
+  /** 引导目标矩形 AppStorage 键（主窗口 Index 测量组件后写入，FloatingSubWindowContent 读取绘制，单位 vp） */
+  static readonly GUIDANCE_RECT_X_KEY: string = 'guidance_rect_x';
+  static readonly GUIDANCE_RECT_Y_KEY: string = 'guidance_rect_y';
+  static readonly GUIDANCE_RECT_W_KEY: string = 'guidance_rect_w';
+  static readonly GUIDANCE_RECT_H_KEY: string = 'guidance_rect_h';
+  /** 引导孔洞相对目标组件矩形的外扩边距 (vp) */
+  static readonly GUIDANCE_HOLE_EXPAND_VP: number = 8;
+  /** 引导孔洞圆角 (vp) */
+  static readonly GUIDANCE_HOLE_RADIUS_VP: number = 12;
+  /** 引导孔洞描边宽度 (vp) */
+  static readonly GUIDANCE_RING_STROKE_VP: number = 2;
+  /** 提示气泡优先显示在孔洞上方的最小可用高度 (vp)，不足则改放孔洞下方 */
+  static readonly GUIDANCE_HINT_MIN_TOP_VP: number = 96;
 }
 
 export class RouterConstants {

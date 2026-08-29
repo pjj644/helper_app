@@ -1,6 +1,7 @@
 import { router } from '@kit.ArkUI';
 import { AuthService } from '../../service/AuthService';
 import { ThemeManager } from '../../common/utils/ThemeManager';
+import { PageContextTracker } from '../../common/agent/PageContextTracker';
 
 @Entry
 @Component
@@ -9,6 +10,14 @@ struct AccountManage {
   @State loginTime: string = '';
 
   async aboutToAppear(): Promise<void> {
+    // 上报页面感知快照，供 AI 助手识别当前所在页面
+    PageContextTracker.getInstance().updateSnapshot(
+      'account_manage',
+      '账号管理',
+      '查看当前登录账号信息，支持退出登录与注销账号',
+      {},
+      []
+    );
     try {
       const context = getContext(this);
       const session = await AuthService.getLoginSession(context);

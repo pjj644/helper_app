@@ -2,8 +2,9 @@ import { window, display, promptAction } from '@kit.ArkUI';
 import { preferences } from '@kit.ArkData';
 import { BusinessError } from '@kit.BasicServicesKit';
 import { AppConstants, RouterConstants } from '../constants/AppConstants';
+import { UIActionDispatcher } from './UIActionDispatcher';
 
-export type FloatingWindowMode = 'BALL' | 'PANEL' | 'HIDDEN';
+export type FloatingWindowMode = 'BALL' | 'PANEL' | 'HIDDEN' | 'GUIDANCE';
 export type BallExpandState = 'HALF_HIDDEN' | 'EXPANDED';
 export type DockSide = 'LEFT' | 'RIGHT';
 
@@ -21,6 +22,8 @@ export class FloatingWindowManager {
   private isEnabled: boolean = true;
   private isAssistantPageActive: boolean = false;
   private currentMode: FloatingWindowMode = 'BALL';
+  // 进入 GUIDANCE 引导模式前的窗口模式，退出引导时恢复
+  private modeBeforeGuidance: FloatingWindowMode = 'BALL';
   private ballExpandState: BallExpandState = 'HALF_HIDDEN';
   private dockSide: DockSide = 'RIGHT';
 
@@ -184,7 +187,7 @@ export class FloatingWindowManager {
           if (this.isEnabled && !this.isAssistantPageActive) {
             this.subWindow?.showWindow();
             this.currentMode = 'BALL';
-            AppStorage.setOrCreate('floating_window_mode', 'BALL');
+            AppStorage.setOrCreate(AppConstants.FLOATING_WINDOW_MODE_KEY, 'BALL');
             AppStorage.setOrCreate('floating_ball_dock_side', this.dockSide);
             AppStorage.setOrCreate('floating_ball_expand_state', this.ballExpandState);
           }
@@ -204,7 +207,7 @@ export class FloatingWindowManager {
     }
     try {
       this.currentMode = 'PANEL';
-      AppStorage.setOrCreate('floating_window_mode', 'PANEL');
+      AppStorage.setOrCreate(AppConstants.FLOATING_WINDOW_MODE_KEY, 'PANEL');
 
       // 展开为全屏覆盖透明窗口（让 Panel 组件在其内部做半屏或抽屉展示）
       this.subWindow.resize(this.screenWidthPx, this.screenHeightPx);
@@ -224,7 +227,7 @@ export class FloatingWindowManager {
     try {
       this.currentMode = 'BALL';
       this.ballExpandState = 'EXPANDED';
-      AppStorage.setOrCreate('floating_window_mode', 'BALL');
+      AppStorage.setOrCreate(AppConstants.FLOATING_WINDOW_MODE_KEY, 'BALL');
       AppStorage.setOrCreate('floating_ball_expand_state', 'EXPANDED');
       AppStorage.setOrCreate('floating_ball_reset_timer', Date.now());
 
@@ -240,6 +243,62 @@ export class FloatingWindowManager {
       this.subWindow.moveWindowTo(this.ballPosX, this.ballPosY);
     } catch (e) {
       console.error('[FloatingWindowManager] switchToBallMode error:', JSON.stringify(e));
+    }
+  }
+
+  /**
+   * 进入引导聚光灯模式：子窗口全屏展示引导层并关闭触摸，
+   * 用户可直接点按主窗口中被高亮的目标元素（AI show_guidance 用）
+   */
+  public switchToGuidanceMode(): void {
+    if (!this.subWindow) {
+      return;
+    }
+    try {
+      // 重复进入（连续 show_guidance）时保留最初进入前的模式
+      if (this.currentMode !== 'GUIDANCE') {
+        this.modeBeforeGuidance = this.currentMode;
+      }
+      this.currentMode = 'GUIDANCE';
+      AppStorage.setOrCreate(AppConstants.FLOATING_WINDOW_MODE_KEY, 'GUIDANCE');
+
+      // 展开为全屏覆盖窗口，引导层自行绘制遮罩与挖孔
+      this.subWindow.resize(this.screenWidthPx, this.screenHeightPx);
+      this.subWindow.moveWindowTo(0, 0);
+      // 关闭子窗口触摸，让点击穿透到主窗口（失败仅记日志，引导层 hitTestBehavior 兜底）
+      this.subWindow.setWindowTouchable(false).catch((err: BusinessError) => {
+        console.error('[FloatingWindowManager] setWindowTouchable(false) error:', JSON.stringify(err));
+      });
+    } catch (e) {
+      console.error('[FloatingWindowManager] switchToGuidanceMode error:', JSON.stringify(e));
+    }
+  }
+
+  /**
+   * 退出引导聚光灯模式：恢复进入前形态并重新开启子窗口触摸
+   */
+  public exitGuidanceMode(): void {
+    // 未处于引导态时直接忽略（含子窗口内容刚挂载收到初始 null 通知的场景）
+    if (this.currentMode !== 'GUIDANCE') {
+      return;
+    }
+    if (!this.subWindow) {
+      // 窗口已被销毁：仅复位模式状态
+      this.currentMode = this.modeBeforeGuidance === 'PANEL' ? 'PANEL' : 'BALL';
+      AppStorage.setOrCreate(AppConstants.FLOATING_WINDOW_MODE_KEY, this.currentMode);
+      return;
+    }
+    try {
+      if (this.modeBeforeGuidance === 'PANEL') {
+        this.switchToPanelMode();
+      } else {
+        this.switchToBallMode();
+      }
+      this.subWindow.setWindowTouchable(true).catch((err: BusinessError) => {
+        console.error('[FloatingWindowManager] setWindowTouchable(true) error:', JSON.stringify(err));
+      });
+    } catch (e) {
+      console.error('[FloatingWindowManager] exitGuidanceMode error:', JSON.stringify(e));
     }
   }
 
@@ -387,6 +446,9 @@ export class FloatingWindowManager {
       return;
     }
     if (!this.subWindow) {
+      // 重建路径（show / setEnabled(true) 均会走到此分支）：
+      // 先清掉残存引导态，避免 8 秒内重建的子窗口内容挂载时通过监听器恢复旧引导
+      UIActionDispatcher.getInstance().clearGuidance();
       this.createSubWindowIfNeeded();
       return;
     }
@@ -408,7 +470,7 @@ export class FloatingWindowManager {
     }
     this.subWindow = null;
     this.currentMode = 'BALL';
-    AppStorage.setOrCreate('floating_window_mode', 'BALL');
+    AppStorage.setOrCreate(AppConstants.FLOATING_WINDOW_MODE_KEY, 'BALL');
   }
 
   public destroy(): void {

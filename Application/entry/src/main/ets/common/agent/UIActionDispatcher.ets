@@ -93,6 +93,15 @@ export class UIActionDispatcher {
   }
 
   /**
+   * 获取当前引导状态。
+   * 供监听器做陈旧通知守卫：clearGuidance 先置空 currentGuidance 再广播，
+   * 遍历期间被撤销的 show 通知可用本方法精确识别并忽略，防止重入卡死。
+   */
+  public getGuidanceState(): GuidanceState | null {
+    return this.currentGuidance;
+  }
+
+  /**
    * 清除 UI 引导
    */
   public clearGuidance(): void {

@@ -17,7 +17,14 @@ import { MarkdownBubble } from '../../common/agent/MarkdownBubble';
 const MAX_HISTORY_ROUNDS: number = 10;
 
 type Message = ChatMessage;
-type DisplayMessage = ChatDisplayMessage;
+
+// 仅内存显示层扩展：为每条显示消息分配递增 uid 作为稳定 ForEach key，
+// 流式更新不再因 key 变化触发整气泡重建；uid 不写入持久化 ChatDisplayMessage（落库前经 toPersistDisplayMessages 剥离）
+interface UidDisplayMessage extends ChatDisplayMessage {
+  uid?: number;
+}
+
+type DisplayMessage = UidDisplayMessage;
 
 @Entry
 @Component
@@ -48,6 +55,11 @@ export struct AssistantPage {
   @State backendGuideHint: string = '';
   // T3 中断态：需要展示「重新发送」入口的 assistant 气泡下标（-1 表示无中断）
   @State interruptedMsgIndex: number = -1;
+  // 流式尾气泡的内容镜像（tracked 状态）：稳定 uid key 下，ForEach 不会对复用项重新同步数据，
+  // chunk 到达时同步本镜像驱动 MarkdownBubble 经 @Prop 增量更新，避免整气泡重建闪烁
+  @State streamingContent: string = '';
+  // 当前流式轮次尾气泡的 uid（0 表示无流式轮次）：内容镜像与思考提示分支均按 uid 绑定，位置无关
+  @State streamingUid: number = 0;
   // 澄清提问卡片：输入框草稿（同一时刻至多一张未回答卡片）与最近一次下发的提问参数缓存
   @State clarificationInputText: string = '';
   private lastClarificationArgs: string = '';
@@ -57,9 +69,14 @@ export struct AssistantPage {
   private thinkingStopwatchTimer: number = -1;
   private thinkingStartTime: number = 0;
   private currentClient: BackendAgentClient | null = null;
+  // 本轮实际下发后端的载荷（页面上下文 + 用户指令），供中断态「重新发送」幂等续接复用；
+  // 气泡展示、messages 历史与会话持久化仍保留 raw 原文
+  private lastPromptWithContext: string = '';
   // T3 缺 final 帧标记：onIncomplete 时置位，onComplete 时消费并落持久化轻提示
   private pendingIncompleteRound: boolean = false;
   private speechHelper: SpeechRecognizerHelper = new SpeechRecognizerHelper();
+  // 消息 uid 递增计数器（uid 仅用于显示层 key 稳定化，不持久化）
+  private nextMsgUid: number = 1;
 
   aboutToAppear(): void {
     FloatingWindowManager.getInstance().setAssistantPageActive(true);
@@ -150,7 +167,7 @@ export struct AssistantPage {
     if (this.sessions.length > 0) {
       this.currentSessionId = this.sessions[0].id;
       this.messages = this.sessions[0].messages;
-      this.displayMessages = this.sessions[0].displayMessages;
+      this.displayMessages = this.withUid(this.sessions[0].displayMessages || []);
       console.info('[AssistantPage] restored session:', this.sessions[0].id, 'title:', this.sessions[0].title);
     } else {
       this.messages = [];
@@ -184,13 +201,50 @@ export struct AssistantPage {
           id: this.sessions[i].id,
           title: this.sessions[i].title,
           messages: [...this.messages],
-          displayMessages: [...this.displayMessages],
+          displayMessages: this.toPersistDisplayMessages(),
           createdAt: this.sessions[i].createdAt,
           updatedAt: this.sessions[i].updatedAt
         };
         break;
       }
     }
+  }
+
+  /** 历史恢复入口统一补 uid：恢复/切换/删除会话时为每条显示消息分配内存层稳定 key */
+  private withUid(list: ChatDisplayMessage[]): DisplayMessage[] {
+    return list.map((d: ChatDisplayMessage): DisplayMessage => ({
+      role: d.role,
+      content: d.content,
+      isError: d.isError,
+      toolName: d.toolName,
+      toolArgs: d.toolArgs,
+      toolResult: d.toolResult,
+      isToolSuccess: d.isToolSuccess,
+      telemetry: d.telemetry,
+      thought: d.thought,
+      thinkingDurationMs: d.thinkingDurationMs,
+      isThoughtExpanded: d.isThoughtExpanded,
+      statusHint: d.statusHint,
+      uid: this.nextMsgUid++
+    }));
+  }
+
+  /** 落库前剥离内存层 uid，保持会话持久化结构不变 */
+  private toPersistDisplayMessages(): ChatDisplayMessage[] {
+    return this.displayMessages.map((m: DisplayMessage): ChatDisplayMessage => ({
+      role: m.role,
+      content: m.content,
+      isError: m.isError,
+      toolName: m.toolName,
+      toolArgs: m.toolArgs,
+      toolResult: m.toolResult,
+      isToolSuccess: m.isToolSuccess,
+      telemetry: m.telemetry,
+      thought: m.thought,
+      thinkingDurationMs: m.thinkingDurationMs,
+      isThoughtExpanded: m.isThoughtExpanded,
+      statusHint: m.statusHint
+    }));
   }
 
   private createNewChat(): void {
@@ -202,6 +256,10 @@ export struct AssistantPage {
       this.stopThinkingTimer();
       this.pendingIncompleteRound = false;
       this.interruptedMsgIndex = -1;
+      this.streamingUid = 0;
+      this.streamingContent = '';
+      // 新对话放弃当前轮次：一并清理重发上下文载荷
+      this.lastPromptWithContext = '';
     }
     this.syncCurrentSession();
     for (let i = 0; i < this.sessions.length; i++) {
@@ -234,12 +292,17 @@ export struct AssistantPage {
       this.showSidePanel = false;
       return;
     }
+    // 切换会话视为放弃当前轮次续接：清空中断标记、流式镜像与重发上下文载荷，避免跨会话复用
+    this.interruptedMsgIndex = -1;
+    this.streamingUid = 0;
+    this.streamingContent = '';
+    this.lastPromptWithContext = '';
     this.syncCurrentSession();
     for (let i = 0; i < this.sessions.length; i++) {
       if (this.sessions[i].id === sessionId) {
         this.currentSessionId = sessionId;
         this.messages = [...this.sessions[i].messages];
-        this.displayMessages = [...this.sessions[i].displayMessages];
+        this.displayMessages = this.withUid(this.sessions[i].displayMessages || []);
         break;
       }
     }
@@ -256,7 +319,12 @@ export struct AssistantPage {
       if (remaining.length > 0) {
         this.currentSessionId = remaining[0].id;
         this.messages = [...remaining[0].messages];
-        this.displayMessages = [...remaining[0].displayMessages];
+        this.displayMessages = this.withUid(remaining[0].displayMessages || []);
+        // 切换到其他会话：清空中断标记、流式镜像与重发上下文载荷，避免跨会话复用
+        this.interruptedMsgIndex = -1;
+        this.streamingUid = 0;
+        this.streamingContent = '';
+        this.lastPromptWithContext = '';
       } else {
         this.createNewChat();
         return;
@@ -573,7 +641,8 @@ export struct AssistantPage {
       toolArgs: this.lastClarificationArgs,
       toolResult: '',
       isToolSuccess: success,
-      statusHint: success ? 'await_answer' : ''
+      statusHint: success ? 'await_answer' : '',
+      uid: this.nextMsgUid++
     };
     const lastIdx: number = this.displayMessages.length - 1;
     if (lastIdx >= 0 && this.displayMessages[lastIdx].role === 'assistant' && (!this.displayMessages[lastIdx].content || this.displayMessages[lastIdx].content.length === 0)) {
@@ -606,7 +675,9 @@ export struct AssistantPage {
       thought: cur.thought,
       thinkingDurationMs: cur.thinkingDurationMs,
       isThoughtExpanded: cur.isThoughtExpanded,
-      statusHint: ''
+      statusHint: '',
+      // 已答态属于离散状态切换：分配新 uid 触发该卡片整体重建（无流式高频更新，不存在闪烁问题）
+      uid: this.nextMsgUid++
     };
     this.displayMessages = updated;
     this.clarificationInputText = '';
@@ -809,25 +880,39 @@ export struct AssistantPage {
       return;
     }
 
-    this.displayMessages = [...this.displayMessages, { role: 'user', content: userInput, isError: false }];
+    this.displayMessages = [...this.displayMessages, { role: 'user', content: userInput, isError: false, uid: this.nextMsgUid++ }];
     this.messages = [...this.messages, { role: 'user', content: userInput }];
     this.inputText = '';
     this.isLoading = true;
+    // 新一轮正常发送即清除历史中断标记，避免「重新发送」入口与警告残留到后续轮次
+    this.interruptedMsgIndex = -1;
 
     const isFirstMessage: boolean = this.messages.length === 1;
     if (isFirstMessage) {
       this.updateCurrentSessionTitle(this.generateTitle(userInput));
     }
 
+    // 注入当前页面上下文（与悬浮球 FloatingSubWindowContent 同一口径）：
+    // 仅实际下发后端的载荷携带上下文前缀，气泡展示、messages 历史与会话持久化仍保留 raw 原文
+    const contextPrompt: string = PageContextTracker.getInstance().getFormattedPromptContext();
+    const promptWithContext: string = `[系统当前页面信息]:\n${contextPrompt}\n\n[用户指令]:\n${userInput}`;
+    // 缓存本轮载荷，供中断态「重新发送」以同一载荷幂等续接
+    this.lastPromptWithContext = promptWithContext;
+
     this.startThinkingTimer();
+    const assistantUid: number = this.nextMsgUid++;
     this.displayMessages = [...this.displayMessages, {
       role: 'assistant',
       content: '',
       isError: false,
       thought: '',
       thinkingDurationMs: 0,
-      statusHint: this.currentThinkingHint
+      statusHint: this.currentThinkingHint,
+      uid: assistantUid
     }];
+    // 新一轮流式开始：绑定流式尾气泡并清空内容镜像，先展示思考提示，首个 chunk 到达后再切换为 MarkdownBubble
+    this.streamingUid = assistantUid;
+    this.streamingContent = '';
     this.scrollToBottom();
 
     this.dispatchAgentRun();
@@ -837,7 +922,8 @@ export struct AssistantPage {
    * 组装回调并发起一次后端对话请求。
    * sendMessage（新消息）与 resendLastMessage（中断重发）共用：
    * 重发时不追加用户消息，沿用当前 session_id 与现有历史，由后端 checkpoint 幂等续接，
-   * 续传内容写回原 assistant 气泡。
+   * 续传内容写回原 assistant 气泡。末位用户消息始终以缓存的 lastPromptWithContext
+   * （页面上下文 + 用户指令）载荷下发，与悬浮球口径一致。
    */
   private dispatchAgentRun(): void {
     this.trimHistory();
@@ -849,19 +935,11 @@ export struct AssistantPage {
     const callbacks: AgentCallbacks = {
       onStatusChange: (status: string, message: string) => {
         self.currentThinkingHint = message;
+        // 原地更新尾 assistant 气泡的状态提示：对象引用不变，稳定 uid 下气泡跨阶段复用不重建
+        // （思考卡片文案由 currentThinkingHint 状态驱动，无需整组替换数组）
         for (let i = self.displayMessages.length - 1; i >= 0; i--) {
           if (self.displayMessages[i].role === 'assistant') {
-            const updated: DisplayMessage[] = [...self.displayMessages];
-            updated[i] = {
-              role: 'assistant',
-              content: updated[i].content,
-              isError: updated[i].isError,
-              thought: updated[i].thought,
-              thinkingDurationMs: updated[i].thinkingDurationMs,
-              statusHint: message,
-              telemetry: updated[i].telemetry
-            };
-            self.displayMessages = updated;
+            self.displayMessages[i].statusHint = message;
             break;
           }
         }
@@ -869,19 +947,13 @@ export struct AssistantPage {
       onThoughtChunk: (chunk: string) => {
         self.activeThought += chunk;
         self.currentThinkingHint = '深度思考中...';
+        // 原地写入思维链：对象引用不变，稳定 uid 下气泡跨 chunk 复用不重建
+        // （思考期实时展示由 activeThought 状态驱动；正文开始后气泡内读取的 msg.thought 已是最新值）
         for (let i = self.displayMessages.length - 1; i >= 0; i--) {
           if (self.displayMessages[i].role === 'assistant') {
-            const updated: DisplayMessage[] = [...self.displayMessages];
-            updated[i] = {
-              role: 'assistant',
-              content: updated[i].content,
-              isError: updated[i].isError,
-              thought: self.activeThought,
-              thinkingDurationMs: Date.now() - self.thinkingStartTime,
-              statusHint: self.currentThinkingHint,
-              telemetry: updated[i].telemetry
-            };
-            self.displayMessages = updated;
+            self.displayMessages[i].thought = self.activeThought;
+            self.displayMessages[i].thinkingDurationMs = Date.now() - self.thinkingStartTime;
+            self.displayMessages[i].statusHint = self.currentThinkingHint;
             break;
           }
         }
@@ -899,7 +971,8 @@ export struct AssistantPage {
           content: `正在${displayName}...`,
           isError: false,
           toolName: toolName,
-          toolArgs: args
+          toolArgs: args,
+          uid: self.nextMsgUid++
         };
         const lastIdx: number = self.displayMessages.length - 1;
         if (lastIdx >= 0 && self.displayMessages[lastIdx].role === 'assistant' && (!self.displayMessages[lastIdx].content || self.displayMessages[lastIdx].content.length === 0)) {
@@ -925,7 +998,8 @@ export struct AssistantPage {
           isError: !success,
           toolName: toolName,
           toolResult: result,
-          isToolSuccess: success
+          isToolSuccess: success,
+          uid: self.nextMsgUid++
         };
         const lastIdx: number = self.displayMessages.length - 1;
         if (lastIdx >= 0 && self.displayMessages[lastIdx].role === 'assistant' && (!self.displayMessages[lastIdx].content || self.displayMessages[lastIdx].content.length === 0)) {
@@ -956,25 +1030,25 @@ export struct AssistantPage {
         }
 
         if (targetIdx !== -1) {
-          const updated: DisplayMessage[] = [...self.displayMessages];
-          const cur = updated[targetIdx];
-          updated[targetIdx] = {
-            role: 'assistant',
-            content: cur.content + chunk,
-            isError: false,
-            thought: self.activeThought.length > 0 ? self.activeThought : cur.thought,
-            thinkingDurationMs: cur.thinkingDurationMs && cur.thinkingDurationMs > 0 ? cur.thinkingDurationMs : dur,
-            telemetry: cur.telemetry
-          };
-          self.displayMessages = updated;
+          // 原地累加正文（对象引用不变，稳定 uid 下气泡跨 chunk 复用不重建）；
+          // 同步 tracked 内容镜像，驱动流式气泡经 @Prop 增量刷新
+          self.displayMessages[targetIdx].content += chunk;
+          const tailUid: number | undefined = self.displayMessages[targetIdx].uid;
+          if (tailUid !== undefined && tailUid === self.streamingUid) {
+            self.streamingContent = self.displayMessages[targetIdx].content;
+          }
         } else {
+          const newUid: number = self.nextMsgUid++;
           self.displayMessages = [...self.displayMessages, {
             role: 'assistant',
             content: chunk,
             isError: false,
             thought: self.activeThought,
-            thinkingDurationMs: dur
+            thinkingDurationMs: dur,
+            uid: newUid
           }];
+          self.streamingUid = newUid;
+          self.streamingContent = chunk;
         }
         self.scrollToBottom();
       },
@@ -991,19 +1065,17 @@ export struct AssistantPage {
           }
         }
         if (targetIdx !== -1) {
-          const updated: DisplayMessage[] = [...self.displayMessages];
-          updated[targetIdx] = {
-            role: 'assistant',
-            content: error,
-            isError: true,
-            thought: self.activeThought,
-            thinkingDurationMs: self.thinkingElapsedMs,
-            statusHint: ''
-          };
-          self.displayMessages = updated;
+          // 原地写入错误终态：对象引用不变，streamingUid 复位触发气泡按新内容重渲染（ListItem 不重建）
+          self.displayMessages[targetIdx].content = error;
+          self.displayMessages[targetIdx].isError = true;
+          self.displayMessages[targetIdx].thought = self.activeThought;
+          self.displayMessages[targetIdx].thinkingDurationMs = self.thinkingElapsedMs;
+          self.displayMessages[targetIdx].statusHint = '';
         } else {
-          self.displayMessages = [...self.displayMessages, { role: 'assistant', content: error, isError: true, statusHint: '' }];
+          self.displayMessages = [...self.displayMessages, { role: 'assistant', content: error, isError: true, statusHint: '', uid: self.nextMsgUid++ }];
         }
+        self.streamingUid = 0;
+        self.streamingContent = '';
         self.updateCurrentSessionTimestamp();
         self.syncCurrentSession();
         self.saveSessions();
@@ -1030,20 +1102,14 @@ export struct AssistantPage {
         }
         for (let i = self.displayMessages.length - 1; i >= 0; i--) {
           if (self.displayMessages[i].role === 'assistant') {
-            const refreshed: DisplayMessage[] = [...self.displayMessages];
-            refreshed[i] = {
-              role: 'assistant',
-              content: refreshed[i].content,
-              isError: refreshed[i].isError,
-              thought: refreshed[i].thought,
-              thinkingDurationMs: refreshed[i].thinkingDurationMs,
-              statusHint: wasIncomplete ? '⚠️ 回复可能不完整' : '',
-              telemetry: refreshed[i].telemetry
-            };
-            self.displayMessages = refreshed;
+            // 原地写入完成态提示（含缺 final 帧轻提示）：对象引用不变，
+            // 配合 streamingUid 复位触发的重渲染即可展示遥测与状态提示，气泡不重建
+            self.displayMessages[i].statusHint = wasIncomplete ? '⚠️ 回复可能不完整' : '';
             break;
           }
         }
+        self.streamingUid = 0;
+        self.streamingContent = '';
         self.interruptedMsgIndex = -1;
         self.updateCurrentSessionTimestamp();
         self.syncCurrentSession();
@@ -1068,19 +1134,17 @@ export struct AssistantPage {
           }
         }
         if (targetIdx !== -1) {
-          const updated: DisplayMessage[] = [...self.displayMessages];
-          updated[targetIdx] = {
-            role: 'assistant',
-            content: updated[targetIdx].content,
-            isError: false,
-            thought: self.activeThought.length > 0 ? self.activeThought : updated[targetIdx].thought,
-            thinkingDurationMs: updated[targetIdx].thinkingDurationMs,
-            statusHint: `⚠️ ${message}`,
-            telemetry: updated[targetIdx].telemetry
-          };
-          self.displayMessages = updated;
+          // 原地写入中断态：保留已收内容，streamingUid 复位与 interruptedMsgIndex 状态变化
+          // 共同触发气泡重渲染展示警告与「重新发送」入口，ListItem 不重建
+          if (self.activeThought.length > 0) {
+            self.displayMessages[targetIdx].thought = self.activeThought;
+          }
+          self.displayMessages[targetIdx].isError = false;
+          self.displayMessages[targetIdx].statusHint = `⚠️ ${message}`;
           self.interruptedMsgIndex = targetIdx;
         }
+        self.streamingUid = 0;
+        self.streamingContent = '';
         self.updateCurrentSessionTimestamp();
         self.syncCurrentSession();
         self.saveSessions();
@@ -1091,30 +1155,34 @@ export struct AssistantPage {
     const client: BackendAgentClient = new BackendAgentClient(context, executor, callbacks);
     this.currentClient = client;
 
+    // 组装请求历史：末位用户消息以「页面上下文 + 用户指令」载荷下发（悬浮球同口径），
+    // messages 内仍存 raw 原文；无缓存载荷时兜底按原样发送
     const history: AgentMessage[] = [];
+    const lastMsgIndex: number = this.messages.length - 1;
     for (let i = 0; i < this.messages.length; i++) {
+      if (this.lastPromptWithContext.length > 0 && i === lastMsgIndex && this.messages[i].role === 'user') {
+        continue;
+      }
       history.push({ role: this.messages[i].role, content: this.messages[i].content });
+    }
+    if (this.lastPromptWithContext.length > 0) {
+      history.push({ role: 'user', content: this.lastPromptWithContext });
     }
 
     client.run(this.currentSessionId, history);
   }
 
   /**
-   * 中断态「重新发送」：携带同一 session_id 原样重发用户最后一条消息，
-   * 不重复入列用户消息；清除中断标记后复用原 assistant 气泡承接续传内容。
+   * 中断态「重新发送」：携带同一 session_id 复用上一轮缓存的「页面上下文 + 用户指令」载荷，
+   * 与首轮下发完全一致（checkpoint 幂等续接），不重复入列用户消息；
+   * 清除中断标记后复用原 assistant 气泡承接续传内容。
    */
   private resendLastMessage(): void {
     if (this.isLoading || this.interruptedMsgIndex === -1) {
       return;
     }
-    let lastUserContent: string = '';
-    for (let i = this.messages.length - 1; i >= 0; i--) {
-      if (this.messages[i].role === 'user') {
-        lastUserContent = this.messages[i].content;
-        break;
-      }
-    }
-    if (lastUserContent.length === 0) {
+    // 复用缓存载荷而非重取 raw 原文，保证重发请求与首轮下发完全一致
+    if (this.lastPromptWithContext.length === 0) {
       this.interruptedMsgIndex = -1;
       return;
     }
@@ -1122,18 +1190,18 @@ export struct AssistantPage {
 
     const idx: number = this.interruptedMsgIndex;
     this.interruptedMsgIndex = -1;
-    const updated: DisplayMessage[] = [...this.displayMessages];
-    if (idx >= 0 && idx < updated.length && updated[idx].role === 'assistant') {
-      updated[idx] = {
-        role: 'assistant',
-        content: updated[idx].content,
-        isError: false,
-        thought: '',
-        thinkingDurationMs: 0,
-        statusHint: '',
-        telemetry: updated[idx].telemetry
-      };
-      this.displayMessages = updated;
+    if (idx >= 0 && idx < this.displayMessages.length && this.displayMessages[idx].role === 'assistant') {
+      // 复用原气泡（uid 不变）原地复位状态：镜像先回填已收的部分内容，
+      // 续传 chunk 到达后继续经镜像增量刷新，ListItem 不重建
+      this.displayMessages[idx].isError = false;
+      this.displayMessages[idx].thought = '';
+      this.displayMessages[idx].thinkingDurationMs = 0;
+      this.displayMessages[idx].statusHint = '';
+      this.streamingContent = this.displayMessages[idx].content;
+      const tailUid: number | undefined = this.displayMessages[idx].uid;
+      if (tailUid !== undefined) {
+        this.streamingUid = tailUid;
+      }
     }
 
     this.isLoading = true;
@@ -1316,8 +1384,8 @@ export struct AssistantPage {
       } else {
         Column({ space: 6 }) {
           if (msg.role === 'assistant') {
-            // 1. 思考中状态卡片（当处于加载状态且无正文时）
-            if (this.isLoading && index === this.displayMessages.length - 1 && (!msg.content || msg.content.length === 0)) {
+            // 1. 思考中状态卡片（流式尾气泡且尚无正文：按 uid 绑定，内容镜像为空即展示）
+            if (msg.uid !== undefined && msg.uid === this.streamingUid && this.streamingContent.length === 0) {
               Column({ space: 8 }) {
                 // 顶部状态提示行：阶段文案 + 实时秒表
                 Row({ space: 8 }) {
@@ -1442,10 +1510,12 @@ export struct AssistantPage {
             // 3. 正文 Markdown 流式/全量渲染
             if (msg.content && msg.content.length > 0) {
               MarkdownBubble({
-                content: msg.content,
+                // 流式尾气泡（uid 匹配）绑定 tracked 内容镜像（chunk 经 @Prop 增量同步，组件不重建）；
+                // 历史/完成气泡绑定静态 msg.content（流式期间原地累加，完成后即全量值）
+                content: (msg.uid !== undefined && msg.uid === this.streamingUid) ? this.streamingContent : msg.content,
                 isUser: false,
                 isError: msg.isError,
-                isStreaming: (this.isLoading && index === this.displayMessages.length - 1)
+                isStreaming: (msg.uid !== undefined && msg.uid === this.streamingUid)
               })
               .width('100%')
             }
@@ -1549,15 +1619,21 @@ export struct AssistantPage {
     this.isLoading = true;
     const userMsg: Message = { role: 'user', content: '[发送了海报/通知图片]' };
     this.messages = [...this.messages, userMsg];
+    const visionAssistantUid: number = this.nextMsgUid++;
     this.displayMessages = [...this.displayMessages, {
       role: 'user',
       content: '📷 [海报/通知图片]',
-      isError: false
+      isError: false,
+      uid: this.nextMsgUid++
     }, {
       role: 'assistant',
       content: '🔍 正在使用智谱多模态大模型解析海报中的日程信息，请稍候...',
-      isError: false
+      isError: false,
+      uid: visionAssistantUid
     }];
+    // 与对话轮次同口径：绑定流式尾气泡（镜像回填占位文案），保证解析中 isStreaming 语义不变
+    this.streamingUid = visionAssistantUid;
+    this.streamingContent = '🔍 正在使用智谱多模态大模型解析海报中的日程信息，请稍候...';
     this.scrollToBottom();
 
     try {
@@ -1590,7 +1666,9 @@ export struct AssistantPage {
       updated[lastIdx] = {
         role: 'assistant',
         content: formattedResult,
-        isError: false
+        isError: false,
+        // 解析结果为一次性终态替换：分配新 uid 触发气泡重建展示
+        uid: this.nextMsgUid++
       };
       this.displayMessages = updated;
       this.messages = [...this.messages, { role: 'assistant', content: formattedResult }];
@@ -1603,11 +1681,15 @@ export struct AssistantPage {
       updated[lastIdx] = {
         role: 'assistant',
         content: `❌ 解析海报失败：${String((err as Error)?.message || err)}`,
-        isError: true
+        isError: true,
+        uid: this.nextMsgUid++
       };
       this.displayMessages = updated;
     } finally {
       this.isLoading = false;
+      // 解析流程结束（结果/失败替换均已换新 uid）：复位流式绑定，避免残留陈旧镜像状态
+      this.streamingUid = 0;
+      this.streamingContent = '';
       this.scrollToBottom();
     }
   }
@@ -2001,7 +2083,9 @@ export struct AssistantPage {
               this.MessageBubbleBuilder(msg, index as number)
             }
           }
-        }, (msg: DisplayMessage, index: number) => `${index}_${msg.role}_${msg.content.length}_${(msg.statusHint && msg.statusHint.length > 0) ? 'h' : 'n'}_${(msg.toolResult && msg.toolResult.length > 0) ? 'a' : 'p'}_${index === this.interruptedMsgIndex ? 'i' : 'n'}`)
+        // 稳定 uid key：流式期间 content 变化不再变更 key，气泡实例跨 chunk 复用不重建
+        // （配合 streamingContent 镜像增量同步；uid 缺省时回退 index 兜底）
+        }, (msg: DisplayMessage, index: number) => (msg.uid !== undefined ? String(msg.uid) : `${index}`))
 
         if (this.displayMessages.length === 0) {
           ListItem() {

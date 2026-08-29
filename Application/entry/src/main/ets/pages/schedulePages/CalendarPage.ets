@@ -9,6 +9,7 @@ import { ExamItem } from '../../model/classTableModel/ExamModel';
 import { ThemeManager } from '../../common/utils/ThemeManager';
 import { ScheduleEditor } from '../../components/ScheduleEditor';
 import { ScheduleSettingsPanel } from '../../components/ScheduleSettingsPanel';
+import { PageContextTracker } from '../../common/agent/PageContextTracker';
 
 const WEEK_HEADERS: string[] = ['日', '一', '二', '三', '四', '五', '六'];
 const TOTAL_GRID_CELLS: number = 42;
@@ -40,6 +41,8 @@ export struct CalendarPage {
     this.currentMonth = today.getMonth() + 1;
     this.selectedDate = ScheduleUtils.formatDate(this.currentYear, this.currentMonth, today.getDate());
     this.loadAllEvents();
+    // 上报页面感知快照（与 Index 日历 Tab 同一口径），避免独立路由进入本页后快照停留在上一页
+    PageContextTracker.getInstance().updateSnapshot('calendar', '校园日历', '日程管理与系统日历事件', {}, []);
   }
 
   onPageShow(): void {

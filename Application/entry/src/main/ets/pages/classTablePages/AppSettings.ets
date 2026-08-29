@@ -24,6 +24,7 @@ import { LoadingOverlay } from '../../components/LoadingOverlay';
 import { SettingsRepository } from '../../repository/SettingsRepository';
 import { AgentEndpointConfig, AgentEndpoint } from '../../common/agent/AgentEndpointConfig';
 import { FloatingWindowManager } from '../../common/agent/FloatingWindowManager';
+import { PageContextTracker } from '../../common/agent/PageContextTracker';
 import { PrivacyDialogComponent } from '../../components/PrivacyDialogComponent';
 
 @Entry
@@ -125,6 +126,14 @@ struct AppSettings {
   }
 
   aboutToAppear(): void {
+    // 上报页面感知快照，供 AI 助手识别当前所在页面
+    PageContextTracker.getInstance().updateSnapshot(
+      'settings',
+      '应用设置',
+      '应用偏好设置中心：显示与外观、动画、云同步、通知及 AI 助手后端配置',
+      {},
+      []
+    );
     this.loadSettings();
     this.checkLoginStatus();
     this.loadUISettings();

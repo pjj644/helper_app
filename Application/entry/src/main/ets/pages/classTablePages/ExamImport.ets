@@ -15,6 +15,7 @@ import { ExamService } from '../../service/ExamService';
 import { ExamUtils, RawExamRow } from '../../common/utils/ExamUtils';
 import { VpnEncoder } from '../../common/utils/VpnEncoder';
 import { AppConstants } from '../../common/constants/AppConstants';
+import { PageContextTracker } from '../../common/agent/PageContextTracker';
 import { LoadingOverlay } from '../../components/LoadingOverlay';
 import { WebScrapeTakeoverBar } from '../../components/WebScrapeTakeoverBar';
 
@@ -72,6 +73,14 @@ struct ExamImport {
     this.message = `请登录后等待自动抓取${getSemesterLabelById(this.selectedSemesterId)} ${getExamTypeLabelById(this.selectedExamTypeId)}信息`;
     console.info(`[ExamImport] aboutToAppear returnHome=${this.returnHome}`);
     console.info(`[ExamImport] params examTypeId=${this.selectedExamTypeId} semesterId=${this.selectedSemesterId}`);
+    // 上报页面感知快照，供 AI 助手识别当前所在页面
+    PageContextTracker.getInstance().updateSnapshot(
+      'exam_import',
+      '考试导入',
+      `从教务系统自动抓取导入${getSemesterLabelById(this.selectedSemesterId)} ${getExamTypeLabelById(this.selectedExamTypeId)}考试安排`,
+      { 'semesterId': this.selectedSemesterId, 'examTypeId': this.selectedExamTypeId },
+      []
+    );
     this.initVpnMode();
   }
 

@@ -5,6 +5,26 @@
 
 ---
 
+## 2026-08: 悬浮球高亮真实化、页面感知全覆盖与伴随助手 UX 打磨
+
+- **聚光灯高亮从「假能力」变为真闭环**：
+  - 根因修复：`ToolExecutor.executePageAction` 的 `show_guidance` 此前无条件返回成功、且全工程无任何渲染订阅者，模型会谎报「已高亮」；现先经新增的 `common/agent/SpotlightRegistry.ets`（元素 ID 注册表，发现页 13 个 id 与组件 `.id()` 一一对应、pageName 与 `PageContextTracker` 快照对齐）校验，未登记 id 如实回执失败并返回 `availableIds`，模型不再谎报；
+  - 渲染落地：`FloatingWindowManager` 新增第三形态 `GUIDANCE` 窗口模式（子窗口临时全屏 + `setWindowTouchable(false)` 触摸穿透，用户仍可直接点击被高亮卡片）；`FloatingSubWindowContent` 渲染四块遮罩挖孔聚光灯 + 呼吸描边环 + 提示气泡（整体 `hitTestBehavior(None)` 双保险）；主窗口侧经 `componentUtils.getRectangleById` 解析组件 `windowOffset`（px→vp）写入 AppStorage 供子窗口取用；超时（默认 8s）/页面快照变化/组件缺失三路自动退出并恢复前形态，并防御通知循环内同步撤销导致的 GUIDANCE 重入卡死；
+  - 三处同步：`get_current_page_context` 新增返回 `highlightableIds`，后端 `tools.ts` 与端侧 `ToolRegistry.ets` 的 `execute_page_action` 描述同步收紧——targetElementId 只能取自该列表，严禁编造。
+- **动作声明与真实能力一致化（消灭「许愿清单」）**：
+  - `navigateToPage` 支持 `web` 外链动作（http/https 校验，带 title 打开内嵌 `WebPage.ets`）；发现页 8 个声明动作（open_map/open_grades/open_library/open_full_table/open_calendar/open_settings/open_login/open_course_import）全部补上真实 handler 并随页面生命周期反注册；
+  - 课程首页快照 `import_courses` 声明改为 `open_course_import`（避免与 tableUI 同名 handler 双触发），删除日历 Tab 无承接的 `add_schedule`；独立 `CalendarPage` 补报快照，消除「进入日历页后仍按发现页高亮」的错位；
+  - 悬浮窗动态快捷胶囊改为本地直触发 `UIActionDispatcher.dispatch`（成功/失败 toast 反馈），不再把 actionId 拼进自然语言绕 LLM 一圈。
+- **页面感知全覆盖与上下文口径统一**：
+  - 12 个二级页面（班车/设置/内嵌网页/课程管理/功能导航/考试导入/成绩导入/登录/账号管理/个人信息/课表导入/日历路由页）接入 `PageContextTracker.updateSnapshot`，消除跳转二级页后「停留在旧页面」的感知错位；发现页 GPA/日程数异步加载完成后即时刷新快照，班车页随校区/周末切换与后台刷新重报；
+  - 全屏助手 `AssistantPage.sendMessage` 与悬浮球统一注入 `[系统当前页面信息]` 上下文（会话历史/标题/持久化仍存用户原文），中断重发改用缓存的带上下文载荷，跨会话切换/新建时清缓存。
+- **伴随助手 UX 打磨**：
+  - 面板 ✕ 从「禁用整个悬浮球功能（需去设置找回）」改为「收起面板并停靠悬浮球」；语音按钮去除长按/点击双路径，仅保留点击切换录音；
+  - 悬浮球与全屏助手消息流 ForEach key 稳定化（内存层 uid）+ 流式内容镜像绑定（`streamingContent`），消除逐 chunk 整气泡重建闪烁；
+  - 工程治理：`floating_window_mode` AppStorage 键收口 `AppConstants`；修复 GUIDANCE 异常路径重入卡死、孔洞负尺寸、子窗口重建残留引导态、中断标记残留等 review 发现。
+
+---
+
 ## 2026-08: 桌面卡片矩阵扩展、个人信息页与后端简单通知
 
 - **桌面卡片矩阵扩展（3 → 5 张卡片）**：

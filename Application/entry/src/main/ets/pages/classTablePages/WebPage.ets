@@ -4,6 +4,7 @@ import { pasteboard } from '@kit.BasicServicesKit';
 import { AppConstants } from '../../common/constants/AppConstants';
 import { VpnEncoder } from '../../common/utils/VpnEncoder';
 import { ThemeManager } from '../../common/utils/ThemeManager';
+import { PageContextTracker } from '../../common/agent/PageContextTracker';
 
 @Entry
 @Component
@@ -31,6 +32,14 @@ struct WebPage {
         this.pageTitle = params['title'];
       }
     }
+    // 上报页面感知快照，供 AI 助手识别当前正在浏览的内嵌网页
+    PageContextTracker.getInstance().updateSnapshot(
+      'web',
+      this.pageTitle,
+      `正在浏览内嵌网页：${this.pageTitle}`,
+      { 'url': this.url },
+      []
+    );
   }
 
   private switchToVpnMode(): void {

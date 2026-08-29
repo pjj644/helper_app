@@ -5,6 +5,7 @@ import { BusinessError } from '@kit.BasicServicesKit';
 import auth, { VerifyCodeAction } from '@hw-agconnect/auth';
 import { AppConstants } from '../../common/constants/AppConstants';
 import { CloudDbRepository } from '../../repository/CloudDbRepository';
+import { PageContextTracker } from '../../common/agent/PageContextTracker';
 
 interface HostContextProvider {
 	getHostContext?: () => common.UIAbilityContext;
@@ -32,6 +33,14 @@ struct LoginIndexPage {
 	private isJumping: boolean = false;
 
 	aboutToAppear(): void {
+		// 上报页面感知快照，供 AI 助手识别当前所在页面
+		PageContextTracker.getInstance().updateSnapshot(
+			'login',
+			'账号登录',
+			'邮箱验证码登录页，用于登录或重新建立账号会话',
+			{},
+			[]
+		);
 		this.checkLoginStatus();
 	}
 

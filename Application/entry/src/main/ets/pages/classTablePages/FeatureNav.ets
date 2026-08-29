@@ -1,6 +1,7 @@
 import { router } from '@kit.ArkUI';
 import { FEATURE_LINKS, FeatureLink } from '../../model/classTableModel/FeatureLinks';
 import { CourseTableStorage, RecentLinkItem } from '../../model/classTableModel/CourseTableStorage';
+import { PageContextTracker } from '../../common/agent/PageContextTracker';
 
 @Entry
 @Component
@@ -8,6 +9,14 @@ struct FeatureNav {
   @State recentItems: RecentLinkItem[] = [];
 
   aboutToAppear(): void {
+    // 上报页面感知快照，供 AI 助手识别当前所在页面
+    PageContextTracker.getInstance().updateSnapshot(
+      'feature_nav',
+      '功能导航',
+      '校园常用网站链接导航，点击后在内嵌浏览器中打开',
+      {},
+      []
+    );
     this.loadRecent();
   }
 

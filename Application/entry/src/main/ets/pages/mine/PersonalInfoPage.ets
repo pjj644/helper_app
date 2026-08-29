@@ -7,6 +7,7 @@ import { ScheduleRepository } from '../../repository/ScheduleRepository';
 import { ExamItem } from '../../model/classTableModel/ExamModel';
 import { RawCourseTableData } from '../../model/classTableModel/CourseModel';
 import { RouterConstants } from '../../common/constants/AppConstants';
+import { PageContextTracker } from '../../common/agent/PageContextTracker';
 
 /** 统计一段时间内互不重复的课程名数量（原始数据按 84 槽位活动矩阵存储） */
 function countDistinctCourses(rawJson: string): number {
@@ -49,6 +50,14 @@ struct PersonalInfoPage {
   @State loading: boolean = true;
 
   async aboutToAppear(): Promise<void> {
+    // 上报页面感知快照，供 AI 助手识别当前所在页面
+    PageContextTracker.getInstance().updateSnapshot(
+      'personal_info',
+      '个人信息',
+      '个人账号信息与本地课表、考试、日程数据统计总览',
+      {},
+      []
+    );
     try {
       const context = getContext(this);
       const session = await AuthService.getLoginSession(context);

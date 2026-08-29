@@ -5,6 +5,7 @@ import { AppConfigRepository } from '../../repository/AppConfigRepository';
 import { CalendarKitReminderService } from '../../service/CalendarKitReminderService';
 import { ToastComponent } from '../../components/ToastComponents';
 import { common } from '@kit.AbilityKit';
+import { PageContextTracker } from '../../common/agent/PageContextTracker';
 
 @Entry
 @Component
@@ -24,7 +25,7 @@ struct BusSchedulePage {
     const context = getContext(this) as common.UIAbilityContext;
     // 学期参数云端预热（幂等）；班车数据过期时顺带后台刷新
     AppConfigRepository.warmUp(context);
-    // 先用本地 last-good / 内置兜底立即渲染，再后台拉远端替换
+    // 先用本地 last-good / 内置兜底立即渲染（含页面感知快照上报），再后台拉远端替换
     this.refreshSchedule();
     this.backgroundRefresh(context);
     this.timerId = setInterval(() => {
@@ -53,10 +54,28 @@ struct BusSchedulePage {
   private refreshSchedule(): void {
     this.busList = BusDataService.getEffectiveBusList(this.departure, this.isWeekend);
     this.refreshNextBus();
+    this.reportPageContext();
   }
 
   private refreshNextBus(): void {
     this.nextBusInfo = BusDataService.getNextBus(this.departure, this.isWeekend);
+  }
+
+  /** 上报页面感知快照，供 AI 助手识别当前所在页面（校区/周末切换与后台刷新后同步更新） */
+  private reportPageContext(): void {
+    const departureLabel: string = this.departure === 'qsh' ? '清水河' : '沙河';
+    PageContextTracker.getInstance().updateSnapshot(
+      'bus_schedule',
+      '成电校车时刻表',
+      `双校区校车时刻查询，当前查看${departureLabel}发车的${this.isWeekend ? '周末' : '工作日'}班次`,
+      {
+        'departure': departureLabel,
+        'isWeekend': this.isWeekend,
+        'busCount': this.busList.length,
+        'nextBusTime': this.nextBusInfo ? this.nextBusInfo.time : ''
+      },
+      []
+    );
   }
 
   private showToast(msg: string): void {

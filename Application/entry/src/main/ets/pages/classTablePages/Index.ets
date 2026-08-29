@@ -6,6 +6,7 @@ import { WebScrapeService } from '../../service/WebScrapeService';
 import { CourseService } from '../../service/CourseService';
 import { CourseRepository } from '../../repository/CourseRepository';
 import { VpnEncoder } from '../../common/utils/VpnEncoder';
+import { PageContextTracker } from '../../common/agent/PageContextTracker';
 import { LoadingOverlay } from '../../components/LoadingOverlay';
 import { calculateSemesterId } from '../../model/classTableModel/ExamAccessRules';
 import { WebScrapeTakeoverBar } from '../../components/WebScrapeTakeoverBar';
@@ -94,6 +95,14 @@ struct Index {
         this.pendingSemesterSwitchId = parsed;
       }
     }
+    // 上报页面感知快照，供 AI 助手识别当前所在页面
+    PageContextTracker.getInstance().updateSnapshot(
+      'course_import',
+      '课表导入',
+      '从教务系统在线导入课表数据',
+      { 'semesterId': this.courseTableTargetSemesterId },
+      []
+    );
     this.initVpnMode();
   }
 

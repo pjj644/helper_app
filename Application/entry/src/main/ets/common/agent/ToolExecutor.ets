@@ -20,6 +20,7 @@ import { ScheduleRepository } from '../../repository/ScheduleRepository'
 import { DataQueryEngine, QueryFilter } from './DataQueryEngine'
 import { PageContextTracker } from './PageContextTracker'
 import { UIActionDispatcher } from './UIActionDispatcher'
+import { SpotlightRegistry } from './SpotlightRegistry'
 
 export interface ToolResult {
   success: boolean
@@ -677,7 +678,8 @@ export class ToolExecutor {
       'exam_import': RouterConstants.PAGE_EXAM_IMPORT,
       'grade_import': RouterConstants.PAGE_GRADE_IMPORT,
       'assistant': RouterConstants.PAGE_ASSISTANT,
-      'home': RouterConstants.PAGE_INDEX
+      'home': RouterConstants.PAGE_INDEX,
+      'web': RouterConstants.PAGE_WEB
     }
     const url: string = pageMap[page] || ''
     if (url.length === 0) {
@@ -685,6 +687,26 @@ export class ToolExecutor {
     }
     // T4：pushUrl 的失败必须捕获并如实回传 success:false，让模型能向用户解释跳转未发生
     try {
+      if (page === 'web') {
+        // 外部网页：url 从 args.params（或 args 本身，沿用现有 fallback 取参方式）读取，
+        // 不带默认 url；仅支持 http/https，防止 file/ftp 等协议被塞进内置浏览器
+        const nestedRaw: Object | undefined = args['params']
+        const nested: Record<string, Object> = (nestedRaw && typeof nestedRaw === 'object')
+          ? nestedRaw as Record<string, Object>
+          : args
+        const webUrl: string = this.getStringArg(nested, 'url')
+        if (webUrl.length === 0) {
+          return { success: false, data: JSON.stringify({ message: '打开网页失败：缺少 url 参数，请提供要打开的网址' }) }
+        }
+        if (!webUrl.startsWith('http://') && !webUrl.startsWith('https://')) {
+          return { success: false, data: JSON.stringify({ message: '打开网页失败：仅支持 http:// 或 https:// 开头的网址' }) }
+        }
+        const titleArg: string = this.getStringArg(nested, 'title')
+        const webTitle: string = titleArg.length > 0 ? titleArg : '页面'
+        const webParams: Record<string, Object> = { 'title': webTitle, 'url': webUrl }
+        await router.pushUrl({ url: url, params: webParams })
+        return { success: true, data: JSON.stringify({ message: `已打开网页「${webTitle}」`, url: webUrl }) }
+      }
       await router.pushUrl({ url: url })
       return { success: true, data: JSON.stringify({ message: `已导航到 ${page} 页面` }) }
     } catch (err) {
@@ -976,9 +998,21 @@ export class ToolExecutor {
   // === 页面感知与 UI 操作工具 ===
   private getCurrentPageContext(): ToolResult {
     const snapshot = PageContextTracker.getInstance().getSnapshot()
+    // 手动拼接「原快照字段 + highlightableIds」：PageSnapshot 接口定义归 PageContextTracker.ets 维护，
+    // 不在其上扩展；highlightableIds 供 show_guidance 取 targetElementId（严禁编造），
+    // 未登记的页面返回空数组，即表示该页不支持聚光灯
+    const merged: Record<string, Object> = {
+      'pageName': snapshot.pageName,
+      'pageTitle': snapshot.pageTitle,
+      'summaryText': snapshot.summaryText,
+      'dataSnapshot': snapshot.dataSnapshot,
+      'availableActions': snapshot.availableActions,
+      'updatedAt': snapshot.updatedAt,
+      'highlightableIds': SpotlightRegistry.getIdsForPage(snapshot.pageName)
+    }
     return {
       success: true,
-      data: JSON.stringify(snapshot)
+      data: JSON.stringify(merged)
     }
   }
 
@@ -1004,15 +1038,43 @@ export class ToolExecutor {
       : args
 
     if (action === 'show_guidance') {
+      // 如实回执：targetElementId 必须是当前页面已登记的可高亮元素（取自 get_current_page_context
+      // 返回的 highlightableIds），未登记即拒绝下发，杜绝模型编造 id 后谎报「已高亮」
+      const snapshot = PageContextTracker.getInstance().getSnapshot()
+      const pageName: string = snapshot.pageName
+      const pageTitle: string = snapshot.pageTitle
       const targetElementId: string = this.getStringArg(params, 'targetElementId')
+      if (!SpotlightRegistry.pageHas(pageName, targetElementId)) {
+        return {
+          success: false,
+          data: JSON.stringify({
+            message: `当前页面【${pageTitle}】不存在可高亮元素 "${targetElementId}"（或该页面不支持聚光灯）`,
+            availableIds: SpotlightRegistry.getIdsForPage(pageName)
+          })
+        }
+      }
       const hintText: string = this.getStringArg(params, 'hintText')
-      const durationMs: number = this.getNumberArg(params, 'durationMs', 5000)
+      const finalHint: string = hintText.length > 0 ? hintText : '请点击高亮区域'
+      const durationMs: number = this.getNumberArg(params, 'durationMs', 8000)
       UIActionDispatcher.getInstance().showGuidance({
         targetElementId: targetElementId,
-        hintText: hintText,
+        hintText: finalHint,
         durationMs: durationMs
       })
-      return { success: true, data: JSON.stringify({ message: `已显示引导提示：${hintText}` }) }
+      return {
+        success: true,
+        data: JSON.stringify({
+          message: `已显示引导提示：${finalHint}`,
+          targetElementId: targetElementId,
+          hintText: finalHint
+        })
+      }
+    }
+
+    if (action === 'web') {
+      // 打开外部网页：复用 navigateToPage 的 http/https 校验与如实回执口径（url 从 params 读取）
+      const navArgs: Record<string, Object> = { 'page': 'web', 'params': params }
+      return await this.navigateToPage(navArgs)
     }
 
     const ok: boolean = await UIActionDispatcher.getInstance().dispatch(action, params)

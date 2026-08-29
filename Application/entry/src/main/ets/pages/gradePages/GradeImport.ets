@@ -9,6 +9,7 @@ import { Logger } from '../../common/utils/Logger';
 import { LoadingOverlay } from '../../components/LoadingOverlay';
 import { calculateSemesterId, getGradeSemesterOptions, getPreviousSemesterId, GradeSemesterOptionItem } from '../../model/classTableModel/ExamAccessRules';
 import { WebScrapeTakeoverBar } from '../../components/WebScrapeTakeoverBar';
+import { PageContextTracker } from '../../common/agent/PageContextTracker';
 
 const TAG = 'GradeImport';
 
@@ -70,6 +71,14 @@ struct GradeImport {
     this.pollCount = 0;
     this.http500RetryCount = 0;
     Logger.info(TAG, `aboutToAppear semesterId=${this.semesterId} gradeUrl=${this.gradeUrl}`);
+    // 上报页面感知快照，供 AI 助手识别当前所在页面
+    PageContextTracker.getInstance().updateSnapshot(
+      'grade_import',
+      '成绩导入',
+      '从教务系统自动抓取导入成绩信息',
+      { 'semesterId': this.semesterId },
+      []
+    );
     this.initVpnMode();
   }
 

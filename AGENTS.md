@@ -65,7 +65,7 @@ devecocli check compat                                       # 跨 SDK API 兼�
 
 ### 架构模式
 - **后端大脑**：LangGraph 编排 + 多模型推理（DeepSeek / 小米 MiMo / 智谱 GLM-4V）+ 深度思考（Reasoning / Thought）流式下行 + 成电 80+ 服务直达库与生活指南动态 RAG 知识库（`campus_services.json`）+ 教务处官网实时检索 + SQLite 会话持久化 + 自动化评测基准体系（Eval Harness）。
-- **端侧统一控制引擎**：`BackendAgentClient`（SSE 长连接客户端）+ `DataQueryEngine`（纯内存多维查询）+ `ToolExecutor`（5 大元工具、流水线批处理、系统日历联动）+ `FloatingWindowManager`（SubWindow 全局伴随悬浮窗）+ `MarkdownBubble`（原生 Markdown 解析、流式打字光标、超链接拦截与内嵌 `WebPage.ets` 浏览器打开）+ 深度思考折叠卡片（毫秒计时）。
+- **端侧统一控制引擎**：`BackendAgentClient`（SSE 长连接客户端）+ `DataQueryEngine`（纯内存多维查询）+ `ToolExecutor`（5 大元工具、流水线批处理、系统日历联动、`show_guidance`/`web` 页面动作如实回执）+ `FloatingWindowManager`（SubWindow 全局伴随悬浮窗，BALL/PANEL/GUIDANCE 三形态）+ `SpotlightRegistry`（聚光灯元素 ID 注册表：页面 `.id()` 标注 ↔ `highlightableIds` 契约，主窗口 componentUtils 测坐标、子窗口挖孔渲染）+ `PageContextTracker`（5 主 Tab + 二级路由页全量页面感知）+ `MarkdownBubble`（原生 Markdown 解析、流式打字光标、超链接拦截与内嵌 `WebPage.ets` 浏览器打开）+ 深度思考折叠卡片（毫秒计时）。
 
 ### 加工具的三处同步铁律（名称与参数必须完全一致）
 1. **后端 Schema 与元数据**：`ai-proxy/src/tools.ts`（定义 schema 与 `toolMeta`：`requiresConfirmation` / `riskLevel`）；

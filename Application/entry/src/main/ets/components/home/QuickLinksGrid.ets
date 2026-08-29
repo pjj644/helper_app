@@ -1,4 +1,5 @@
 import { AppConstants } from '../../common/constants/AppConstants';
+import { SpotlightIds } from '../../common/agent/SpotlightRegistry';
 
 export interface HomeToolItem {
   title: string;
@@ -7,6 +8,8 @@ export interface HomeToolItem {
   route?: string;
   url?: string;
   iconImage?: Resource;
+  /** 聚光灯引导目标 id（AI 引导高亮用，无则不参与高亮定位） */
+  spotlightId?: string;
 }
 
 @Component
@@ -95,6 +98,7 @@ export struct QuickLinksGrid {
       .padding({ left: 16, right: 16, top: 14, bottom: 14 })
       .backgroundColor($r('app.color.card_background'))
       .borderRadius(16)
+      .id(SpotlightIds.DISCOVER_HERO_CLOUD)
       .onClick(() => {
         const cloudTool = this.tools.find((t: HomeToolItem) => t.title === '云中成电');
         if (cloudTool) {
@@ -135,6 +139,7 @@ export struct QuickLinksGrid {
         .borderRadius(14)
         .backgroundColor($r('app.color.accent_bg_color'))
         .justifyContent(FlexAlign.Center)
+        .id(SpotlightIds.DISCOVER_QUICK_GRADES)
         .onClick(() => {
           const gradeTool = this.tools.find((t: HomeToolItem) => t.title === '成绩查询');
           if (gradeTool) this.onToolClick(gradeTool);
@@ -158,6 +163,7 @@ export struct QuickLinksGrid {
         .borderRadius(14)
         .backgroundColor($r('app.color.tag_bg_exam'))
         .justifyContent(FlexAlign.Center)
+        .id(SpotlightIds.DISCOVER_QUICK_BUS)
         .onClick(() => {
           const busTool = this.tools.find((t: HomeToolItem) => t.title === '成电班车');
           if (busTool) this.onToolClick(busTool);
@@ -181,6 +187,7 @@ export struct QuickLinksGrid {
         .borderRadius(14)
         .backgroundColor($r('app.color.tag_bg_done'))
         .justifyContent(FlexAlign.Center)
+        .id(SpotlightIds.DISCOVER_QUICK_CALENDAR)
         .onClick(() => {
           const calTool = this.tools.find((t: HomeToolItem) => t.title === '校园日历');
           if (calTool) this.onToolClick(calTool);
@@ -220,6 +227,8 @@ export struct QuickLinksGrid {
             .borderRadius(14)
             .backgroundColor($r('app.color.card_background'))
             .justifyContent(FlexAlign.Center)
+            // 聚光灯引导目标 id（无 id 的调用方回落空串，不影响布局与点击）
+            .id(tool.spotlightId || '')
             .onClick(() => this.onToolClick(tool));
           }
         });

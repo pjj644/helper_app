@@ -189,8 +189,8 @@ sequenceDiagram
 
 ### 4.2 4 大高阶辅助与页面感知工具
 
-1. **`get_current_page_context`**（Low 风险，免确认）：由 `PageContextTracker` 提供，感知用户当前停留在哪个页面（课表/考试/成绩/首页）及当前页面的数据快照与可用操作。
-2. **`execute_page_action`**（Low 风险，免确认）：由 `UIActionDispatcher` 事件总线驱动，在当前页面直接触发 UI 动作（如切周 `switch_week`、切换 Tab 或展示聚光灯高亮引导 `show_guidance`）。
+1. **`get_current_page_context`**（Low 风险，免确认）：由 `PageContextTracker` 提供，感知用户当前停留在哪个页面及当前页面的数据快照与可用操作；返回值额外携带 `highlightableIds`（来自 `SpotlightRegistry` 的当前页可高亮元素 id 列表，非登记页为空数组）。页面覆盖：5 个主 Tab（Index）+ 课表/考试/成绩/助手 + 12 个二级路由页（班车/设置/内嵌网页/课程管理/考试导入/成绩导入/课表导入/登录/账号管理/个人信息/功能导航/日历路由页）。
+2. **`execute_page_action`**（Low 风险，免确认）：由 `UIActionDispatcher` 事件总线驱动，在当前页面直接触发 UI 动作：`switch_week`（切周）、`switch_tab`（切 Tab）、`import_courses/grades/exams`（触发导入）、`web`（带 url/title 打开内嵌网页）、`show_guidance`（聚光灯高亮引导，`targetElementId` 必须取自 `get_current_page_context` 的 `highlightableIds`，未登记 id 会被端侧如实拒绝并返回可用列表，模型严禁编造）。
 3. **`generate_study_plan`**（Low 风险，免确认）：分析用户即将到来的所有考试，根据倒计时剩余天数加权生成考前每日突击复习规划。
 4. **`ask_user_clarification`**（Low 风险，免确认）：意图歧义或参数缺失时向用户发起澄清提问，端侧以交互卡片呈现选项并回传选择结果。
 
@@ -224,9 +224,14 @@ sequenceDiagram
 - **SubWindow 独立子窗口架构 (`FloatingWindowManager.ets`)**：
   - 基于 HarmonyOS `windowStage.createSubWindow` 实现跨页面透明子窗口；
   - 严格生命周期管理：先调用 `setUIContent` 再配置尺寸与位置（规避 `1300002` 异常）。
-- **双形态自由切换**：
+- **三形态自由切换**：
   - **球态 (Ball Mode)**：60×60 vp 呼吸发光微型球，支持全屏自由拖拽与贴边吸附物理反馈；
-  - **浮窗态 (Panel Mode)**：覆盖在当前页面之上的 Mini 助手卡片，右上角配备缩小 `[-]`、新对话 `[+]` 与关闭 `[X]`。
+  - **浮窗态 (Panel Mode)**：覆盖在当前页面之上的 Mini 助手卡片，右上角配备缩小 `[-]`、新对话 `[+]` 与收起停靠 `[X]`（收起面板并停靠悬浮球，禁用功能需到设置）；
+  - **引导态 (GUIDANCE Mode)**：AI 下发 `show_guidance` 时子窗口临时全屏并 `setWindowTouchable(false)`（触摸穿透，用户仍可直接点击被高亮卡片），渲染聚光灯引导层；超时/页面切换/组件缺失自动退出并恢复前形态。
+- **聚光灯高亮闭环（`SpotlightRegistry.ets`）**：
+  - 元素 ID 注册表：页面组件以 `.id()` 标注（发现页 13 个 id：Hero 卡、常用服务三卡、所有功能九宫格），注册表按 pageName 登记；
+  - 坐标解析在主窗口侧完成（`componentUtils.getRectangleById` 取 `windowOffset`，px→vp 换算后经 AppStorage 同步给子窗口）；子窗口以四块遮罩挖孔 + 呼吸描边环 + 提示气泡渲染，整层 `hitTestBehavior(None)`；
+  - 如实回执：`ToolExecutor` 先校验 `SpotlightRegistry.pageHas(当前页, targetElementId)`，失败返回 `success:false` + `availableIds`，杜绝模型谎报「已高亮」。
 - **统一会话与历史管理 (`ChatSessionRepository.ets`)**：
   - 全屏助手与悬浮 Mini 助手共享同一套本地会话仓库，支持会话实时双向同步与独立新建。
 - **状态同步与避让**：
@@ -252,9 +257,10 @@ sequenceDiagram
 | `ToolRegistry.ets` | 工具元数据定义、参数校验与动态风险等级判定（`getRiskLevel` / `requiresConfirmation`）。 |
 | `ToolExecutor.ets` | 端侧中央工具分发器（`switch(toolName)`）、CRUD 事务执行、流水线批处理（`executePipeline`）。 |
 | `DataQueryEngine.ets` | 纯内存多维数据过滤与统一查询引擎（接管课表、考试、成绩、日程、日历）。 |
-| `PageContextTracker.ets` | 全局页面活跃状态与数据快照感知中心（单例模式，`updateSnapshot`）。 |
-| `UIActionDispatcher.ets` | 页面 UI 动作与高亮聚光灯指令总线（`switch_week` / `show_guidance`）。 |
-| `FloatingWindowManager.ets` | HarmonyOS SubWindow 全局悬浮球与 Mini 浮窗生命周期管理。 |
+| `PageContextTracker.ets` | 全局页面活跃状态与数据快照感知中心（单例模式，`updateSnapshot`；5 主 Tab + 二级路由页全量上报）。 |
+| `UIActionDispatcher.ets` | 页面 UI 动作与高亮聚光灯指令总线（`switch_week` / `switch_tab` / `open_*` / `web` / `show_guidance`，含 `getGuidanceState` 重入守卫）。 |
+| `SpotlightRegistry.ets` | 聚光灯元素 ID 注册表（id ↔ 组件 `.id()` 契约、按 pageName 校验可高亮元素，`show_guidance` 如实回执的依据）。 |
+| `FloatingWindowManager.ets` | HarmonyOS SubWindow 悬浮球生命周期管理，BALL/PANEL/GUIDANCE 三形态切换（GUIDANCE 态触摸穿透）。 |
 | `CalendarKitReminderService.ets` | HarmonyOS 系统日历写入、班车/考试去重与事件查询。 |
 | `ChatSessionRepository.ets` | 统一会话与历史消息持久化，支持深度思考与流式遥测指标存储。 |
 

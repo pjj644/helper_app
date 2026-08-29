@@ -1,8 +1,9 @@
 import { promptAction, curves } from '@kit.ArkUI';
 import { common } from '@kit.AbilityKit';
+import { AppConstants } from '../../common/constants/AppConstants';
 import { FloatingWindowManager } from '../../common/agent/FloatingWindowManager';
 import { PageContextTracker, PageSnapshot, PageActionDescriptor } from '../../common/agent/PageContextTracker';
-import { UIActionDispatcher } from '../../common/agent/UIActionDispatcher';
+import { UIActionDispatcher, GuidanceState } from '../../common/agent/UIActionDispatcher';
 import { BackendAgentClient, AgentCallbacks, AgentMessage } from '../../common/agent/BackendAgentClient';
 import { ToolExecutor } from '../../common/agent/ToolExecutor';
 import { ToolRegistry } from '../../common/agent/ToolRegistry';
@@ -15,16 +16,28 @@ interface MiniDisplayMessage {
   role: 'user' | 'assistant' | 'tool';
   content: string;
   isError?: boolean;
+  // 仅内存显示层用于稳定 ForEach key（流式更新不再触发气泡重建），不写入 ChatDisplayMessage
+  uid?: number;
 }
+
+/** 引导层遮罩底色（挖孔四周半透明黑） */
+const GUIDANCE_MASK_COLOR: string = 'rgba(0, 0, 0, 0.55)';
 
 @Entry
 @Component
 export struct FloatingSubWindowContent {
-  @StorageLink('floating_window_mode') windowMode: string = 'BALL';
+  @StorageLink(AppConstants.FLOATING_WINDOW_MODE_KEY) windowMode: string = 'BALL';
   @StorageLink('floating_ball_expand_state') expandState: string = 'HALF_HIDDEN';
   @StorageLink('floating_ball_dock_side') dockSide: string = 'RIGHT';
   @StorageLink('floating_ball_reset_timer') @Watch('onResetTimerTriggered') resetTimerTrigger: number = 0;
   @StorageProp(ThemeManager.THEME_STORAGE_KEY) isDarkMode: boolean = false;
+
+  // 引导聚光灯：目标矩形（vp，主窗口 Index 测量后经 AppStorage 写入）与提示文案
+  @StorageLink(AppConstants.GUIDANCE_RECT_X_KEY) guidanceRectX: number = 0;
+  @StorageLink(AppConstants.GUIDANCE_RECT_Y_KEY) guidanceRectY: number = 0;
+  @StorageLink(AppConstants.GUIDANCE_RECT_W_KEY) guidanceRectW: number = 0;
+  @StorageLink(AppConstants.GUIDANCE_RECT_H_KEY) guidanceRectH: number = 0;
+  @State guidanceHint: string = '';
 
   @State breathScale: number = 1.0;
   @State breathOpacity: number = 0.6;
@@ -41,6 +54,9 @@ export struct FloatingSubWindowContent {
   ];
   @State inputText: string = '';
   @State isLoading: boolean = false;
+  // 流式尾气泡的内容镜像（tracked 状态）：稳定 uid key 下，ForEach 不会对复用项重新同步 @Prop，
+  // chunk 到达时同步本镜像驱动 MarkdownBubble 经 @Prop 增量更新，避免整气泡重建闪烁
+  @State streamingContent: string = '';
   @State isRecording: boolean = false;
   @State recordingDuration: number = 0;
   @State currentThinkingHint: string = '正在思考中...';
@@ -50,6 +66,8 @@ export struct FloatingSubWindowContent {
   // 记录本轮载荷与气泡下标，供中断态「重新发送」复用（同一 session_id 幂等续接）
   private lastPromptWithContext: string = '';
   private lastAssistantMsgIndex: number = -1;
+  // 消息 uid 递增计数器（uid 仅用于显示层 key 稳定化，不持久化）
+  private nextMsgUid: number = 1;
 
   private scroller: Scroller = new Scroller();
   private speechHelper: SpeechRecognizerHelper = new SpeechRecognizerHelper();
@@ -64,13 +82,36 @@ export struct FloatingSubWindowContent {
   private dragStartX: number = 0;
   private dragStartY: number = 0;
 
+  // 页面快照监听：快照变化即撤除引导，避免高亮滞留指向已失效的元素
+  private pageSnapshotListener: (snapshot: PageSnapshot) => void = (snapshot: PageSnapshot): void => {
+    this.pageSnapshot = snapshot;
+    UIActionDispatcher.getInstance().clearGuidance();
+  };
+
+  // 引导状态监听：驱动子窗口进入/退出 GUIDANCE 模式并同步提示文案
+  private guidanceStateListener: (state: GuidanceState | null) => void = (state: GuidanceState | null): void => {
+    // 守卫：notifyGuidanceChange 线性遍历期间，若坐标解析监听器同步 clearGuidance（先置空再广播），
+    // 外层循环随后下发的陈旧 show 通知在此拦截，防止重入把子窗口卡在全屏不可触摸的引导态
+    if (state && UIActionDispatcher.getInstance().getGuidanceState() === null) {
+      return;
+    }
+    if (state) {
+      FloatingWindowManager.getInstance().switchToGuidanceMode();
+      this.guidanceHint = state.hintText;
+    } else {
+      FloatingWindowManager.getInstance().exitGuidanceMode();
+      this.guidanceHint = '';
+    }
+  };
+
   aboutToAppear(): void {
     this.initOrLoadSession();
 
     // 监听页面上下文变化
-    PageContextTracker.getInstance().addListener((snapshot: PageSnapshot) => {
-      this.pageSnapshot = snapshot;
-    });
+    PageContextTracker.getInstance().addListener(this.pageSnapshotListener);
+
+    // 监听 AI 引导聚光灯状态（show_guidance / clearGuidance）
+    UIActionDispatcher.getInstance().addGuidanceListener(this.guidanceStateListener);
 
     // 呼吸动画定时器
     this.breathTimer = setInterval(() => {
@@ -82,6 +123,8 @@ export struct FloatingSubWindowContent {
   }
 
   aboutToDisappear(): void {
+    PageContextTracker.getInstance().removeListener(this.pageSnapshotListener);
+    UIActionDispatcher.getInstance().removeGuidanceListener(this.guidanceStateListener);
     this.clearCollapseTimer();
     if (this.breathTimer >= 0) {
       clearInterval(this.breathTimer);
@@ -137,13 +180,15 @@ export struct FloatingSubWindowContent {
           this.messages = latest.displayMessages.map((d: ChatDisplayMessage): MiniDisplayMessage => ({
             role: (d.role === 'user' ? 'user' : 'assistant') as 'user' | 'assistant' | 'tool',
             content: d.content,
-            isError: d.isError
+            isError: d.isError,
+            uid: this.nextMsgUid++
           }));
         } else {
           this.messages = [
             {
               role: 'assistant',
-              content: '你好！我是你的 AI 伴随助手。我可以感知当前页面内容，指导操作或代你执行指令。'
+              content: '你好！我是你的 AI 伴随助手。我可以感知当前页面内容，指导操作或代你执行指令。',
+              uid: this.nextMsgUid++
             }
           ];
         }
@@ -165,13 +210,15 @@ export struct FloatingSubWindowContent {
     this.interruptedMsgIndex = -1;
     this.lastPromptWithContext = '';
     this.lastAssistantMsgIndex = -1;
+    this.streamingContent = '';
     const newSession = ChatSessionRepository.createNewSession();
     this.currentSessionId = newSession.id;
     this.sessionMessages = [];
     this.messages = [
       {
         role: 'assistant',
-        content: '你好！我是你的 AI 伴随助手。已开启新对话，我可以感知当前页面内容，指导操作或代你执行指令。'
+        content: '你好！我是你的 AI 伴随助手。已开启新对话，我可以感知当前页面内容，指导操作或代你执行指令。',
+        uid: this.nextMsgUid++
       }
     ];
     if (autoSave) {
@@ -269,11 +316,13 @@ export struct FloatingSubWindowContent {
     }
 
     this.inputText = '';
-    const userMsg: MiniDisplayMessage = { role: 'user', content: raw };
+    const userMsg: MiniDisplayMessage = { role: 'user', content: raw, uid: this.nextMsgUid++ };
     this.messages.push(userMsg);
 
     const assistantMsgIndex = this.messages.length;
-    this.messages.push({ role: 'assistant', content: '' });
+    this.messages.push({ role: 'assistant', content: '', uid: this.nextMsgUid++ });
+    // 新一轮流式开始：清空内容镜像，先展示思考提示，首个 chunk 到达后再切换为 MarkdownBubble
+    this.streamingContent = '';
     this.isLoading = true;
     this.thinkingStartTime = Date.now();
     this.thinkingElapsedMs = 0;
@@ -348,6 +397,8 @@ export struct FloatingSubWindowContent {
         }
         if (this.messages[assistantMsgIndex]) {
           this.messages[assistantMsgIndex].content += chunk;
+          // 同步 tracked 镜像，驱动流式气泡经 @Prop 增量刷新（不重建 ListItem / MarkdownBubble）
+          this.streamingContent = this.messages[assistantMsgIndex].content;
           this.scroller.scrollEdge(Edge.Bottom);
         }
       },
@@ -422,6 +473,8 @@ export struct FloatingSubWindowContent {
     this.thinkingTimer = setInterval(() => {
       this.thinkingElapsedMs = Date.now() - this.thinkingStartTime;
     }, 100);
+    // 重发复用原气泡（uid 不变）：镜像先回填已收的部分内容，续传 chunk 到达后继续增量刷新
+    this.streamingContent = this.messages[this.lastAssistantMsgIndex].content;
     this.dispatchAgentTurn(this.lastPromptWithContext, this.lastAssistantMsgIndex);
     setTimeout(() => {
       this.scroller.scrollEdge(Edge.Bottom);
@@ -625,7 +678,7 @@ export struct FloatingSubWindowContent {
               FloatingWindowManager.getInstance().switchToBallMode();
             });
 
-            // 取消/关闭悬浮球 [X]
+            // 收起面板并停靠悬浮球（禁用请到设置）
             Button() {
               Text('✕')
                 .fontSize(13)
@@ -637,11 +690,9 @@ export struct FloatingSubWindowContent {
             .type(ButtonType.Circle)
             .backgroundColor('rgba(239, 68, 68, 0.1)')
             .onClick(() => {
-              FloatingWindowManager.getInstance().setEnabled(false);
-              promptAction.showToast({
-                message: 'AI 悬浮球已关闭，可在设置或 AI 助手页重新开启',
-                duration: 2000
-              });
+              // 先把窗口缩回球，再停靠边缘并滑到半隐藏态，功能本身保持开启
+              FloatingWindowManager.getInstance().switchToBallMode();
+              FloatingWindowManager.getInstance().dockBall();
             });
           }
         }
@@ -691,7 +742,10 @@ export struct FloatingSubWindowContent {
               .backgroundColor('rgba(217, 119, 6, 0.1)')
               .borderRadius(12)
               .onClick(() => {
-                this.sendMessage(`请帮我执行操作：${act.label} (${act.actionId})`);
+                // 快捷动作本地直触发，绕过 LLM 转述（actionId 不进自然语言）
+                UIActionDispatcher.getInstance().dispatch(act.actionId, {}).then((ok: boolean) => {
+                  promptAction.showToast({ message: ok ? `已执行：${act.label}` : '当前页面暂不支持该操作', duration: 1500 });
+                });
               });
             });
           }
@@ -732,7 +786,7 @@ export struct FloatingSubWindowContent {
                     .alignSelf(ItemAlign.Start);
 
                     Column() {
-                      if (this.isLoading && index === this.messages.length - 1 && (!msg.content || msg.content.length === 0)) {
+                      if (this.isLoading && index === this.messages.length - 1 && this.streamingContent.length === 0) {
                         Row({ space: 6 }) {
                           Text(`${this.currentThinkingHint} (${(this.thinkingElapsedMs / 1000).toFixed(1)}s)`)
                             .fontSize(12)
@@ -742,7 +796,9 @@ export struct FloatingSubWindowContent {
                         .alignItems(VerticalAlign.Center);
                       } else {
                         MarkdownBubble({
-                          content: msg.content,
+                          // 流式尾气泡绑定 tracked 镜像（chunk 经 @Prop 增量同步，组件不重建）；
+                          // 历史气泡绑定静态 msg.content
+                          content: (this.isLoading && index === this.messages.length - 1) ? this.streamingContent : msg.content,
                           isUser: false,
                           isError: msg.isError,
                           isStreaming: (this.isLoading && index === this.messages.length - 1)
@@ -781,7 +837,8 @@ export struct FloatingSubWindowContent {
               .width('100%')
               .margin({ top: 4, bottom: 4 });
             }
-          }, (msg: MiniDisplayMessage, index: number) => `${index}_${msg.role}_${msg.content.length}_${index === this.interruptedMsgIndex ? 'i' : 'n'}`);
+          // 稳定 uid key：流式期间 content 变化不再变更 key，气泡实例跨 chunk 复用不重建（配合 streamingContent 镜像增量同步）
+          }, (msg: MiniDisplayMessage, index: number) => (msg.uid !== undefined ? String(msg.uid) : `${index}`));
         }
         .width('100%')
         .layoutWeight(1)
@@ -812,25 +869,16 @@ export struct FloatingSubWindowContent {
           .height(36)
           .type(ButtonType.Circle)
           .backgroundColor(this.isRecording ? 'rgba(239, 68, 68, 0.15)' : (this.isDarkMode ? '#374151' : '#F3F4F6'))
+          // 语音按钮：点击开始录音，再次点击停止并自动发送（去掉长按分支，避免双路径语义重复导致误触）
           .gesture(
-            GestureGroup(
-              GestureMode.Exclusive,
-              LongPressGesture({ repeat: false })
-                .onAction(() => {
-                  this.startVoiceRecording();
-                })
-                .onActionEnd(() => {
+            TapGesture()
+              .onAction(() => {
+                if (this.isRecording) {
                   this.stopVoiceRecording(true);
-                }),
-              TapGesture()
-                .onAction(() => {
-                  if (this.isRecording) {
-                    this.stopVoiceRecording(true);
-                  } else {
-                    this.startVoiceRecording();
-                  }
-                })
-            )
+                } else {
+                  this.startVoiceRecording();
+                }
+              })
           );
 
           // 文本输入框
@@ -897,12 +945,141 @@ export struct FloatingSubWindowContent {
     .height('100%');
   }
 
+  // === 引导聚光灯几何：孔洞 = 目标矩形外扩 8vp（单位 vp） ===
+  private guidanceHoleLeft(): number {
+    return this.guidanceRectX - AppConstants.GUIDANCE_HOLE_EXPAND_VP;
+  }
+
+  private guidanceHoleTop(): number {
+    return this.guidanceRectY - AppConstants.GUIDANCE_HOLE_EXPAND_VP;
+  }
+
+  private guidanceHoleWidth(): number {
+    // 钳制下限为 0，防止坐标解析异常（rect 为 0/负）时渲染负尺寸遮罩与描边环
+    return Math.max(this.guidanceRectW + AppConstants.GUIDANCE_HOLE_EXPAND_VP * 2, 0);
+  }
+
+  private guidanceHoleHeight(): number {
+    return Math.max(this.guidanceRectH + AppConstants.GUIDANCE_HOLE_EXPAND_VP * 2, 0);
+  }
+
+  // === 引导聚光灯覆盖层 (GUIDANCE Mode) ===
+  @Builder
+  private GuidanceOverlayView(): void {
+    Stack({ alignContent: Alignment.TopStart }) {
+      // 四块遮罩拼出挖孔（中间留白即高亮目标区域）
+      Column() {
+        Column()
+          .width('100%')
+          .height(Math.max(this.guidanceHoleTop(), 0))
+          .backgroundColor(GUIDANCE_MASK_COLOR);
+
+        Row() {
+          Column()
+            .width(Math.max(this.guidanceHoleLeft(), 0))
+            .height(this.guidanceHoleHeight())
+            .backgroundColor(GUIDANCE_MASK_COLOR);
+
+          Column()
+            .width(this.guidanceHoleWidth())
+            .height(this.guidanceHoleHeight());
+
+          Column()
+            .layoutWeight(1)
+            .height(this.guidanceHoleHeight())
+            .backgroundColor(GUIDANCE_MASK_COLOR);
+        }
+        .width('100%')
+        .alignItems(VerticalAlign.Top);
+
+        Column()
+          .width('100%')
+          .layoutWeight(1)
+          .backgroundColor(GUIDANCE_MASK_COLOR);
+      }
+      .width('100%')
+      .height('100%')
+      .alignItems(HorizontalAlign.Start)
+      .hitTestBehavior(HitTestMode.None);
+
+      if (this.guidanceHoleWidth() > 0) {
+        // 孔洞边缘呼吸描边环（复用 breathScale 呼吸节拍，幅度收敛到约 3%）
+        Rect()
+          .width(this.guidanceHoleWidth())
+          .height(this.guidanceHoleHeight())
+          .position({ x: this.guidanceHoleLeft(), y: this.guidanceHoleTop() })
+          .radius(AppConstants.GUIDANCE_HOLE_RADIUS_VP)
+          .fillOpacity(0)
+          .stroke(Color.White)
+          .strokeWidth(AppConstants.GUIDANCE_RING_STROKE_VP)
+          .strokeOpacity(0.5 + this.breathOpacity * 0.5)
+          .scale({
+            x: 1 + (this.breathScale - 1) * 0.25,
+            y: 1 + (this.breathScale - 1) * 0.25
+          })
+          .animation({ duration: 250 });
+      }
+
+      if (this.guidanceHint.length > 0 && this.guidanceHoleWidth() > 0) {
+        if (this.guidanceHoleTop() >= AppConstants.GUIDANCE_HINT_MIN_TOP_VP) {
+          // 上方空间充足：气泡贴在孔洞正上方，小三角指向孔洞
+          Column() {
+            Text(this.guidanceHint)
+              .fontSize(13)
+              .fontColor(this.isDarkMode ? '#F3F4F6' : '#111827')
+              .backgroundColor(this.isDarkMode ? '#1F2937' : '#FFFFFF')
+              .textAlign(TextAlign.Center)
+              .maxLines(2)
+              .textOverflow({ overflow: TextOverflow.Ellipsis })
+              .padding({ left: 14, right: 14, top: 9, bottom: 9 })
+              .borderRadius(12)
+              .constraintSize({ maxWidth: '78%' });
+            Polygon({ width: 12, height: 6 })
+              .points([[0, 0], [12, 0], [6, 6]])
+              .fill(this.isDarkMode ? '#1F2937' : '#FFFFFF');
+          }
+          .width('100%')
+          .height(this.guidanceHoleTop())
+          .justifyContent(FlexAlign.End)
+          .alignItems(HorizontalAlign.Center)
+          .hitTestBehavior(HitTestMode.None);
+        } else {
+          // 上方空间不足：气泡放到孔洞下方
+          Column() {
+            Polygon({ width: 12, height: 6 })
+              .points([[0, 6], [6, 0], [12, 6]])
+              .fill(this.isDarkMode ? '#1F2937' : '#FFFFFF');
+            Text(this.guidanceHint)
+              .fontSize(13)
+              .fontColor(this.isDarkMode ? '#F3F4F6' : '#111827')
+              .backgroundColor(this.isDarkMode ? '#1F2937' : '#FFFFFF')
+              .textAlign(TextAlign.Center)
+              .maxLines(2)
+              .textOverflow({ overflow: TextOverflow.Ellipsis })
+              .padding({ left: 14, right: 14, top: 9, bottom: 9 })
+              .borderRadius(12)
+              .constraintSize({ maxWidth: '78%' });
+          }
+          .width('100%')
+          .position({ x: 0, y: this.guidanceHoleTop() + this.guidanceHoleHeight() })
+          .alignItems(HorizontalAlign.Center)
+          .hitTestBehavior(HitTestMode.None);
+        }
+      }
+    }
+    .width('100%')
+    .height('100%')
+    .hitTestBehavior(HitTestMode.None);
+  }
+
   build() {
     Stack({ alignContent: Alignment.TopStart }) {
       if (this.windowMode === 'BALL') {
         this.FloatingBallView();
       } else if (this.windowMode === 'PANEL') {
         this.MiniAssistantPanelView();
+      } else if (this.windowMode === 'GUIDANCE') {
+        this.GuidanceOverlayView();
       }
     }
     .width('100%')
