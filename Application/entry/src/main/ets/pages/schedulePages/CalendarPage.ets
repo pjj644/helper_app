@@ -4,7 +4,7 @@ import { ScheduleService } from '../../service/ScheduleService';
 import { ReminderService } from '../../service/ReminderService';
 import { CourseService } from '../../service/CourseService';
 import { ExamService } from '../../service/ExamService';
-import { Course, SECTION_TIMES } from '../../model/classTableModel/CourseModel';
+import { Course, SECTION_TIMES, courseTableModel, getWeekForDate } from '../../model/classTableModel/CourseModel';
 import { ExamItem } from '../../model/classTableModel/ExamModel';
 import { ThemeManager } from '../../common/utils/ThemeManager';
 import { ScheduleEditor } from '../../components/ScheduleEditor';
@@ -111,10 +111,15 @@ export struct CalendarPage {
       for (let cellIdx = 0; cellIdx < TOTAL_GRID_CELLS; cellIdx++) {
         const currentDayOfWeek: number = current.getDay();
         const mappedDow: number = currentDayOfWeek === 0 ? 7 : currentDayOfWeek;
+        // 与首页/桌面卡片口径对齐：按网格日期算教学周，非行课周（validWeeks 未命中）不生成课程事件
+        const weekNumber: number = getWeekForDate(current);
 
         for (let ci = 0; ci < courses.length; ci++) {
           const course: Course = courses[ci];
           if (course.time.dayOfWeek !== mappedDow) {
+            continue;
+          }
+          if (!courseTableModel.isValidForWeek(course, weekNumber)) {
             continue;
           }
 
@@ -125,7 +130,7 @@ export struct CalendarPage {
           const timeRange: string = `${startTime}-${endTime}`;
 
           const evt: ScheduleEvent = {
-            id: 'course_' + course.id + '_' + dateStr,
+            id: ScheduleService.buildCourseEventId(course.id, dateStr, course.time.startSection, endSection),
             title: course.name,
             date: dateStr,
             timeRange: timeRange,
@@ -851,7 +856,7 @@ export struct CalendarPage {
               .onClick(() => {
                 this.prepareEditEvent(event);
               });
-            }, (event: ScheduleEvent, index: number) => event.id + '_' + this.renderVersion);
+            }, (event: ScheduleEvent, index: number) => event.id + '_' + index + '_' + this.renderVersion);
           }
           .width('100%')
           .alignItems(HorizontalAlign.Start)
