@@ -35,6 +35,7 @@ export class AppConstants {
   static readonly SETTING_SCHEDULE_REMINDER_COURSE_KEY: string = 'setting_schedule_reminder_course';
   static readonly SETTING_SCHEDULE_REMINDER_CUSTOM_KEY: string = 'setting_schedule_reminder_custom';
   static readonly SETTING_SCHEDULE_REMINDER_ASSIGNMENT_KEY: string = 'setting_schedule_reminder_assignment';
+  /** 自动创建课程/考试日程开关：默认关闭（偏好未写入或读取失败时按 false 处理），开启后仅针对当前学期生效 */
   static readonly SETTING_AUTO_SYNC_SCHEDULE_KEY: string = 'setting_auto_sync_schedule';
   // ==================== 云端自动同步（P2-7a） ====================
   /** 云端自动同步主开关（默认关闭，用户显式开启后才自动上传课表/考试到 CloudDB） */

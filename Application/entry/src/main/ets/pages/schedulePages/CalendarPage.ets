@@ -6,6 +6,8 @@ import { CourseService } from '../../service/CourseService';
 import { ExamService } from '../../service/ExamService';
 import { Course, SECTION_TIMES, courseTableModel, getWeekForDate } from '../../model/classTableModel/CourseModel';
 import { ExamItem } from '../../model/classTableModel/ExamModel';
+import { ExamUtils } from '../../common/utils/ExamUtils';
+import { calculateSemesterId } from '../../model/classTableModel/ExamAccessRules';
 import { ThemeManager } from '../../common/utils/ThemeManager';
 import { ScheduleEditor } from '../../components/ScheduleEditor';
 import { ScheduleSettingsPanel } from '../../components/ScheduleSettingsPanel';
@@ -158,9 +160,14 @@ export struct CalendarPage {
     const events: ScheduleEvent[] = [];
     try {
       const exams: ExamItem[] = await ExamService.loadExams(ctx);
+      const currentSemesterId: number = calculateSemesterId();
       for (let i = 0; i < exams.length; i++) {
         const exam: ExamItem = exams[i];
         if (exam.beginTime <= 0) {
+          continue;
+        }
+        // 仅显示当前学期考试，与创建侧（ScheduleService.buildExamEvents）口径一致
+        if (ExamUtils.resolveSemesterId(exam) !== currentSemesterId) {
           continue;
         }
         const examDate: Date = new Date(exam.beginTime);

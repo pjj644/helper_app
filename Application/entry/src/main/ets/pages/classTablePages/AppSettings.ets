@@ -37,7 +37,8 @@ struct AppSettings {
     examRemindMinutes: 30,
     courseRemindMinutes: 30,
   };
-  @State autoSyncSchedule: boolean = true;
+  // 「自动创建相关日程」默认关闭（与 getAutoSyncScheduleEnabled 的默认值保持一致）
+  @State autoSyncSchedule: boolean = false;
   @State cloudAutoSyncEnabled: boolean = false;
   @State cloudSyncCellularAllowed: boolean = false;
   // P2-7d：AI 会话云同步开关（默认关闭）

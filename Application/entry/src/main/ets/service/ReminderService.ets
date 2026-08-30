@@ -48,9 +48,17 @@ export class ReminderService {
 
   static async refreshAllReminders(context: Context): Promise<void> {
     try {
-      await ScheduleService.syncCoursesToSchedule(context);
-      await ScheduleService.syncExamsToSchedule(context);
-
+      // ① 过期日程清理：无条件执行（与自动创建开关无关，关闭用户的过期日程也需清理）
+      await ScheduleService.removeExpiredSchedules(context);
+      // ② 学期守卫：剔除非当前学期的自动课程/考试日程（含系统日历残留联动清理），必须先于重建执行
+      await ScheduleService.pruneNonCurrentSemesterAutoSchedules(context);
+      // ③ 自动创建课程/考试日程：仅在「自动同步课表与日程」开关开启时重建（默认关闭）
+      const autoSyncEnabled: boolean = await ReminderService.getAutoSyncScheduleEnabled(context);
+      if (autoSyncEnabled) {
+        await ScheduleService.syncCoursesToSchedule(context);
+        await ScheduleService.syncExamsToSchedule(context);
+      }
+      // ④ 重建提醒（代理提醒 + 系统日历双向对齐）
       await ReminderService.refreshScheduleReminders(context);
     } catch (error) {
       console.error('[ReminderDebug] refreshAllReminders error:', JSON.stringify(error));
@@ -373,10 +381,10 @@ export class ReminderService {
   static async getAutoSyncScheduleEnabled(context: Context): Promise<boolean> {
     try {
       const pref = preferences.getPreferencesSync(context, { name: AppConstants.COURSE_TABLE_PREF_NAME });
-      const value = pref.getSync(AppConstants.SETTING_AUTO_SYNC_SCHEDULE_KEY, true);
+      const value = pref.getSync(AppConstants.SETTING_AUTO_SYNC_SCHEDULE_KEY, false);
       return value as boolean;
     } catch {
-      return true;
+      return false;
     }
   }
 
