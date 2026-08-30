@@ -5,6 +5,17 @@
 
 ---
 
+## 2026-08: 课表学期切换改走教务表单提交，修复错抓旧学期与「学期不一致」
+
+- **根因**：上一轮「学期校验闸门」在校验不一致时靠写 `semester.id` cookie + 整页重载课表 URL 切学期，但 EAMS 服务端完全忽略该 cookie，页面始终停留在会话默认学期（如 2025-2026-2/503）——下载 2026-2027-1（523）实际得到 503 课表，手动切到 503 又被二次闸门拒收报「学期不一致」；
+- **修复（对齐教务真实机制）**：学期切换改为注入 JS 提交页面 `courseTableForm`（`WebScrapeService.buildSwitchSemesterScript`）——将表单隐藏域 `semester.id` 置为目标学期后，优先调页面自带 `searchTable()`（AJAX 局部刷新，2.5s 延时主动复验），无该函数时退化为 `form.submit()` 整页 POST（依赖 onPageEnd 复验）；即与页面上手动点「切换学期」按钮等效，`table0` 随服务端重渲染重建；
+- **`error.courseTable.unknown` 自愈**：新增 `buildDetectCourseTableErrorScript`（含一层 iframe 扫描），onPageEnd 检测到该错误页时回退 `home!childmenus.action?menu.id=844` 门户激活菜单会话后重入（`courseTableErrorFallbackCount` ≤2 次，超限转手动模式 + 刷新按钮）；课表二级地址严禁直连：`doNavigateToCourseTable` 的 VPN 分支与「未找到课表链接」回退分支均改为先经 844 门户；
+- **Review 整改（独立子代理，1 BLOCKING + 2 建议已修）**：① VPN 模式下「先经门户」会在门户与登录检查间无限循环——增加 `VpnEncoder.isVpnEamsUrl` 判断，已在门户时改走页内找课表链接分支；② 切换脚本注入失败的三个分支（执行失败/NO_FORM/解析异常）改为延时复验，重试计数可向手动模式终态收敛；③ 学期校验日志增加学期日历只读文本（`semesterLabel`）交叉来源，仅辅助排查不参与判定；
+- **验证**：`devecocli build --modules entry@default --build-mode debug` BUILD SUCCESSFUL + `devecocli check lint` 0 error（51 条预存在 warning 与基线一致）；真站浏览器 E2E 被教务动态防护（瑞数）拦截未能在线验证，机制结论基于页面存档 `temp/courseTableForStd!courseTable.action.html` 核对（表单字段、`searchTable()`、切换按钮行为），**待真机/模拟器实测两个学期抓取**；
+- **已知限制**：`searchTable()` 内含教材登记前置检查（`bookOrderCheckAjax`），未登记教材时会弹 colorbox 而不提交，此时会消耗重试次数后收敛到手动模式（不会误入库）；学期闸门读的隐藏域在 `searchTable` 模式下存在被切换脚本自写值「自证」的理论风险，依赖服务端 AJAX 响应重绘表单区消除，待真机确认。
+
+---
+
 ## 2026-08: 课表抓取按学期严格隔离与教务返回学期校验
 
 - **修复跨学期污染（写库侧双写）**：抓取持久化原本在写目标分片之外还**无条件**执行第二笔 `CourseService.saveRawCourseData` → 写死 `calculateSemesterId()` 分片（永远=当前真实学期），抓归档学期会把抓到的数据整片覆盖当前学期分片，并连带刷新桌面卡片缓存与触发云同步；现仅当抓取目标 === `calculateSemesterId()` 时才执行（`Index.persistAndNavigateToTableUI`）；
