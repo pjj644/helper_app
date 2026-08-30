@@ -140,5 +140,5 @@ common/         -> 共享基础设施
 
 - `CourseModel.ets` 的 `getCurrentWeek()` / `getWeekForDate(date)`：锚定到「含行课首日的那个自然周的周一」，周一至周日严格对齐 84 槽位 `validWeeks`。
   - 当前学期锚点：`2026-08-31`（2026-2027 第一学期，行课首日 2026-09-01 周二所在周的周一）。开学前返回第 1 周。
-- `ExamAccessRules.ets`：学期 ID 相对 base 503（2025-2026 第二学期）按 `startYear*2 + (termNumber-1)` 步长 20 动态计算。
-- 成绩学期筛选支持相邻上下 10 学期动态换算，默认自动回退至已出分学期（503）。
+- `ExamAccessRules.ets`：学期 ID 按 `startYear*2 + (termNumber-1)` 索引、步长 20 相对映射基准动态计算；基准优先取云端 app-config 的 `baseSemesterId + semesterLabel` 配对（id 与标签锚点必须成对生效），云端不可用回落内置兜底 base 503（2025-2026 第二学期）。`SemesterConfig.parseSemesterConfigJson` 含语义一致性闸门：标签可解析时按固定历史锚点（483↔2025-2026-1，教务 id 空间客观事实，步进 20）重算期望 id，与 `baseSemesterId` 不符则整包拒绝回落兜底，防止坏配对导致全学期 id 偏移。
+- 成绩学期筛选支持相邻上下 10 学期动态换算，默认取上一学期（`getPreviousSemesterId()` = 当前学期 − 20 的相对策略，当前时段为 503）。
