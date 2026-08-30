@@ -441,7 +441,9 @@ struct TableUI {
 
     const context = getContext(this);
     // 按当前查看学期读写，杜绝「读当前学期分片 → 写 selected 分片」的跨学期拷贝；
-    // 以 (id, dayOfWeek, startSection) 定位被编辑课程（loadFromJson 合并连堂后每条课程在该学期内唯一）
+    // 以完整课程内容身份定位被编辑课程：同槽位可并存同 courseID 的多条课程
+    //（如前后半学期同学号不同教室/周次），(id, dayOfWeek, startSection) 三元组在该学期内不唯一，
+    // 仅按三元组定位会稳定误改/误删第一条（旧实现按数组下标定位同理需完整内容比对兜底）
     const semesterCourses: Course[] =
       await CourseService.loadCoursesForSemester(context, this.selectedSemesterId);
     let edited: Course | null = null;
@@ -451,10 +453,7 @@ struct TableUI {
     let replaced = false;
     if (edited !== null) {
       for (let i = 0; i < semesterCourses.length; i++) {
-        const candidate = semesterCourses[i];
-        if (candidate.id === edited.id &&
-            candidate.time.dayOfWeek === edited.time.dayOfWeek &&
-            candidate.time.startSection === edited.time.startSection) {
+        if (TableUI.isSameCourseIdentity(semesterCourses[i], edited)) {
           semesterCourses[i] = newCourse;
           replaced = true;
           break;
@@ -477,21 +476,30 @@ struct TableUI {
     await this.loadCourseList();
   }
 
+  /** 课程条目完整内容身份（解析模型内的唯一粒度，同槽位多条课程也可区分；不含随机 colorIndex 与合并派生的 duration） */
+  private static isSameCourseIdentity(a: Course, b: Course): boolean {
+    return a.id === b.id &&
+      a.name === b.name &&
+      a.teacherName === b.teacherName &&
+      a.roomName === b.roomName &&
+      a.validWeeks === b.validWeeks &&
+      a.time.dayOfWeek === b.time.dayOfWeek &&
+      a.time.startSection === b.time.startSection;
+  }
+
   private async deleteCourse(index: number): Promise<void> {
     if (index < 0 || index >= this.courses.length) {
       return;
     }
     const context = getContext(this);
     const target: Course = this.courses[index];
-    // 按当前查看学期读写，按 (id, dayOfWeek, startSection) 身份删除，杜绝跨学期拷贝
+    // 按当前查看学期读写，按完整课程内容身份删除（理由同 confirmEditor），杜绝跨学期拷贝与同槽位误删
     const semesterCourses: Course[] =
       await CourseService.loadCoursesForSemester(context, this.selectedSemesterId);
     const remaining: Course[] = [];
     let removed = false;
     for (const c of semesterCourses) {
-      if (!removed && c.id === target.id &&
-          c.time.dayOfWeek === target.time.dayOfWeek &&
-          c.time.startSection === target.time.startSection) {
+      if (!removed && TableUI.isSameCourseIdentity(c, target)) {
         removed = true;
         continue;
       }

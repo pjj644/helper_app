@@ -307,6 +307,12 @@ export class SyncService {
       }
       const rawData: RawCourseTableData = JSON.parse(courseJson);
       const courses = SyncService.extractCoursesFromRawData(rawData);
+      if (courses.length === 0) {
+        // 分片存在但解析不出任何课程（如 activities 全空）：无法区分「抓空」与「未抓」，
+        // 与「分片 JSON 缺失」同样跳过裁剪，防止空 bizKey 集合把云端该学期记录全部误删
+        console.warn(`[SyncService] 学期${semesterId}本地分片解析为空，跳过替换式云同步裁剪`);
+        return;
+      }
       const semesterLabel = getSemesterLabelById(semesterId);
 
       const cloudCourses: ClassCourse[] = [];
