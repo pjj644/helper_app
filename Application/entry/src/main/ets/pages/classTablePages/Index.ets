@@ -10,6 +10,7 @@ import { PageContextTracker } from '../../common/agent/PageContextTracker';
 import { LoadingOverlay } from '../../components/LoadingOverlay';
 import { calculateSemesterId } from '../../model/classTableModel/ExamAccessRules';
 import { WebScrapeTakeoverBar } from '../../components/WebScrapeTakeoverBar';
+import { SyncService } from '../../service/SyncService';
 
 interface CourseActivity {
   teacherId: string;
@@ -26,6 +27,8 @@ interface CourseTableData {
   activities: CourseActivity[][];
   error?: string;
   source?: string;
+  /** 抽取脚本读取的页面真实学期标识（表单 hidden input / 学期下拉），读不到为空串 */
+  semesterId?: string;
 }
 
 interface LinkInfo {
@@ -72,12 +75,13 @@ struct Index {
   private lastCourseData: string = '';
   private currentActivities: CourseActivity[][] = [];
   private courseTableTargetSemesterId: number = calculateSemesterId();
-  private pendingSemesterSwitchId: number = 0;
   private isPageActive: boolean = false;
   private vpnAutoDetected: boolean = false;
   private vpnNavigatedFromPortal: boolean = false;
-  private semesterSwitchRetryCount: number = 0;
-  private readonly MAX_SEMESTER_SWITCH_RETRY: number = 2;
+  /** 学期校验重试计数（跨整页重载持续累计，闸门通过或手动刷新时归零） */
+  private semesterVerifyRetryCount: number = 0;
+  private readonly MAX_SEMESTER_VERIFY_RETRY: number = 3;
+  private semesterVerifyInFlight: boolean = false;
   private table0NotFoundCount: number = 0;
   private readonly MAX_TABLE0_NOT_FOUND: number = 5;
   private http500RetryCount: number = 0;
@@ -92,7 +96,6 @@ struct Index {
       const parsed = Number.parseInt(params['semesterId'], 10);
       if (Number.isFinite(parsed) && parsed > 0) {
         this.courseTableTargetSemesterId = parsed;
-        this.pendingSemesterSwitchId = parsed;
       }
     }
     // 上报页面感知快照，供 AI 助手识别当前所在页面
@@ -198,111 +201,22 @@ struct Index {
           }
 
           if (url.includes('courseTableForStd') && !this.autoNavigateTriggered) {
-            if (this.pendingSemesterSwitchId > 0) {
-              console.info('[ClassTableScrape] 检测到课表页面，需要切换学期到:', this.pendingSemesterSwitchId);
-              const getParamsJs: string = WebScrapeService.buildGetFormParamsScript();
-              this.controller.runJavaScript(getParamsJs, (paramsError: Error | null, paramsResult: string) => {
-                if (paramsError) {
-                  console.error('[ClassTableScrape] 获取当前学期参数失败:', paramsError);
-                  this.pendingSemesterSwitchId = 0;
-                  setTimeout(() => {
-                    if (!this.isPageActive) {
-                      return;
-                    }
-                    this.extractCourseData();
-                  }, 2000);
-                  return;
+            console.info('[ClassTableScrape] 检测到课表页面，延迟2秒等待渲染稳定后校验学期');
+            setTimeout(() => {
+              if (!this.isPageActive) {
+                console.info('[ClassTableScrape] 页面已离开，跳过学期校验');
+                return;
+              }
+              try {
+                const stableUrl: string = this.controller.getUrl();
+                console.info('[ClassTableScrape] 延迟后当前URL:', stableUrl);
+                if (stableUrl.includes('courseTableForStd') && !this.autoNavigateTriggered) {
+                  this.verifySemesterAndExtract(stableUrl);
                 }
-                try {
-                  let paramsInner: string = paramsResult;
-                  if (paramsResult.trim().startsWith('"')) {
-                    const decoded: string = JSON.parse(paramsResult);
-                    if (typeof decoded === 'string') {
-                      paramsInner = decoded;
-                    }
-                  }
-                  const paramsObj: Record<string, Object> = JSON.parse(paramsInner) as Record<string, Object>;
-                  const currentSemesterId: number = (paramsObj['semesterId'] as number) || 0;
-                  const idsValue: string = (paramsObj['ids'] as string) || '';
-                  console.info('[ClassTableScrape] 当前学期ID:', currentSemesterId, 'ids:', idsValue, '目标学期ID:', this.pendingSemesterSwitchId);
-                  if (idsValue && currentSemesterId > 0 && currentSemesterId !== this.pendingSemesterSwitchId) {
-                    const onCampusForSwitch: boolean = url.includes('eams.uestc.edu.cn');
-                    const useVpnForSwitch: boolean = this.isVpnMode && !onCampusForSwitch;
-                    try {
-                      const cookieDomain = useVpnForSwitch ?
-                        AppConstants.WEBVPN_BASE_URL : 'https://eams.uestc.edu.cn';
-                      webview.WebCookieManager.configCookieSync(cookieDomain,
-                        'semester.id=' + this.pendingSemesterSwitchId);
-                      console.info('[ClassTableScrape] 已设置Cookie semester.id=', this.pendingSemesterSwitchId, 'useVpn=', useVpnForSwitch);
-                    } catch (cookieErr) {
-                      console.error('[ClassTableScrape] 设置Cookie失败:', cookieErr);
-                    }
-                    const switchJs: string = useVpnForSwitch ?
-                      WebScrapeService.buildVpnSemesterSwitchScript(this.pendingSemesterSwitchId,
-                        VpnEncoder.buildVpnEamsUrl('/eams/courseTableForStd!courseTable.action')) :
-                      WebScrapeService.buildSemesterSwitchScript(this.pendingSemesterSwitchId);
-                    const executeSemesterSwitch = (): void => {
-                      this.controller.runJavaScript(switchJs, (sErr: Error | null, sRes: string) => {
-                        if (sErr) {
-                          console.error('[ClassTableScrape] 切换学期失败:', sErr);
-                        } else {
-                          console.info('[ClassTableScrape] 切换学期结果:', sRes);
-                          if (sRes && sRes.includes('403') && !this.vpnAutoDetected) {
-                            console.info('[ClassTableScrape] 学期切换403，切换到VPN模式');
-                            this.switchToVpnMode();
-                            return;
-                          }
-                        }
-                        this.semesterSwitchRetryCount = 0;
-                        this.pendingSemesterSwitchId = 0;
-                        setTimeout(() => {
-                          if (!this.isPageActive) {
-                            return;
-                          }
-                          this.extractCourseData();
-                        }, 2000);
-                      });
-                    };
-                    executeSemesterSwitch();
-                  } else {
-                    console.info('[ClassTableScrape] 当前学期与目标学期一致或表单未就绪，直接提取课表');
-                    this.pendingSemesterSwitchId = 0;
-                    setTimeout(() => {
-                      if (!this.isPageActive) {
-                        return;
-                      }
-                      this.extractCourseData();
-                    }, 2000);
-                  }
-                } catch (e) {
-                  console.error('[ClassTableScrape] 解析学期参数失败:', e);
-                  this.pendingSemesterSwitchId = 0;
-                  setTimeout(() => {
-                    if (!this.isPageActive) {
-                      return;
-                    }
-                    this.extractCourseData();
-                  }, 2000);
-                }
-              });
-            } else {
-              console.info('[ClassTableScrape] 检测到课表页面，延迟2秒等二次跳转稳定后再提取');
-              setTimeout(() => {
-                if (!this.isPageActive) {
-                  console.info('[ClassTableScrape] 页面已离开，跳过数据提取');
-                  return;
-                }
-                try {
-                  const currentUrl: string = this.controller.getUrl();
-                  console.info('[ClassTableScrape] 延迟后当前URL:', currentUrl);
-                  if (currentUrl.includes('courseTableForStd') && !this.autoNavigateTriggered) {
-                    this.extractCourseData();
-                  }
-                } catch (e) {
-                  console.error('[ClassTableScrape] 获取URL失败，页面可能已销毁:', e);
-                }
-              }, 2000);
-            }
+              } catch (e) {
+                console.error('[ClassTableScrape] 获取URL失败，页面可能已销毁:', e);
+              }
+            }, 2000);
           }
         })
         .onHttpErrorReceive((event) => {
@@ -363,7 +277,7 @@ struct Index {
           this.pageRetryCount = 0;
           this.hasRefreshedAfterLoadFail = false;
           this.table0NotFoundCount = 0;
-          this.semesterSwitchRetryCount = 0;
+          this.semesterVerifyRetryCount = 0;
           this.reloadCurrentPage();
         })
       }
@@ -599,6 +513,86 @@ struct Index {
     });
   }
 
+  /**
+   * 学期校验闸门（校验驱动）：读取课表页表单的真实学期，与目标学期一致才放行抽取。
+   * 不一致或表单未就绪时走 handleSemesterVerifyFailure（写 cookie + 整页重载 + 重试）。
+   */
+  private verifySemesterAndExtract(pageUrl: string): void {
+    if (!this.isPageActive || this.autoNavigateTriggered || this.manualMode || this.semesterVerifyInFlight) {
+      return;
+    }
+    this.semesterVerifyInFlight = true;
+    const getParamsJs: string = WebScrapeService.buildGetFormParamsScript();
+    this.controller.runJavaScript(getParamsJs, (paramsError: Error | null, paramsResult: string) => {
+      this.semesterVerifyInFlight = false;
+      if (!this.isPageActive || this.autoNavigateTriggered || this.manualMode) {
+        return;
+      }
+      if (paramsError) {
+        console.error('[ClassTableScrape] 读取页面学期参数失败:', paramsError);
+        this.handleSemesterVerifyFailure(pageUrl);
+        return;
+      }
+      try {
+        let paramsInner: string = paramsResult;
+        if (paramsResult.trim().startsWith('"')) {
+          const decoded: string = JSON.parse(paramsResult);
+          if (typeof decoded === 'string') {
+            paramsInner = decoded;
+          }
+        }
+        const paramsObj: Record<string, Object> = JSON.parse(paramsInner) as Record<string, Object>;
+        const pageSemesterId: number = (paramsObj['semesterId'] as number) || 0;
+        console.info('[ClassTableScrape] 学期校验: 页面学期=', pageSemesterId,
+          '目标学期=', this.courseTableTargetSemesterId);
+        if (pageSemesterId > 0 && pageSemesterId === this.courseTableTargetSemesterId) {
+          // 校验通过：归零重试计数后放行抽取（抽取结果仍受 semesterId 二次闸门保护）
+          this.semesterVerifyRetryCount = 0;
+          this.extractCourseData();
+          return;
+        }
+        this.handleSemesterVerifyFailure(pageUrl);
+      } catch (e) {
+        console.error('[ClassTableScrape] 解析学期参数失败:', e);
+        this.handleSemesterVerifyFailure(pageUrl);
+      }
+    });
+  }
+
+  /**
+   * 校验未通过（页面学期与目标不一致，或表单未就绪读不到学期）：
+   * 写目标学期 cookie 后整页重载课表 URL，让服务端按 cookie 重新渲染（window.table0 随之重建），
+   * onPageEnd 后将再次校验；超过最大重试次数则停止自动流程并明确提示，绝不入库。
+   */
+  private handleSemesterVerifyFailure(pageUrl: string): void {
+    if (this.semesterVerifyRetryCount >= this.MAX_SEMESTER_VERIFY_RETRY) {
+      console.error('[ClassTableScrape] 学期校验连续失败，停止自动抓取（绝不入库）');
+      this.semesterVerifyRetryCount = 0;
+      this.enableManualMode('教务返回学期与目标不一致，请重试');
+      this.showRefreshBtn = true;
+      return;
+    }
+    this.semesterVerifyRetryCount++;
+    this.message = `正在切换到目标学期(${this.semesterVerifyRetryCount}/${this.MAX_SEMESTER_VERIFY_RETRY})...`;
+    const onCampus: boolean = pageUrl.includes('eams.uestc.edu.cn');
+    const useVpn: boolean = this.isVpnMode && !onCampus;
+    try {
+      const cookieDomain = useVpn ? AppConstants.WEBVPN_BASE_URL : 'https://eams.uestc.edu.cn';
+      webview.WebCookieManager.configCookieSync(cookieDomain,
+        'semester.id=' + this.courseTableTargetSemesterId);
+      console.info('[ClassTableScrape] 已设置Cookie semester.id=', this.courseTableTargetSemesterId, 'useVpn=', useVpn);
+    } catch (cookieErr) {
+      console.error('[ClassTableScrape] 设置Cookie失败:', cookieErr);
+    }
+    setTimeout(() => {
+      if (!this.isPageActive) {
+        return;
+      }
+      console.info('[ClassTableScrape] 整页重载课表以应用目标学期:', pageUrl);
+      this.controller.loadUrl(pageUrl);
+    }, 500);
+  }
+
   extractCourseData(isManualTrigger: boolean = false): void {
     if ((this.manualMode && !isManualTrigger) || this.isExtracting || this.autoNavigateTriggered) {
       return;
@@ -671,6 +665,23 @@ struct Index {
           }
 
           console.info('[ClassTableScrape] activities长度:', courseData.activities.length);
+
+          // 学期二次闸门：抽取脚本带回的页面真实学期与目标不一致时绝不入库
+          const scrapedSemesterId: string = courseData.semesterId || '';
+          if (scrapedSemesterId.length > 0) {
+            const scrapedId: number = Number.parseInt(scrapedSemesterId, 10);
+            if (Number.isFinite(scrapedId) && scrapedId > 0 && scrapedId !== this.courseTableTargetSemesterId) {
+              console.error('[ClassTableScrape] 抽取结果学期(' + scrapedId + ')与目标学期(' +
+                this.courseTableTargetSemesterId + ')不一致，拒绝入库');
+              if (isManualTrigger) {
+                this.message = '教务返回学期与目标不一致，请重试';
+                this.isProcessing = false;
+              } else {
+                this.handleSemesterVerifyFailure(this.controller.getUrl());
+              }
+              return;
+            }
+          }
 
           let hasCourseData: boolean = false;
           for (let i: number = 0; i < courseData.activities.length; i++) {
@@ -858,13 +869,28 @@ struct Index {
   }
 
   private async persistAndNavigateToTableUI(courseData: string): Promise<void> {
+    let persisted: boolean = false;
     try {
       const context = getContext(this);
       await CourseRepository.saveCourseDataBySemester(context, this.courseTableTargetSemesterId, courseData);
-      await CourseService.saveRawCourseData(context, JSON.parse(courseData));
+      // 仅抓当前学期时才联动「下一节课卡片缓存 + 云同步」；
+      // 抓归档学期时严禁再走 saveRawCourseData（其内部无条件写 calculateSemesterId() 分片，
+      // 历史双写会用归档课表整片覆盖当前学期数据）
+      if (this.courseTableTargetSemesterId === calculateSemesterId()) {
+        await CourseService.saveRawCourseData(context, JSON.parse(courseData));
+      }
       console.info('[ClassTableScrape] courseCache: 抓取成功并已写入本地');
+      persisted = true;
     } catch (error) {
       console.error('[ClassTableScrape] courseCache: 保存课表本地数据失败:', error);
+    }
+
+    if (persisted) {
+      // 校验通过的抓取后触发「该学期替换式云同步」（上传本地分片 + 裁剪云端该学期多余记录），失败静默
+      SyncService.replaceSemesterCoursesInCloud(getContext(this), this.courseTableTargetSemesterId)
+        .catch((syncError: Object) => {
+          console.error('[ClassTableScrape] 替换式云同步失败:', syncError);
+        });
     }
 
     if (this.returnToHome) {

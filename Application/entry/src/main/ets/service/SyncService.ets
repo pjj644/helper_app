@@ -209,6 +209,11 @@ export class SyncService {
         await SyncService.initCloudDB();
       }
       const ctx = context as Context;
+
+      // 历史脏数据清理：修复前云端 semesterId<=0 的记录曾被写进幽灵分片 course_table_data_json_0
+      //（getStoredSemesterIds 过滤 id>0 故不可见但占空间），每次下载合并前直接删除该键（不存在时为空操作）
+      await CourseRepository.deleteSemesterData(ctx, 0);
+
       const cloudCourses = await CloudDbRepository.queryAllCourses(userId);
 
       // 云端为空时保持本地不变：本轮无删除墓碑，空结果不能被解释为「云端已全部删除」
@@ -220,6 +225,11 @@ export class SyncService {
       const bySemester = new Map<number, ClassCourse[]>();
       for (const cc of cloudCourses) {
         const sid = cc.semesterId || 0;
+        if (sid <= 0) {
+          // 跳过无有效学期的云端脏记录，避免再写幽灵分片 course_table_data_json_0
+          console.warn(`[SyncService] 跳过云端无有效学期的课程记录: courseId=${cc.courseId || ''}`);
+          continue;
+        }
         if (!bySemester.has(sid)) {
           bySemester.set(sid, []);
         }
@@ -262,6 +272,79 @@ export class SyncService {
       };
       return result;
     }
+  }
+
+  private static replaceSemesterSyncRunning: boolean = false;
+
+  /**
+   * 抓取成功后的「单学期替换式」云同步（防云端固化放大器）：
+   * 1) 按既有 LWW upsert 路径上传本地分片 semesterId 的全部课程；
+   * 2) 裁剪云端该 (userId, semesterId) 下槽位级 bizKey 不在本地分片中的课程记录——
+   *    用于清除历史跨学期污染上云后、仅靠 LWW 合并无法删除的多余记录。
+   * 删除条件严格限定「同 userId + 同 semesterId + bizKey 不在本地集合」，绝不触碰其他学期或其他数据。
+   * 未登录或本地该学期分片为空时跳过（分片为空无法区分「抓空」与「未抓」，不做破坏性删除）。
+   */
+  static async replaceSemesterCoursesInCloud(context: Object, semesterId: number): Promise<void> {
+    if (SyncService.replaceSemesterSyncRunning) {
+      return;
+    }
+    SyncService.replaceSemesterSyncRunning = true;
+    try {
+      if (semesterId <= 0) {
+        return;
+      }
+      const ctx = context as Context;
+      const userId = await AuthService.getLoginUserId(ctx);
+      if (!userId) {
+        return;
+      }
+      if (!CloudDbRepository.getZone()) {
+        await SyncService.initCloudDB();
+      }
+      const courseJson = await CourseRepository.loadCourseDataBySemester(ctx, semesterId);
+      if (!courseJson) {
+        return;
+      }
+      const rawData: RawCourseTableData = JSON.parse(courseJson);
+      const courses = SyncService.extractCoursesFromRawData(rawData);
+      const semesterLabel = getSemesterLabelById(semesterId);
+
+      const cloudCourses: ClassCourse[] = [];
+      for (const course of courses) {
+        cloudCourses.push(SyncService.toCloudCourse(course, userId, semesterId, semesterLabel));
+      }
+
+      const localBizKeys = new Set<string>();
+      for (const cc of cloudCourses) {
+        localBizKeys.add(SyncService.courseBizKeyOfRecord(cc));
+      }
+
+      if (cloudCourses.length > 0) {
+        await SyncService.upsertCoursesInBatches(cloudCourses);
+      }
+
+      const existingCourses = await CloudDbRepository.queryCourses(userId, semesterId);
+      const stale: ClassCourse[] = [];
+      for (const ec of existingCourses) {
+        if (ec && !localBizKeys.has(SyncService.courseBizKeyOfRecord(ec))) {
+          stale.push(ec);
+        }
+      }
+      if (stale.length > 0) {
+        await CloudDbRepository.deleteCourses(stale);
+        console.info(`[SyncService] 已裁剪云端学期${semesterId}多余课程记录 ${stale.length} 条`);
+      }
+      console.info(`[SyncService] 替换式同步完成: 学期${semesterId} 上传${cloudCourses.length}条 裁剪${stale.length}条`);
+    } catch (error) {
+      console.error('[SyncService] 单学期替换式云同步失败:', error);
+    } finally {
+      SyncService.replaceSemesterSyncRunning = false;
+    }
+  }
+
+  /** 云端 ClassCourse 记录的槽位级业务键（与 cloudCourseEntriesFromRecords 口径一致） */
+  private static courseBizKeyOfRecord(cc: ClassCourse): string {
+    return getCourseBizKey(cc.courseId || '', Number(cc.dayOfWeek) || 1, Number(cc.startSection) || 1);
   }
 
   static async syncExamsToCloud(context: Object, userId: string): Promise<SyncResult> {

@@ -22,11 +22,26 @@ export class WebScrapeService {
             unitCountValue = window.unitCount;
           }
 
+          // 读取页面真实学期标识：优先表单 hidden input，回退学期下拉选中值；读不到为空串
+          var semesterIdValue = '';
+          try {
+            var semInput = document.querySelector('input[name="semester.id"]');
+            if (semInput && semInput.value) {
+              semesterIdValue = String(semInput.value).trim();
+            } else {
+              var semSelect = document.querySelector('select[name="semester.id"]');
+              if (semSelect && semSelect.value) {
+                semesterIdValue = String(semSelect.value).trim();
+              }
+            }
+          } catch (se) { semesterIdValue = ''; }
+
           if (data && data.activities) {
             var jsonStr = JSON.stringify({
               unitCounts: unitCountValue || 12,
               activities: data.activities,
-              source: 'direct'
+              source: 'direct',
+              semesterId: semesterIdValue
             });
             try {
               return btoa(unescape(encodeURIComponent(jsonStr)));
@@ -43,7 +58,8 @@ export class WebScrapeService {
                 var iframeJsonStr = JSON.stringify({
                   unitCounts: iframeWin.unitCount || 12,
                   activities: iframeWin.table0.activities || [],
-                  source: 'iframe'
+                  source: 'iframe',
+                  semesterId: semesterIdValue
                 });
                 try {
                   return btoa(unescape(encodeURIComponent(iframeJsonStr)));
@@ -462,55 +478,6 @@ export class WebScrapeService {
 `;
   }
 
-  static buildSemesterSwitchScript(semesterId: number): string {
-    return `
-(function() {
-  try {
-    document.cookie = 'semester.id=${semesterId}; path=/eams; domain=eams.uestc.edu.cn';
-
-    var idsInput = document.querySelector('input[name="ids"]');
-    var idsValue = idsInput ? idsInput.value : '';
-    if (!idsValue) {
-      var semInput = document.querySelector('input[name="semester.id"]');
-      if (semInput && semInput.value) {
-        var formEl = semInput.closest('form');
-        if (formEl) {
-          var hiddenIds = formEl.querySelector('input[name="ids"]');
-          if (hiddenIds) {
-            idsValue = hiddenIds.value;
-          }
-        }
-      }
-    }
-
-    var formData = 'ignoreHead=1&setting.kind=std&startWeek=1&project.id=1&isEng=0&semester.id=${semesterId}&ids=' + encodeURIComponent(idsValue);
-
-    var xhr = new XMLHttpRequest();
-    xhr.open('POST', 'courseTableForStd!courseTable.action', false);
-    xhr.setRequestHeader('Content-Type', 'application/x-www-form-urlencoded');
-    xhr.withCredentials = true;
-    xhr.send(formData);
-
-    if (xhr.status === 200) {
-      var contentDiv = document.querySelector('.grid-container') || document.querySelector('#content') || document.querySelector('.content-container');
-      if (contentDiv) {
-        contentDiv.innerHTML = xhr.responseText;
-      }
-      var semInput2 = document.querySelector('input[name="semester.id"]');
-      if (semInput2) {
-        semInput2.value = '${semesterId}';
-      }
-      return JSON.stringify({ success: true, semesterId: ${semesterId} });
-    } else {
-      return JSON.stringify({ success: false, error: 'HTTP ' + xhr.status });
-    }
-  } catch(e) {
-    return JSON.stringify({ success: false, error: e.message });
-  }
-})()
-`;
-  }
-
   static buildGetFormParamsScript(): string {
     return `
 (function() {
@@ -523,53 +490,6 @@ export class WebScrapeService {
     });
   } catch(e) {
     return JSON.stringify({ semesterId: 0, ids: '', error: e.message });
-  }
-})()
-`;
-  }
-
-  static buildVpnSemesterSwitchScript(semesterId: number, vpnActionUrl: string): string {
-    return `
-(function() {
-  try {
-    var idsInput = document.querySelector('input[name="ids"]');
-    var idsValue = idsInput ? idsInput.value : '';
-    if (!idsValue) {
-      var semInput = document.querySelector('input[name="semester.id"]');
-      if (semInput && semInput.value) {
-        var formEl = semInput.closest('form');
-        if (formEl) {
-          var hiddenIds = formEl.querySelector('input[name="ids"]');
-          if (hiddenIds) {
-            idsValue = hiddenIds.value;
-          }
-        }
-      }
-    }
-
-    var formData = 'ignoreHead=1&setting.kind=std&startWeek=1&project.id=1&isEng=0&semester.id=${semesterId}&ids=' + encodeURIComponent(idsValue);
-
-    var xhr = new XMLHttpRequest();
-    xhr.open('POST', '${vpnActionUrl}', false);
-    xhr.setRequestHeader('Content-Type', 'application/x-www-form-urlencoded');
-    xhr.withCredentials = true;
-    xhr.send(formData);
-
-    if (xhr.status === 200) {
-      var contentDiv = document.querySelector('.grid-container') || document.querySelector('#content') || document.querySelector('.content-container');
-      if (contentDiv) {
-        contentDiv.innerHTML = xhr.responseText;
-      }
-      var semInput2 = document.querySelector('input[name="semester.id"]');
-      if (semInput2) {
-        semInput2.value = '${semesterId}';
-      }
-      return JSON.stringify({ success: true, semesterId: ${semesterId} });
-    } else {
-      return JSON.stringify({ success: false, error: 'HTTP ' + xhr.status });
-    }
-  } catch(e) {
-    return JSON.stringify({ success: false, error: e.message });
   }
 })()
 `;

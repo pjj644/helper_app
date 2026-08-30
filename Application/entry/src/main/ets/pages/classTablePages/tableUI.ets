@@ -297,7 +297,10 @@ struct TableUI {
 
   private async loadCourseList(): Promise<void> {
     try {
-      const allCourses: Course[] = await CourseService.loadCourses(getContext(this));
+      // 按当前查看学期读取课程列表（与主网格数据源一致），
+      // 不再读 CourseService.loadCourses 的「当前真实学期」分片，避免列表与查看学期脱钩
+      const allCourses: Course[] =
+        await CourseService.loadCoursesForSemester(getContext(this), this.selectedSemesterId);
       allCourses.sort((a, b) => {
         if (a.time.dayOfWeek !== b.time.dayOfWeek) {
           return a.time.dayOfWeek - b.time.dayOfWeek;
@@ -436,44 +439,79 @@ struct TableUI {
       }
     };
 
-    if (this.editIndex >= 0) {
-      CourseService.updateCourse(this.editIndex, newCourse);
-    } else {
-      CourseService.addCourse(newCourse);
+    const context = getContext(this);
+    // 按当前查看学期读写，杜绝「读当前学期分片 → 写 selected 分片」的跨学期拷贝；
+    // 以 (id, dayOfWeek, startSection) 定位被编辑课程（loadFromJson 合并连堂后每条课程在该学期内唯一）
+    const semesterCourses: Course[] =
+      await CourseService.loadCoursesForSemester(context, this.selectedSemesterId);
+    let edited: Course | null = null;
+    if (this.editIndex >= 0 && this.editIndex < this.courses.length) {
+      edited = this.courses[this.editIndex];
+    }
+    let replaced = false;
+    if (edited !== null) {
+      for (let i = 0; i < semesterCourses.length; i++) {
+        const candidate = semesterCourses[i];
+        if (candidate.id === edited.id &&
+            candidate.time.dayOfWeek === edited.time.dayOfWeek &&
+            candidate.time.startSection === edited.time.startSection) {
+          semesterCourses[i] = newCourse;
+          replaced = true;
+          break;
+        }
+      }
+    }
+    if (!replaced) {
+      semesterCourses.push(newCourse);
     }
 
     this.showEditor = false;
+    await CourseService.saveCoursesForSemester(context, this.selectedSemesterId, semesterCourses);
 
-    const context = getContext(this);
-    await CourseService.saveCourses(context, CourseService.getAllCourses());
-
-    const rawJson = await CourseRepository.loadCourseData(context);
+    const rawJson = await CourseRepository.loadCourseDataBySemester(context, this.selectedSemesterId);
     if (rawJson) {
-      await CourseRepository.saveCourseDataBySemester(context, this.selectedSemesterId, rawJson);
       this.applyCourseData(rawJson);
+      this.hasCourseDataForSemester = true;
     }
 
     await this.loadCourseList();
   }
 
   private async deleteCourse(index: number): Promise<void> {
-    CourseService.deleteCourse(index);
-
+    if (index < 0 || index >= this.courses.length) {
+      return;
+    }
     const context = getContext(this);
-    await CourseService.saveCourses(context, CourseService.getAllCourses());
-
-    const rawJson = await CourseRepository.loadCourseData(context);
-    if (rawJson) {
-      await CourseRepository.saveCourseDataBySemester(context, this.selectedSemesterId, rawJson);
-      this.applyCourseData(rawJson);
+    const target: Course = this.courses[index];
+    // 按当前查看学期读写，按 (id, dayOfWeek, startSection) 身份删除，杜绝跨学期拷贝
+    const semesterCourses: Course[] =
+      await CourseService.loadCoursesForSemester(context, this.selectedSemesterId);
+    const remaining: Course[] = [];
+    let removed = false;
+    for (const c of semesterCourses) {
+      if (!removed && c.id === target.id &&
+          c.time.dayOfWeek === target.time.dayOfWeek &&
+          c.time.startSection === target.time.startSection) {
+        removed = true;
+        continue;
+      }
+      remaining.push(c);
+    }
+    if (!removed) {
+      console.warn('[TableUI] 待删除课程不在当前查看学期分片中，跳过删除');
+      await this.loadCourseList();
+      return;
     }
 
-    this.courses = CourseService.getAllCourses().sort((a, b) => {
-      if (a.time.dayOfWeek !== b.time.dayOfWeek) {
-        return a.time.dayOfWeek - b.time.dayOfWeek;
-      }
-      return a.time.startSection - b.time.startSection;
-    });
+    await CourseService.saveCoursesForSemester(context, this.selectedSemesterId, remaining);
+
+    const rawJson = await CourseRepository.loadCourseDataBySemester(context, this.selectedSemesterId);
+    if (rawJson) {
+      this.applyCourseData(rawJson);
+      this.hasCourseDataForSemester = remaining.length > 0;
+    }
+
+    await this.loadCourseList();
   }
 
   build() {

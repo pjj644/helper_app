@@ -84,6 +84,21 @@ export class CloudDbRepository {
     await classDatabaseZone.upsert(courses);
   }
 
+  /**
+   * 按记录精确删除云端课程（替换式同步专用）：
+   * 调用方必须先用 queryCourses(userId, semesterId) 查出待删记录，
+   * 仅允许删除「同 userId + 同 semesterId 下 bizKey 不在本地集合」的记录，禁止跨学期/全量删除。
+   */
+  static async deleteCourses(courses: ClassCourse[]): Promise<void> {
+    if (!classDatabaseZone) {
+      throw new Error('CloudDB zone not initialized');
+    }
+    if (courses.length === 0) {
+      return;
+    }
+    await classDatabaseZone.delete(courses);
+  }
+
   static async deleteCoursesByUserAndSemester(userId: string, semesterId: number): Promise<number> {
     if (!classDatabaseZone) {
       throw new Error('CloudDB zone not initialized');
