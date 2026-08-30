@@ -5,6 +5,17 @@
 
 ---
 
+## 2026-08: 自动创建日程默认关闭并限定当前学期
+
+- **开关真正生效 + 默认关闭**：`setting_auto_sync_schedule`（自动创建相关日程，课程+考试共用）默认值三处对齐改为 false（`ReminderService.getAutoSyncScheduleEnabled` 的 getSync 默认值与 catch 兜底、`AppSettings` 的 @State 初始值）；并修正 `refreshAllReminders` 原本**不判开关**、每次进入应用都无条件重建自动日程的关键缺陷——现固定四步：无条件过期清理 → 无条件学期守卫清理 → 开关开启时才重建课程/考试自动日程 → 刷新提醒（关闭用户的自定义日程与其提醒不受影响）；
+- **当前学期限定**：`ScheduleService.buildExamEvents` 与 `CalendarPage.buildExamEventsForView` 按 `ExamUtils.resolveSemesterId(e) === ExamAccessRules.calculateSemesterId()` 过滤（跨年 12 月/1 月边界两侧同函数同映射，口径自洽），其他学期考试不再创建/显示；课程数据本就按学期分片读取，叠加教学周过滤后天然限定当前学期；
+- **学期守卫清理 `ScheduleService.pruneNonCurrentSemesterAutoSchedules`**：进入应用（`refreshAllReminders`）与日程修改（`saveSchedule/updateSchedule/deleteSchedule`）时执行——候选为 type∈{course,exam} 且带 sourceId 的自动日程，课程按「sourceId ∈ 当前课表 id 集 且 教学周 ∈ [1, maxWeek]」、考试按「id ∈ 当前学期考试 id 集」判定保留；被剔除项先删系统日历关联事件（`deleteEventBySchedule`，绝不触碰 `clearAllEvents`）再清本地；清理严格松于构建（过期项由过期清理兜底），结构上排除「删了又建」互搏，函数幂等；
+- **Review 结论（独立子代理）**：PASS——自定义日程（sourceId 为空）不受守卫影响；maxWeek 计算与 `CourseModel.getMaxWeekNumber` 同口径；桌面卡片考试链路不经日程仓库不受波及；AI 日程查询与发现页计数随过滤收窄，符合「其他学期不显示」意图；
+- **已知限制**：存量用户偏好已写入 true 的保持原状（默认值语义，可在设置页手动关闭）；SyncCard 与 DisplaySettingsCard 两处同键 Toggle 的关闭行为不一致属预存在语义，未在本轮统一；
+- **验证**：`devecocli check lint` 0 error（51 条预存在 warning 与基线一致）+ `devecocli build --modules entry@default --build-mode debug` BUILD SUCCESSFUL（review 侧独立复验通过）。
+
+---
+
 ## 2026-08: 日历日程计数修复与日程口径统一
 
 - **修复「日历显示 3 个日程、下方只渲染 2 条」**：根因是日历页选中日列表 ForEach 键值仅由 `event.id` 构成，同一门课同天非连续节次（如 1-2 节 + 5-6 节）或空 courseId 会生成同 id 双事件，ArkUI 键值重复时第二条被静默丢弃，`selectedEvents.length` 与实际渲染条数分叉。现键值加入 index（`CalendarPage.ets`），并将课程事件 id 单点收归 `ScheduleService.buildCourseEventId`（`course_<id>_<date>_<start>_<end>`，日历页与 `buildCourseEvents` 共用一套拼装），同日多时段不再碰撞，连带修复 `addSchedule` upsert 互相覆盖与提醒 notificationId 顶替；

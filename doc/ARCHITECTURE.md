@@ -125,6 +125,7 @@ common/         -> 共享基础设施
   - 写入日程/班车/考试时支持自动查重与唯一性校验，防止重复事件冗余；
   - 删除日程时自动联动清除系统日历关联事件，维持双向严格一致。
 - **应用内日程聚合口径 (`ScheduleService.getAllEvents`)**：课程/考试事件实时构建优先，仓库遗留自动事件（course/exam 且带 sourceId）按 id 去重、再按「类型|日期|timeRange|标题」语义键兜底去重，用户手动日程（`sch_`/custom/assignment）不受影响；课程事件 id 单点收归 `ScheduleService.buildCourseEventId`（`course_<id>_<date>_<start>_<end>`，日历页与提醒构建共用），同日多时段同课程不再碰撞；课程事件按 `getWeekForDate + isValidForWeek` 教学周过滤，月历、发现页「今日 X 件事」与 AI 查询共用同一去重后数据源。
+- **自动创建日程开关与学期守卫**：`setting_auto_sync_schedule`（自动创建相关日程）默认**关闭**；`ReminderService.refreshAllReminders` 固定四步——① 无条件过期清理 → ② 无条件 `ScheduleService.pruneNonCurrentSemesterAutoSchedules` 学期守卫（进入应用与 `saveSchedule/updateSchedule/deleteSchedule` 时执行，非当前学期的自动日程连同系统日历关联事件一并清理）→ ③ 开关开启时才重建课程/考试自动日程（考试按 `resolveSemesterId === calculateSemesterId` 限定当前学期，日历页考试展示同口径）→ ④ 刷新提醒。
 - **云端存储**：华为 Cloud DB（Zone: `classData`），对象类型 `ClassCourse`、`ClassExam`（继承 `DatabaseObject`），鉴权走 `@hw-agconnect/auth`。
 
 ## 抓取模式与教务状态机 (Web Scraping)
