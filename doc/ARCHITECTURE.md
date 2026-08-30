@@ -84,7 +84,7 @@ common/         -> 共享基础设施
 1. **发现 (Quick)**：校内常用系统门户（「云中成电」Hero Banner 推广位、校园地图、清水河畔、图书馆等）与「成电班车」时刻表入口。
 2. **AI助手 (Assistant)**：全屏多模态智能体交互界面（集成打字机流式 Markdown 渲染、超链接拦截内嵌直达、语音输入、海报提取与快捷场景胶囊）。
 3. **课程 (Class / Home)**：课表主仪表盘，包含周网格课表、今日课程卡片（支持点击右上角图标自由切换为考试倒计时卡片）。
-4. **日历 (Calendar)**：统一事件日历，聚合课程、考试与自定义日程，支持月视图、列表视图与日程快速新建。
+4. **日历 (Calendar)**：统一事件日历，聚合课程（仅行课周，与首页/桌面卡片口径一致）、考试与自定义日程，支持月视图、列表视图与日程快速新建。
 5. **我的 (Mine)**：账号登录态、华为云同步、悬浮球设置、助手后端配置、意见反馈（一键复制开发者邮箱 `pjj644@users.noreply.github.com`）与版本关于信息。
 
 页面跳转统一走 `router.pushUrl`，路由常量集中定义在 `AppConstants.RouterConstants`。对于外部 HTTP 链接统一唤起 `pages/classTablePages/WebPage` 内嵌原生顶栏浏览器打开。
@@ -124,6 +124,7 @@ common/         -> 共享基础设施
   - 接入 HarmonyOS `@kit.CalendarKit`；
   - 写入日程/班车/考试时支持自动查重与唯一性校验，防止重复事件冗余；
   - 删除日程时自动联动清除系统日历关联事件，维持双向严格一致。
+- **应用内日程聚合口径 (`ScheduleService.getAllEvents`)**：课程/考试事件实时构建优先，仓库遗留自动事件（course/exam 且带 sourceId）按 id 去重、再按「类型|日期|timeRange|标题」语义键兜底去重，用户手动日程（`sch_`/custom/assignment）不受影响；课程事件 id 单点收归 `ScheduleService.buildCourseEventId`（`course_<id>_<date>_<start>_<end>`，日历页与提醒构建共用），同日多时段同课程不再碰撞；课程事件按 `getWeekForDate + isValidForWeek` 教学周过滤，月历、发现页「今日 X 件事」与 AI 查询共用同一去重后数据源。
 - **云端存储**：华为 Cloud DB（Zone: `classData`），对象类型 `ClassCourse`、`ClassExam`（继承 `DatabaseObject`），鉴权走 `@hw-agconnect/auth`。
 
 ## 抓取模式与教务状态机 (Web Scraping)

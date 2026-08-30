@@ -5,6 +5,15 @@
 
 ---
 
+## 2026-08: 日历日程计数修复与日程口径统一
+
+- **修复「日历显示 3 个日程、下方只渲染 2 条」**：根因是日历页选中日列表 ForEach 键值仅由 `event.id` 构成，同一门课同天非连续节次（如 1-2 节 + 5-6 节）或空 courseId 会生成同 id 双事件，ArkUI 键值重复时第二条被静默丢弃，`selectedEvents.length` 与实际渲染条数分叉。现键值加入 index（`CalendarPage.ets`），并将课程事件 id 单点收归 `ScheduleService.buildCourseEventId`（`course_<id>_<date>_<start>_<end>`，日历页与 `buildCourseEvents` 共用一套拼装），同日多时段不再碰撞，连带修复 `addSchedule` upsert 互相覆盖与提醒 notificationId 顶替；
+- **日程口径统一**：日历月历与 `ScheduleService.buildCourseEvents` 均按 `getWeekForDate + isValidForWeek` 过滤课程事件（考试/自定义日程不受影响），假期不再显示课程，与首页 `getCoursesForDayAndWeek`、桌面卡片口径对齐；`getAllEvents` 改为实时构建事件优先 + 按 id 去重，仓库遗留自动事件（type 为 course/exam 且带 sourceId）再按「类型|日期|timeRange|标题」语义键兜底去重，止住 `syncCoursesToSchedule/syncExamsToSchedule` 每次回前台重复持久化导致的发现页「今日 X 件事」与 AI 查询报数偏大；
+- **Review 结论（独立子代理）**：PASS——事件 id 消费方全量排查无字符串解析依赖（Repository 全等比较、ReminderService 哈希派生、DataQueryEngine 透传、ToolExecutor 全等匹配），换 id 格式无需适配；「编辑自动生成的课程/考试事件」在新口径下由「编辑无效 + 双条重复」变为「编辑无效 + 计数准确」，无新增回归；`weekNumberFor` 锚点前日期返回第 1 周属全局预存在语义，未在本轮改动；
+- **验证**：`devecocli check lint` 0 error（51 条预存在 @performance warning 与基线一致）+ `devecocli build --modules entry@default --build-mode debug` BUILD SUCCESSFUL（review 侧 touch 重编独立复验通过）。
+
+---
+
 ## 2026-08: 悬浮球高亮真实化、页面感知全覆盖与伴随助手 UX 打磨
 
 - **聚光灯高亮从「假能力」变为真闭环**：
