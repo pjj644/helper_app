@@ -8,8 +8,30 @@
  * - 行课首日锚点 2026-08-31（周一）：2026-2027 学年第一学期行课首日为 2026-09-01（周二），
  *   周次按周一~周日对齐 validWeeks，故锚定到所在周的周一；
  * - 教务学期 ID 锚点 503 ↔ 2025-2026-2（ID 步进 20，见 ExamAccessRules）。
+ *
+ * 教务学期 id 锚点客观事实（教务系统实测，id 步进 20）：
+ * 483 ↔ 2025-2026-1、503 ↔ 2025-2026-2、523 ↔ 2026-2027-1。
+ * id 与标签必须成对正确，否则全部学期换算整体偏移（本文件解析闸门会拦截错配配置）。
  * 与 common/constants/AppConstants.SCHOOL_SEMESTER_START 保持同一兜底口径。
  */
+
+/**
+ * 教务学期 id 空间的历史锚点（客观事实，非业务可配置项）：
+ * 2025-2026-1 ↔ 483，相邻学期步进 20（如 2025-2026-2 ↔ 503、2026-2027-1 ↔ 523）。
+ * 用于对云端下发的 (baseSemesterId, semesterLabel) 做语义一致性校验。
+ */
+const HISTORICAL_SEMESTER_ANCHOR_ID = 483;
+const HISTORICAL_SEMESTER_ANCHOR_START_YEAR = 2025;
+const HISTORICAL_SEMESTER_ANCHOR_TERM_NUMBER = 1;
+const SEMESTER_ID_STEP_FOR_ANCHOR = 20;
+
+/**
+ * 学期索引换算：与 ExamAccessRules 同公式（startYear*2 + (termNumber-1)）。
+ * 在本文件内私有实现，避免 model 间循环依赖（ExamAccessRules 在 repository 层依赖本文件）。
+ */
+function toSemesterIndexLocal(startYear: number, termNumber: number): number {
+  return startYear * 2 + (termNumber - 1);
+}
 
 /** 学期配置数据结构（云端 app-config 的本地 last-good 形态） */
 export interface SemesterConfigData {
@@ -29,7 +51,11 @@ export interface SemesterAnchor {
   termNumber: number;
 }
 
-/** 最终兜底配置：数值与历史硬编码行为完全一致（云端不可用时整体启用） */
+/**
+ * 最终兜底配置：数值与历史硬编码行为完全一致（云端不可用时整体启用）。
+ * 兜底配对 (503, '2025-2026-2') 语义正确，勿改动数值。
+ * 教务 id 锚点客观事实：483↔2025-2026-1、503↔2025-2026-2、523↔2026-2027-1（步进 20）。
+ */
 export const FALLBACK_SEMESTER_CONFIG: SemesterConfigData = {
   semesterStartDate: '2026-08-31',
   baseSemesterId: 503,
@@ -130,6 +156,9 @@ interface SemesterConfigPayload {
  * 解析并校验云端 app-config JSON 文本为 SemesterConfigData。
  * 采用「全有或全无」策略：行课首日或学期 ID 任一字段非法即整包拒绝（返回 null），
  * 避免 id 与标签锚点混用两代数据导致换算错位。解析失败同样返回 null。
+ * 格式校验通过后追加语义一致性校验：当学期标签非空且可解析时，按固定历史锚点
+ * （483 ↔ 2025-2026-1，步进 20）重算标签期望 id，与 baseSemesterId 不一致即整包拒绝。
+ * 标签为空时跳过该校验（保持向后兼容）。
  */
 export function parseSemesterConfigJson(text: string): SemesterConfigData | null {
   if (!text) {
@@ -146,6 +175,19 @@ export function parseSemesterConfigJson(text: string): SemesterConfigData | null
       return null;
     }
     const label: string = typeof payload.semesterLabel === 'string' ? payload.semesterLabel : '';
+    // 语义一致性闸门：拦截 (id, 标签) 错配配置（如坏配对 503 ↔ '2026-2027-1'）
+    if (label) {
+      const anchor: SemesterAnchor | null = parseSemesterAnchorFromLabel(label);
+      if (anchor !== null) {
+        const expectedId: number = HISTORICAL_SEMESTER_ANCHOR_ID +
+          (toSemesterIndexLocal(anchor.startYear, anchor.termNumber) -
+            toSemesterIndexLocal(HISTORICAL_SEMESTER_ANCHOR_START_YEAR, HISTORICAL_SEMESTER_ANCHOR_TERM_NUMBER)) *
+          SEMESTER_ID_STEP_FOR_ANCHOR;
+        if (baseId !== expectedId) {
+          return null;
+        }
+      }
+    }
     const fetchedAt: string = typeof payload.generatedAt === 'string' ? payload.generatedAt : '';
     const config: SemesterConfigData = {
       semesterStartDate: startDate,
