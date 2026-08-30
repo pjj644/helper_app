@@ -508,17 +508,17 @@ struct ExamPage {
                 ListItem() {
                   this.ExamCardBuilder(item);
                 }
-              });
+              }, (item: ExamItem) => `${item.courseName}_${item.examDate}_${item.beginTime}`);
             }
-            .width('100%')
-            .height('100%');
+            .width('100%');
           }
         }
         .width('100%')
         .padding({ left: 12, right: 12, top: 12, bottom: 16 });
       }
       .layoutWeight(1)
-      .width('100%');
+      .width('100%')
+      .edgeEffect(EdgeEffect.Spring);
     }
     .width('100%')
     .height('100%')
