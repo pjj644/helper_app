@@ -5,6 +5,18 @@
 
 ---
 
+## 2026-08: 课表抓取按学期严格隔离与教务返回学期校验
+
+- **修复跨学期污染（写库侧双写）**：抓取持久化原本在写目标分片之外还**无条件**执行第二笔 `CourseService.saveRawCourseData` → 写死 `calculateSemesterId()` 分片（永远=当前真实学期），抓归档学期会把抓到的数据整片覆盖当前学期分片，并连带刷新桌面卡片缓存与触发云同步；现仅当抓取目标 === `calculateSemesterId()` 时才执行（`Index.persistAndNavigateToTableUI`）；
+- **修复「抓到的课变成其他学期」（切学期机制不可靠）**：原 XHR + `innerHTML` 切学期不会执行响应中的 `<script>`，页面全局 `table0`（抽取脚本唯一数据源）永远是初始学期数据，且表单未就绪时跳过切换直接抽取遗留 cookie 页面、全程无学期校验；现整体移除伪装式切学期脚本（含 `semInput2.value` 掩盖补丁），改为**校验驱动状态机**：onPageEnd → 2s → 读页面真实学期（表单 `semester.id`）比对目标 → 不一致写学期 cookie + 整页重载重试（≤3 次，`table0` 随服务端重渲染原生重建）→ 超限转手动模式明示「教务返回学期与目标不一致」；抽取脚本回传学期作入库前二次闸门，自动/手动两条路径学期不一致都绝不入库；
+- **tableUI 按学期隔离**：`loadCourseList/confirmEditor/deleteCourse` 从「永远读写当前学期分片 + 把当前分片数据整片拷进 selected 分片」改为按 `selectedSemesterId` 的 `loadCoursesForSemester/saveCoursesForSemester` 隔离读写（对齐 CourseManage 正确实现）；review 修复（BLOCKING）：编辑/删除定位从 (id, dayOfWeek, startSection) 升级为完整课程身份（id/名称/教师/教室/周次/星期/起始节）——同槽位可并存同学号不同教室/周次的多条课程，三元组定位会稳定误改第一条；
+- **云端固化防护**：新增 `SyncService.replaceSemesterCoursesInCloud`——校验通过的抓取后先 LWW 上传该学期本地分片，再删除云端同 userId+semesterId 下 bizKey（`courseId|dayOfWeek|startSection`）不在本地集合的课程记录，破除「仅云端有→采用」无墓碑合并对污染数据的永久化回灌；本地分片为空/未登录/semesterId<=0 直接跳过不做破坏性删除；下载合并跳过 semesterId<=0 脏记录并清理幽灵分片 `course_table_data_json_0`；
+- **Review 结论（独立子代理）**：PASS WITH FIXES（1 BLOCKING 已修）——状态机重试/重入有界且不卡死，学期比对全 number 归一无跨类型坑；删除条件严格限定 userId+semesterId+槽位级 bizKey；tableUI 当前学期默认链路无回归；VPN 模式下 WebVPN 对学期 cookie 的透传效果建议真机各验证一次（失败方向安全：转手动模式，绝不污染）；
+- **验证**：`devecocli check lint` 0 error（51 条预存在 warning 与基线一致）+ `devecocli build --modules entry@default --build-mode debug` BUILD SUCCESSFUL（review 侧 touch 重编独立复验通过）；
+- **已知限制**：历史被污染的学期需在对应学期页面重新点「下载」抓取一次即可净化（新链路自动裁剪云端残留）；未登录用户云端残留待登录后抓取清理；下载合并的删除墓碑属架构既有限制，替换式同步等效补齐了单学期的删除传播。
+
+---
+
 ## 2026-08: 自动创建日程默认关闭并限定当前学期
 
 - **开关真正生效 + 默认关闭**：`setting_auto_sync_schedule`（自动创建相关日程，课程+考试共用）默认值三处对齐改为 false（`ReminderService.getAutoSyncScheduleEnabled` 的 getSync 默认值与 catch 兜底、`AppSettings` 的 @State 初始值）；并修正 `refreshAllReminders` 原本**不判开关**、每次进入应用都无条件重建自动日程的关键缺陷——现固定四步：无条件过期清理 → 无条件学期守卫清理 → 开关开启时才重建课程/考试自动日程 → 刷新提醒（关闭用户的自定义日程与其提醒不受影响）；

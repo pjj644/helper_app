@@ -134,6 +134,7 @@ common/         -> 共享基础设施
 - **登录状态机**：优先识别统一身份认证（CAS / IDAS）输入凭据阶段，未完成登录前暂停自动跳转，等待用户认证通过。
 - **500 与会话恢复机制**：全面识别多设备登录踢出、会话失效以及包含 `[点击此处](http://eams.uestc.edu.cn/eams/home.action)` 或返回 HTTP 500 状态码的异常。收到 500 时先自动导航至 `home.action` 激活教务系统主 Session，待主站确立登录态后再平滑跳转至课表（`courseTableForStd.action`）、考试或成绩页面进行数据提取，避免二级子页面连续 500 死循环。
 - **非 Headless 约束**：抓取依赖真实 WebView 渲染，AI 助手导入操作通过 `app_control` (`navigate`) 跳转到对应导入页完成。
+- **课表抓取学期闸门**：抓取页进入课表页后先校验页面真实学期（表单 `semester.id`）与目标学期（路由参数/`calculateSemesterId`），不一致则写学期 cookie + 整页重载重试（≤3 次），超限转手动模式提示；抽取脚本回传学期作入库前二次闸门，学期不一致绝不入库。持久化仅当目标为当前学期（`calculateSemesterId()`）时才触发卡片缓存与云同步联动；校验通过后执行 `SyncService.replaceSemesterCoursesInCloud`（上传该学期分片并裁剪云端同学期 bizKey 不在本地集合的记录，防无墓碑合并回灌污染）。课表详情页（tableUI）的列表/编辑/删除一律按 `selectedSemesterId` 学期分片（`loadCoursesForSemester/saveCoursesForSemester`）隔离读写，严禁跨分片拷贝。
 
 ## 学期 / 周次 计算
 
