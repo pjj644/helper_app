@@ -86,6 +86,9 @@ struct Index {
   private readonly MAX_TABLE0_NOT_FOUND: number = 5;
   private http500RetryCount: number = 0;
   private readonly MAX_HTTP_500_RETRY: number = 2;
+  /** error.courseTable 回退门户重试计数（学期闸门校验通过时归零） */
+  private courseTableErrorFallbackCount: number = 0;
+  private readonly MAX_COURSE_TABLE_ERROR_FALLBACK: number = 2;
 
   aboutToAppear(): void {
     this.isPageActive = true;
@@ -194,30 +197,55 @@ struct Index {
             return;
           }
 
-          if (!url.includes('courseTableForStd')) {
-            console.info('[ClassTableScrape] 当前非课表页面，执行登录检测与导航');
-            this.checkLoginStatusAndNavigate();
-            return;
-          }
-
-          if (url.includes('courseTableForStd') && !this.autoNavigateTriggered) {
-            console.info('[ClassTableScrape] 检测到课表页面，延迟2秒等待渲染稳定后校验学期');
-            setTimeout(() => {
-              if (!this.isPageActive) {
-                console.info('[ClassTableScrape] 页面已离开，跳过学期校验');
+          // 登录页判断之后、courseTableForStd 判断之前：
+          // 课表页可能呈现 error.courseTable（如 error.courseTable.unknown），
+          // 会话未经 844 门户激活时服务端拒绝渲染课表，需回退门户重新进入后再走既有导航流程
+          const detectErrorJs: string = WebScrapeService.buildDetectCourseTableErrorScript();
+          this.controller.runJavaScript(detectErrorJs, (detectErr: Error | null, detectResult: string) => {
+            if (detectErr) {
+              console.error('[ClassTableScrape] error.courseTable 检测脚本执行失败:', detectErr);
+              this.handlePageEndAfterErrorCheck(url);
+              return;
+            }
+            if (!this.isPageActive || this.manualMode) {
+              return;
+            }
+            try {
+              let detectInner: string = detectResult;
+              if (detectResult.trim().startsWith('"')) {
+                const decoded: string = JSON.parse(detectResult);
+                if (typeof decoded === 'string') {
+                  detectInner = decoded;
+                }
+              }
+              const detectObj: Record<string, Object> = JSON.parse(detectInner) as Record<string, Object>;
+              if (detectObj['hasError'] === true) {
+                this.courseTableErrorFallbackCount++;
+                if (this.courseTableErrorFallbackCount > this.MAX_COURSE_TABLE_ERROR_FALLBACK) {
+                  console.error('[ClassTableScrape] error.courseTable 回退门户次数超限，停止自动流程');
+                  this.enableManualMode('课表会话激活失败，请手动操作');
+                  this.showRefreshBtn = true;
+                  return;
+                }
+                console.info('[ClassTableScrape] 检测到 error.courseTable，回退门户激活会话(' +
+                  this.courseTableErrorFallbackCount + '/' + this.MAX_COURSE_TABLE_ERROR_FALLBACK + ')');
+                this.message = '课表会话未激活，正在通过门户重新进入...';
+                const portalUrl: string = (this.isVpnMode && !url.includes('eams.uestc.edu.cn')) ?
+                  VpnEncoder.buildVpnEamsPortalUrl() :
+                  AppConstants.EAMS_PORTAL_URL;
+                setTimeout(() => {
+                  if (!this.isPageActive || this.manualMode) {
+                    return;
+                  }
+                  this.controller.loadUrl(portalUrl);
+                }, 500);
                 return;
               }
-              try {
-                const stableUrl: string = this.controller.getUrl();
-                console.info('[ClassTableScrape] 延迟后当前URL:', stableUrl);
-                if (stableUrl.includes('courseTableForStd') && !this.autoNavigateTriggered) {
-                  this.verifySemesterAndExtract(stableUrl);
-                }
-              } catch (e) {
-                console.error('[ClassTableScrape] 获取URL失败，页面可能已销毁:', e);
-              }
-            }, 2000);
-          }
+            } catch (e) {
+              console.error('[ClassTableScrape] 解析 error.courseTable 检测结果失败:', e);
+            }
+            this.handlePageEndAfterErrorCheck(url);
+          });
         })
         .onHttpErrorReceive((event) => {
           const statusCode = event.response.getResponseCode();
@@ -284,6 +312,37 @@ struct Index {
     }
     .width('100%')
     .height('100%');
+  }
+
+  /**
+   * onPageEnd 通过登录页判断与 error.courseTable 检测后的后续分支（保持原有行为）：
+   * 非课表页面走登录检测与导航；课表页面延迟 2 秒等待渲染稳定后校验学期。
+   */
+  private handlePageEndAfterErrorCheck(url: string): void {
+    if (!url.includes('courseTableForStd')) {
+      console.info('[ClassTableScrape] 当前非课表页面，执行登录检测与导航');
+      this.checkLoginStatusAndNavigate();
+      return;
+    }
+
+    if (!this.autoNavigateTriggered) {
+      console.info('[ClassTableScrape] 检测到课表页面，延迟2秒等待渲染稳定后校验学期');
+      setTimeout(() => {
+        if (!this.isPageActive) {
+          console.info('[ClassTableScrape] 页面已离开，跳过学期校验');
+          return;
+        }
+        try {
+          const stableUrl: string = this.controller.getUrl();
+          console.info('[ClassTableScrape] 延迟后当前URL:', stableUrl);
+          if (stableUrl.includes('courseTableForStd') && !this.autoNavigateTriggered) {
+            this.verifySemesterAndExtract();
+          }
+        } catch (e) {
+          console.error('[ClassTableScrape] 获取URL失败，页面可能已销毁:', e);
+        }
+      }, 2000);
+    }
   }
 
   private switchToVpnMode(): void {
@@ -444,22 +503,28 @@ struct Index {
   doNavigateToCourseTable(): void {
     const currentUrl: string = this.controller.getUrl();
     const onCampusNetwork: boolean = currentUrl.includes('eams.uestc.edu.cn');
+    // VPN 代理的 EAMS 页面 URL 不含明文 eams.uestc.edu.cn，需单独识别（如已在代理门户/课表页则不得再重载门户，否则无限循环）
+    const onVpnEamsPage: boolean = VpnEncoder.isVpnEamsUrl(currentUrl);
 
     if (currentUrl.includes('courseTableForStd')) {
       console.info('[ClassTableScrape] 已在课表页面，无需再次导航');
       return;
     }
 
-    if (this.isVpnMode && !onCampusNetwork) {
-      console.info('[ClassTableScrape] VPN模式：直接导航到VPN代理的课表URL');
+    if (this.isVpnMode && !onCampusNetwork && !onVpnEamsPage) {
+      // 直连课表二级地址会触发 error.courseTable.unknown，必须先经 844 门户：
+      // 仅当尚未处于 VPN 代理的 EAMS 页面时才先 loadUrl 门户，门户加载完成后由既有流程再进入课表
+      console.info('[ClassTableScrape] VPN模式：尚未在VPN代理的EAMS页面，先导航到VPN代理的EAMS门户激活会话');
       this.message = '正在跳转到课表页面...';
-      const vpnCourseTableUrl = VpnEncoder.buildVpnCourseTableUrl();
+      const vpnPortalUrl = VpnEncoder.buildVpnEamsPortalUrl();
       setTimeout(() => {
-        this.controller.loadUrl(vpnCourseTableUrl);
+        this.controller.loadUrl(vpnPortalUrl);
       }, 500);
       return;
     }
 
+    // 已在校园网 EAMS 或 VPN 代理的 EAMS 页面：直接在页面内查找课表链接。
+    // VPN 门户页内链接已被 WebVPN 改写为可用代理地址，无需重载门户（重载会导致门户→查登录→再进门户的无限循环）
     const findCourseTableJs: string = WebScrapeService.buildFindCourseTableLinkScript();
 
     this.controller.runJavaScript(findCourseTableJs, (error: Error | null, result: string) => {
@@ -498,8 +563,9 @@ struct Index {
           }, 500);
         } else {
           console.error('[ClassTableScrape] 未找到有效的课表链接，linkInfo:', linkInfo);
-          const fallbackUrl: string = AppConstants.EAMS_COURSE_TABLE_URL;
-          console.info('[ClassTableScrape] 使用回退URL导航:', fallbackUrl);
+          // 回退同样先经 844 门户激活会话，直连课表二级地址会触发 error.courseTable.unknown
+          const fallbackUrl: string = AppConstants.EAMS_PORTAL_URL;
+          console.info('[ClassTableScrape] 使用回退门户URL导航:', fallbackUrl);
           this.message = '正在跳转到课表页面...';
           setTimeout(() => {
             this.controller.loadUrl(fallbackUrl);
@@ -515,9 +581,9 @@ struct Index {
 
   /**
    * 学期校验闸门（校验驱动）：读取课表页表单的真实学期，与目标学期一致才放行抽取。
-   * 不一致或表单未就绪时走 handleSemesterVerifyFailure（写 cookie + 整页重载 + 重试）。
+   * 不一致或表单未就绪时走 handleSemesterVerifyFailure（注入表单提交切换学期 + 重试）。
    */
-  private verifySemesterAndExtract(pageUrl: string): void {
+  private verifySemesterAndExtract(): void {
     if (!this.isPageActive || this.autoNavigateTriggered || this.manualMode || this.semesterVerifyInFlight) {
       return;
     }
@@ -530,7 +596,7 @@ struct Index {
       }
       if (paramsError) {
         console.error('[ClassTableScrape] 读取页面学期参数失败:', paramsError);
-        this.handleSemesterVerifyFailure(pageUrl);
+        this.handleSemesterVerifyFailure();
         return;
       }
       try {
@@ -543,28 +609,33 @@ struct Index {
         }
         const paramsObj: Record<string, Object> = JSON.parse(paramsInner) as Record<string, Object>;
         const pageSemesterId: number = (paramsObj['semesterId'] as number) || 0;
+        // semesterLabel 仅为交叉验证参考来源（学期日历只读文本），不参与主判定，便于真机排查
+        const semesterLabel: string = (paramsObj['semesterLabel'] as string) || '';
         console.info('[ClassTableScrape] 学期校验: 页面学期=', pageSemesterId,
-          '目标学期=', this.courseTableTargetSemesterId);
+          '目标学期=', this.courseTableTargetSemesterId, '学期标签=', semesterLabel);
         if (pageSemesterId > 0 && pageSemesterId === this.courseTableTargetSemesterId) {
           // 校验通过：归零重试计数后放行抽取（抽取结果仍受 semesterId 二次闸门保护）
           this.semesterVerifyRetryCount = 0;
+          this.courseTableErrorFallbackCount = 0;
           this.extractCourseData();
           return;
         }
-        this.handleSemesterVerifyFailure(pageUrl);
+        this.handleSemesterVerifyFailure();
       } catch (e) {
         console.error('[ClassTableScrape] 解析学期参数失败:', e);
-        this.handleSemesterVerifyFailure(pageUrl);
+        this.handleSemesterVerifyFailure();
       }
     });
   }
 
   /**
    * 校验未通过（页面学期与目标不一致，或表单未就绪读不到学期）：
-   * 写目标学期 cookie 后整页重载课表 URL，让服务端按 cookie 重新渲染（window.table0 随之重建），
-   * onPageEnd 后将再次校验；超过最大重试次数则停止自动流程并明确提示，绝不入库。
+   * EAMS 学期切换不依赖 cookie，需将 courseTableForm 表单 hidden input[name="semester.id"]
+   * 置为目标学期后提交；优先页面自带 searchTable()（AJAX 局部刷新，无整页导航、不触发 onPageEnd，
+   * 需延时后主动复验），否则 form.submit() 整页 POST（依赖 onPageEnd 既有延迟校验再次走闸门）。
+   * 超过最大重试次数则停止自动流程并明确提示，绝不入库。
    */
-  private handleSemesterVerifyFailure(pageUrl: string): void {
+  private handleSemesterVerifyFailure(): void {
     if (this.semesterVerifyRetryCount >= this.MAX_SEMESTER_VERIFY_RETRY) {
       console.error('[ClassTableScrape] 学期校验连续失败，停止自动抓取（绝不入库）');
       this.semesterVerifyRetryCount = 0;
@@ -574,23 +645,61 @@ struct Index {
     }
     this.semesterVerifyRetryCount++;
     this.message = `正在切换到目标学期(${this.semesterVerifyRetryCount}/${this.MAX_SEMESTER_VERIFY_RETRY})...`;
-    const onCampus: boolean = pageUrl.includes('eams.uestc.edu.cn');
-    const useVpn: boolean = this.isVpnMode && !onCampus;
-    try {
-      const cookieDomain = useVpn ? AppConstants.WEBVPN_BASE_URL : 'https://eams.uestc.edu.cn';
-      webview.WebCookieManager.configCookieSync(cookieDomain,
-        'semester.id=' + this.courseTableTargetSemesterId);
-      console.info('[ClassTableScrape] 已设置Cookie semester.id=', this.courseTableTargetSemesterId, 'useVpn=', useVpn);
-    } catch (cookieErr) {
-      console.error('[ClassTableScrape] 设置Cookie失败:', cookieErr);
-    }
-    setTimeout(() => {
-      if (!this.isPageActive) {
+    const switchJs: string = WebScrapeService.buildSwitchSemesterScript(this.courseTableTargetSemesterId);
+    this.controller.runJavaScript(switchJs, (switchError: Error | null, switchResult: string) => {
+      if (!this.isPageActive || this.manualMode || this.autoNavigateTriggered) {
         return;
       }
-      console.info('[ClassTableScrape] 整页重载课表以应用目标学期:', pageUrl);
-      this.controller.loadUrl(pageUrl);
-    }, 500);
+      if (switchError) {
+        console.error('[ClassTableScrape] 注入学期切换脚本失败:', switchError);
+        this.scheduleSemesterReverify();
+        return;
+      }
+      try {
+        let switchInner: string = switchResult;
+        if (switchResult.trim().startsWith('"')) {
+          const decoded: string = JSON.parse(switchResult);
+          if (typeof decoded === 'string') {
+            switchInner = decoded;
+          }
+        }
+        const switchObj: Record<string, Object> = JSON.parse(switchInner) as Record<string, Object>;
+        console.info('[ClassTableScrape] 学期切换结果:', switchInner);
+        if (switchObj['ok'] !== true) {
+          console.error('[ClassTableScrape] 学期切换失败:', switchObj['error']);
+          this.scheduleSemesterReverify();
+          return;
+        }
+        if (switchObj['mode'] === 'searchTable') {
+          // AJAX 局部刷新：URL 不变、onPageEnd 不触发，延时后主动复验学期闸门
+          console.info('[ClassTableScrape] searchTable 局部刷新已提交，延时后复验学期');
+          setTimeout(() => {
+            if (!this.isPageActive || this.manualMode || this.autoNavigateTriggered) {
+              return;
+            }
+            this.verifySemesterAndExtract();
+          }, 2500);
+        }
+        // formSubmit 模式：整页导航触发 onPageEnd，由既有 2 秒延迟校验再次走闸门，无需额外处理
+      } catch (e) {
+        console.error('[ClassTableScrape] 解析学期切换结果失败:', e);
+        this.scheduleSemesterReverify();
+      }
+    });
+  }
+
+  /**
+   * 学期切换注入失败分支（脚本执行失败 / ok !== true / 结果解析异常）的统一兜底：
+   * 这些分支不会触发 onPageEnd，若无后续动作将静默死锁；延时约 1 秒主动复验，
+   * 使 semesterVerifyRetryCount 可向 MAX_SEMESTER_VERIFY_RETRY 手动模式终态收敛。
+   */
+  private scheduleSemesterReverify(): void {
+    setTimeout(() => {
+      if (!this.isPageActive || this.manualMode || this.autoNavigateTriggered) {
+        return;
+      }
+      this.verifySemesterAndExtract();
+    }, 1000);
   }
 
   extractCourseData(isManualTrigger: boolean = false): void {
@@ -677,7 +786,7 @@ struct Index {
                 this.message = '教务返回学期与目标不一致，请重试';
                 this.isProcessing = false;
               } else {
-                this.handleSemesterVerifyFailure(this.controller.getUrl());
+                this.handleSemesterVerifyFailure();
               }
               return;
             }

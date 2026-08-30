@@ -484,12 +484,108 @@ export class WebScrapeService {
   try {
     var semInput = document.querySelector('input[name="semester.id"]');
     var idsInput = document.querySelector('input[name="ids"]');
+    // 交叉验证参考来源：学期日历只读文本控件（读不到为空串，容错）。
+    // 仅供日志排查，不改变 semesterId 主判定来源（主闸门仍用隐藏域）
+    var semesterLabel = '';
+    try {
+      var target = document.querySelector('#semesterCalendar_target');
+      if (target && target.parentElement) {
+        var sibling = target.parentElement.querySelector('input.calendar-text');
+        if (sibling && sibling.value) {
+          semesterLabel = String(sibling.value).trim();
+        }
+      }
+      if (!semesterLabel) {
+        var calInputs = document.querySelectorAll('input.calendar-text');
+        for (var i = 0; i < calInputs.length; i++) {
+          var v = String(calInputs[i].value || '').trim();
+          if (v) {
+            semesterLabel = v;
+            break;
+          }
+        }
+      }
+    } catch (le) { semesterLabel = ''; }
     return JSON.stringify({
       semesterId: semInput ? parseInt(semInput.value, 10) : 0,
-      ids: idsInput ? idsInput.value : ''
+      ids: idsInput ? idsInput.value : '',
+      semesterLabel: semesterLabel
     });
   } catch(e) {
-    return JSON.stringify({ semesterId: 0, ids: '', error: e.message });
+    return JSON.stringify({ semesterId: 0, ids: '', semesterLabel: '', error: e.message });
+  }
+})()
+`;
+  }
+
+  /**
+   * 学期切换注入脚本：EAMS 的学期切换不依赖 cookie，而是将 courseTableForm 表单中
+   * hidden input[name="semester.id"] 置为目标学期后提交。
+   * 优先调用页面自带的 searchTable()（内部走 bg.form.submit 局部刷新 contentDiv，不发生整页导航）；
+   * 页面无该函数时退化为 form.submit() 整页 POST。
+   * @param targetSemesterId 目标学期 id（数字，直接拼接进脚本）
+   * @returns 注入脚本，返回 {ok:true, mode:'searchTable'|'formSubmit'} 或 {ok:false, error:'...'}
+   */
+  static buildSwitchSemesterScript(targetSemesterId: number): string {
+    return `
+(function() {
+  try {
+    var form = document.getElementById('courseTableForm') || document.forms['courseTableForm'];
+    if (!form) {
+      return JSON.stringify({ ok: false, error: 'NO_FORM' });
+    }
+    var semInput = form.querySelector('input[name="semester.id"]');
+    if (!semInput) {
+      return JSON.stringify({ ok: false, error: 'NO_SEMESTER_INPUT' });
+    }
+    semInput.value = '${targetSemesterId}';
+    if (typeof searchTable === 'function') {
+      searchTable();
+      return JSON.stringify({ ok: true, mode: 'searchTable' });
+    }
+    form.submit();
+    return JSON.stringify({ ok: true, mode: 'formSubmit' });
+  } catch(e) {
+    return JSON.stringify({ ok: false, error: e.message });
+  }
+})()
+`;
+  }
+
+  /**
+   * 检测课表页是否出现 error.courseTable（如 error.courseTable.unknown）错误文本。
+   * 错误可能出现在主文档，也可能在 iframe 内，故主文档与一层 iframe 均扫描，容错 try/catch。
+   * @returns 注入脚本，返回 {hasError: true/false}
+   */
+  static buildDetectCourseTableErrorScript(): string {
+    return `
+(function() {
+  try {
+    function hasErrorText(doc) {
+      try {
+        var body = doc && doc.body;
+        var text = body ? (body.innerText || '') : '';
+        return text.indexOf('error.courseTable') >= 0;
+      } catch (e) {
+        return false;
+      }
+    }
+    if (hasErrorText(document)) {
+      return JSON.stringify({ hasError: true });
+    }
+    var iframes = document.querySelectorAll('iframe, frame');
+    for (var i = 0; i < iframes.length; i++) {
+      try {
+        var subDoc = iframes[i].contentDocument ||
+          (iframes[i].contentWindow ? iframes[i].contentWindow.document : null);
+        if (subDoc && hasErrorText(subDoc)) {
+          return JSON.stringify({ hasError: true });
+        }
+      } catch (e) {}
+    }
+    return JSON.stringify({ hasError: false });
+  } catch (e) {
+    return JSON.stringify({ hasError: false });
   }
 })()
 `;
