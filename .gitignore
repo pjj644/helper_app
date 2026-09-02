@@ -20,3 +20,6 @@ oh_modules/
 /information/
 /temp/
 *.env
+
+# 华为云 AGC 真实凭据配置（防止泄露，仅保留 .example 模板入库）
+**/agconnect-services.json
