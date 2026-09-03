@@ -281,7 +281,7 @@ sequenceDiagram
 - **启动后端**：`cd "C:\Users\28399\Desktop\华为云\后端服务\ai-proxy" && npm run dev`（端口 3000）。后端 `.env`（`DEEPSEEK_API_KEY` 等）已 gitignore，勿提交。
 - **单独模拟联调（不连手机）**：`node test/phone-sim.mjs` + `npm run typecheck`。
 - **自动化评测基准运行**：`cd "C:\Users\28399\Desktop\华为云\后端服务\ai-proxy" && npm run test:eval`（全量运行 34 条评测集并自动生成 Markdown 报告）。
-- **真机/模拟器联调**：填电脑 **局域网 LAN IP**（如 `http://192.168.1.11:3000`），不要填 `localhost`。
+- **真机/模拟器联调**：默认使用 Cloudflare 隧道域名（`https://946796742.xyz/ai`），全网直连免配；若本地脱机联调可在「设置 - 助手后端」展开后填电脑 **局域网 LAN IP**（如 `http://192.168.1.11:3000`）。
 - **调试日志前缀**：`[BackendAgentClient]` / `[CalendarKit]` / `[ReminderDebug]` / `[ExamDebug]` / `[HomeDebug]` / `[FloatingWindow]`。
 
 ---

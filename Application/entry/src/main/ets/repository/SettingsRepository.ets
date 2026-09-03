@@ -62,7 +62,13 @@ export class SettingsRepository {
     const abilityContext = ContextUtils.getAbilityContext(context);
     const pref = await preferences.getPreferences(abilityContext, AppConstants.COURSE_TABLE_PREF_NAME);
     const url: string = (await pref.get(AppConstants.SETTING_AGENT_BACKEND_URL_KEY, AppConstants.AI_AGENT_URL)) as string;
-    return url && url.length > 0 ? url : AppConstants.AI_AGENT_URL;
+    const isOldLanAddress: boolean = !!url && (url.includes('192.168.') || url.includes('localhost') || url.includes('127.0.0.1'));
+    if (!url || url.length === 0 || isOldLanAddress) {
+      await pref.put(AppConstants.SETTING_AGENT_BACKEND_URL_KEY, AppConstants.AI_AGENT_URL);
+      await pref.flush();
+      return AppConstants.AI_AGENT_URL;
+    }
+    return url;
   }
 
   static async saveAgentBackendUrl(context: Object, url: string): Promise<void> {
@@ -76,7 +82,12 @@ export class SettingsRepository {
     const abilityContext = ContextUtils.getAbilityContext(context);
     const pref = await preferences.getPreferences(abilityContext, AppConstants.COURSE_TABLE_PREF_NAME);
     const key: string = (await pref.get(AppConstants.SETTING_AGENT_PROXY_KEY_KEY, AppConstants.AI_AGENT_KEY)) as string;
-    return key && key.length > 0 ? key : '';
+    if (!key || key.length === 0) {
+      await pref.put(AppConstants.SETTING_AGENT_PROXY_KEY_KEY, AppConstants.AI_AGENT_KEY);
+      await pref.flush();
+      return AppConstants.AI_AGENT_KEY;
+    }
+    return key;
   }
 
   static async saveAgentProxyKey(context: Object, key: string): Promise<void> {

@@ -17,7 +17,7 @@
 ## 2. 工具链与 MCP
 
 - **DevEco CLI（官方，`@deveco/deveco-cli` v1.2.2）**：已全局安装，命令 `devecocli`。自动探测 DevEco Studio（本机 `D:\deveco\DevEco Studio`，也可用环境变量 `DEVECO_CLI_STUDIO_PATH` 显式指定）。
-- **DevEco MCP 配置**：根目录 `.opencode/opencode.json` 中配置了 `deveco-mcp`（`devecocli serve mcp`，stdio 本地服务，`PROJECT_PATH` 指向 `Application/`；修改后需重启生效）。
+- **DevEco MCP 配置**：OpenCode（根目录 `.opencode/opencode.json`）与 Antigravity IDE（项目根目录 `.agents/mcp_config.json` 及 `.agents/plugins/deveco-mcp/`）均已接入 `deveco-mcp`（`devecocli serve mcp`，stdio 本地服务，`PROJECT_PATH` 指向 `Application/`；修改后需重启或 Reload Window 生效）。
   - `check`：ArkTS / C++ LSP 静态诊断（**首次调用会先做项目 sync，返回 "Project is syncing，请 10s 后重试" 属正常**）。
   - `restart`：LSP 卡死后原地重启。
 - **Skills 辅助**：可加载 `.agents/skills/arkts-syntax-assistant` 解决 ArkTS 语法与鸿蒙 API 约束。
@@ -75,8 +75,7 @@ devecocli check compat                                       # 跨 SDK API 兼�
 ### 后端开发与验证
 - **启动后端**：`cd "C:\Users\28399\Desktop\华为云\后端服务\ai-proxy" && npm run dev`（端口 3000）。后端 `.env`（`DEEPSEEK_API_KEY` 等）已 gitignore，勿提交。
 - **单独模拟联调**（不连手机）：`node test/phone-sim.mjs` + `npm run typecheck`。
-- **自动化评测基准**：`cd "C:\Users\28399\Desktop\华为云\后端服务\ai-proxy" && npm run test:eval`（33 条用例回归评测并生成 `test/evals/EVAL_REPORT.md`）。
-- **真机/模拟器联调**：填电脑 **局域网 LAN IP**（如 `http://192.168.1.11:3000`），不要填 `localhost`。
+- **真机/模拟器联调**：默认已接入 Cloudflare 隧道域名（`https://946796742.xyz/ai`），全网直连免配；若本地脱机联调可在「设置 - 助手后端」展开后填电脑 **局域网 LAN IP**（如 `http://192.168.1.11:3000`）。
 - **调试日志前缀**：`[BackendAgentClient]` / `[CalendarKit]` / `[ReminderDebug]` / `[ExamDebug]` / `[HomeDebug]` / `[FloatingWindow]`。
 
 ## 6. 常用命令速查（Slash Commands）

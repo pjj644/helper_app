@@ -27,10 +27,11 @@
 
 ### DevEco MCP（AI 助手用）
 
-- 已配置于根目录 `.opencode/opencode.json`（`deveco-mcp`，stdio：`devecocli serve mcp`，`PROJECT_PATH` 指向 `Application/`），**改配置后需重启 opencode 生效**。
-- 工具 `check`：对 `.ets` / `.c` / `.cpp` 文件做 LSP 静态诊断；**首次调用先做项目 sync，返回 "Project is syncing，请 10s 后重试" 属正常**。
-- 工具 `restart`：LSP 卡死后原地重启。
-- 可选工具组（需 `ADDITIONAL_TOOL_GROUPS=ui_integration_test,emulator_manager`）：UI 自动化测试 / 模拟器镜像管理。
+- **OpenCode**：已配置于根目录 `.opencode/opencode.json`（`deveco-mcp`，stdio：`devecocli serve mcp`，`PROJECT_PATH` 指向 `Application/`），改配置后重启 OpenCode 生效。
+- **Antigravity IDE**：已配置于项目根目录 `.agents/mcp_config.json` 及 `.agents/plugins/deveco-mcp/`（仅对本项目目录生效，隔离全局配置），配置后在命令面板（`Ctrl+Shift+P`）执行 `Developer: Reload Window` 或重启 IDE 生效。
+- **工具 `check`**：对 `.ets` / `.c` / `.cpp` 文件做 LSP 静态诊断；**首次调用先做项目 sync，返回 "Project is syncing，请 10s 后重试" 属正常**。
+- **工具 `restart`**：LSP 卡死后原地重启。
+- **可选工具组**（需 `ADDITIONAL_TOOL_GROUPS=ui_integration_test,emulator_manager`）：UI 自动化测试 / 模拟器镜像管理。
 
 ## 命令行构建（不装 CLI 时）
 
@@ -78,11 +79,14 @@ devecocli check lint                                         # 代码检查 (0 e
 
 ## AI 助手与系统联调测试用例
 
-前置：后端在本机运行，手机与电脑**处于同一局域网 WiFi**。
+前置：后端服务运行，可通过 Cloudflare 隧道公网直连，或手机与电脑处于同一局域网。
 
-1. 启动后端：`cd "C:\Users\28399\Desktop\华为云\后端服务\ai-proxy" && npm run dev`。`curl http://localhost:3000/health` 应返回 200。
-2. 查电脑 WLAN IP（`ipconfig`，如 `192.168.1.11`）。防火墙放行 3000 端口。
-3. DevEco 装新 hap 到真机。打开「应用设置 -> 助手后端」填 `http://192.168.1.11:3000`。
+1. 启动后端与隧道：
+   - 启动后端：`cd "C:\Users\28399\Desktop\华为云\后端服务\ai-proxy" && npm run dev`。
+   - 启动隧道：`cloudflared tunnel run main-tunnel`（提供全网直连 `https://946796742.xyz/ai`）。
+2. 端侧接入：
+   - 应用已默认配置 `https://946796742.xyz/ai` 与默认访问密钥，开箱即用。
+   - 如需本地脱机调试：在「我的 - 应用设置 - 助手后端」点击「展开配置」，将地址修改为电脑局域网 IP（如 `http://192.168.1.11:3000`）。
 4. 核心用例测试：
     - **基础查询类**：`今天有几节课` / `明天呢` / `我这周课表` / `高数在哪上` / `下次考试什么时候` / `我GPA多少` / `现在第几周`
     - **校园智搜与服务直达**：`清水河去沙河的班车有哪些` / `缓考怎么申请` / `校医院急诊电话` / `教务处有什么新通知` / `我要评教` / `网费怎么充值`（验证大模型输出 Markdown 链接 `[服务名称](URL)`，点击触发内嵌 `WebPage.ets` 浏览器打开）

@@ -92,9 +92,9 @@ export class AppConstants {
   static readonly AI_AGENT_MAX_TOOL_ROUNDS: number = 5;
   static readonly AI_AGENT_TOOL_TIMEOUT_MS: number = 30000;
 
-  // ECS proxy — 地址与密钥不内置默认值，统一经 common/agent/AgentEndpointConfig 从设置读取
-  static readonly AI_AGENT_URL: string = '';
-  static readonly AI_AGENT_KEY: string = '';
+  // AI 后端 proxy — 默认指向 Cloudflare 隧道域名与访问密钥，经 common/agent/AgentEndpointConfig 从设置读取
+  static readonly AI_AGENT_URL: string = 'https://946796742.xyz/ai';
+  static readonly AI_AGENT_KEY: string = 'uestc-helper-proxy-key-change-me';
   static readonly AI_CHAT_PATH: string = 'api/chat';
   static readonly AI_TOOL_RESULT_PATH: string = 'api/tool-result';
   static readonly AI_HEALTH_PATH: string = 'health';

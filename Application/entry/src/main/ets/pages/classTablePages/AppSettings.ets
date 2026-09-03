@@ -83,6 +83,7 @@ struct AppSettings {
   @State testResultText: string = '';
   @State testConnectionSuccess: boolean = false;
   @State showAgentToolCalls: boolean = false;
+  @State agentAdvancedExpanded: boolean = false;
   @StorageLink('floating_ball_enabled') floatingBallEnabled: boolean = true;
 
   private appSettings: UISettings = UISettings.getInstance();
@@ -829,94 +830,122 @@ struct AppSettings {
   @Builder AgentBackendCard() {
     Column({ space: 0 }) {
       Row() {
-        Text('助手后端')
-          .fontSize(18)
-          .fontWeight(FontWeight.Bold)
-          .fontColor($r('app.color.text_primary'))
-      }
-      .width('100%')
-      .padding({ bottom: 16 })
+        Row({ space: 8 }) {
+          Text('助手后端')
+            .fontSize(18)
+            .fontWeight(FontWeight.Bold)
+            .fontColor($r('app.color.text_primary'))
 
-      Column({ space: 4 }) {
-        Text('后端地址')
-          .fontSize(15)
-          .fontColor($r('app.color.text_primary'))
-        Text('本地 LangGraph 后端的局域网地址（电脑 IP:端口）。AI 助手依赖此地址，需与电脑在同一 WiFi。')
-          .fontSize(12)
-          .fontColor($r('app.color.text_tertiary'))
-      }
-      .width('100%')
-      .alignItems(HorizontalAlign.Start)
-      .padding({ bottom: 8 })
-
-      TextInput({ text: this.agentBackendUrl, placeholder: 'http://电脑局域网IP:3000' })
-        .width('100%')
-        .height(48)
-        .fontSize(14)
-        .fontColor($r('app.color.text_primary'))
-        .placeholderColor($r('app.color.text_tertiary'))
-        .backgroundColor($r('app.color.button_background'))
-        .borderRadius(10)
-        .onChange((value: string) => {
-          this.agentBackendUrl = value;
-          SettingsRepository.saveAgentBackendUrl(getContext(this), value).then(() => {
-            AgentEndpointConfig.syncConfiguredState(getContext(this));
-          });
-        })
-
-      Column({ space: 4 }) {
-        Text('访问密钥')
-          .fontSize(15)
-          .fontColor($r('app.color.text_primary'))
-        Text('后端 PROXY_AUTH_KEY 对应的值，助手请求会携带 x-proxy-key 鉴权头，需与后端一致。')
-          .fontSize(12)
-          .fontColor($r('app.color.text_tertiary'))
-      }
-      .width('100%')
-      .alignItems(HorizontalAlign.Start)
-      .padding({ top: 12, bottom: 8 })
-
-      TextInput({ text: this.agentProxyKey, placeholder: '请输入后端访问密钥' })
-        .type(InputType.Password)
-        .width('100%')
-        .height(48)
-        .fontSize(14)
-        .fontColor($r('app.color.text_primary'))
-        .placeholderColor($r('app.color.text_tertiary'))
-        .backgroundColor($r('app.color.button_background'))
-        .borderRadius(10)
-        .onChange((value: string) => {
-          this.agentProxyKey = value;
-          SettingsRepository.saveAgentProxyKey(getContext(this), value).then(() => {
-            AgentEndpointConfig.syncConfiguredState(getContext(this));
-          });
-        })
-
-      Divider().color($r('app.color.divider_color'))
-
-      Row({ space: 12 }) {
-        Button() {
-          Text(this.testingConnection ? '测试中...' : '测试连接')
-            .fontSize(14)
-            .fontColor('#FFFFFF')
+          Text(this.agentBackendUrl.includes('946796742.xyz') ? '云端隧道' : (this.agentBackendUrl.length > 0 ? '自建服务' : '未配置'))
+            .fontSize(11)
+            .fontWeight(FontWeight.Medium)
+            .fontColor($r('app.color.primary_color'))
+            .backgroundColor($r('app.color.primary_light_color'))
+            .borderRadius(6)
+            .padding({ left: 6, right: 6, top: 2, bottom: 2 })
         }
-        .width(120)
-        .height(40)
-        .backgroundColor(this.testingConnection ? $r('app.color.text_tertiary') : $r('app.color.primary_color'))
-        .borderRadius(10)
-        .enabled(!this.testingConnection)
-        .onClick(() => this.testAgentConnection())
+        .alignItems(VerticalAlign.Center)
 
-        if (this.testResultText.length > 0) {
-          Text(this.testResultText)
+        Blank()
+
+        Row({ space: 4 }) {
+          Text(this.agentAdvancedExpanded ? '收起配置' : '展开配置 >')
             .fontSize(13)
-            .fontColor(this.testConnectionSuccess ? $r('app.color.success_color') : $r('app.color.danger_color'))
-            .layoutWeight(1)
+            .fontColor($r('app.color.primary_color'))
         }
+        .onClick(() => {
+          this.agentAdvancedExpanded = !this.agentAdvancedExpanded;
+        })
       }
       .width('100%')
       .alignItems(VerticalAlign.Center)
-      .padding({ top: 12 })
+      .padding({ bottom: this.agentAdvancedExpanded ? 16 : 8 })
+
+      if (this.agentAdvancedExpanded) {
+        Column({ space: 0 }) {
+          Column({ space: 4 }) {
+            Text('后端地址')
+              .fontSize(15)
+              .fontColor($r('app.color.text_primary'))
+            Text('默认使用 Cloudflare 云端隧道，全网可直连。如需本地开发可修改为电脑局域网 IP:端口。')
+              .fontSize(12)
+              .fontColor($r('app.color.text_tertiary'))
+          }
+          .width('100%')
+          .alignItems(HorizontalAlign.Start)
+          .padding({ bottom: 8 })
+
+          TextInput({ text: this.agentBackendUrl, placeholder: 'https://946796742.xyz/ai' })
+            .width('100%')
+            .height(48)
+            .fontSize(14)
+            .fontColor($r('app.color.text_primary'))
+            .placeholderColor($r('app.color.text_tertiary'))
+            .backgroundColor($r('app.color.button_background'))
+            .borderRadius(10)
+            .onChange((value: string) => {
+              this.agentBackendUrl = value;
+              SettingsRepository.saveAgentBackendUrl(getContext(this), value).then(() => {
+                AgentEndpointConfig.syncConfiguredState(getContext(this));
+              });
+            })
+
+          Column({ space: 4 }) {
+            Text('访问密钥')
+              .fontSize(15)
+              .fontColor($r('app.color.text_primary'))
+            Text('后端 PROXY_AUTH_KEY 对应的值，助手请求会携带 x-proxy-key 鉴权头，需与后端一致。')
+              .fontSize(12)
+              .fontColor($r('app.color.text_tertiary'))
+          }
+          .width('100%')
+          .alignItems(HorizontalAlign.Start)
+          .padding({ top: 12, bottom: 8 })
+
+          TextInput({ text: this.agentProxyKey, placeholder: '请输入后端访问密钥' })
+            .type(InputType.Password)
+            .width('100%')
+            .height(48)
+            .fontSize(14)
+            .fontColor($r('app.color.text_primary'))
+            .placeholderColor($r('app.color.text_tertiary'))
+            .backgroundColor($r('app.color.button_background'))
+            .borderRadius(10)
+            .onChange((value: string) => {
+              this.agentProxyKey = value;
+              SettingsRepository.saveAgentProxyKey(getContext(this), value).then(() => {
+                AgentEndpointConfig.syncConfiguredState(getContext(this));
+              });
+            })
+
+          Divider().color($r('app.color.divider_color')).margin({ top: 12 })
+
+          Row({ space: 12 }) {
+            Button() {
+              Text(this.testingConnection ? '测试中...' : '测试连接')
+                .fontSize(14)
+                .fontColor('#FFFFFF')
+            }
+            .width(120)
+            .height(40)
+            .backgroundColor(this.testingConnection ? $r('app.color.text_tertiary') : $r('app.color.primary_color'))
+            .borderRadius(10)
+            .enabled(!this.testingConnection)
+            .onClick(() => this.testAgentConnection())
+
+            if (this.testResultText.length > 0) {
+              Text(this.testResultText)
+                .fontSize(13)
+                .fontColor(this.testConnectionSuccess ? $r('app.color.success_color') : $r('app.color.danger_color'))
+                .layoutWeight(1)
+            }
+          }
+          .width('100%')
+          .alignItems(VerticalAlign.Center)
+          .padding({ top: 12, bottom: 8 })
+        }
+        .width('100%')
+      }
 
       Divider().color($r('app.color.divider_color'))
 
