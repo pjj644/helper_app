@@ -1,4 +1,4 @@
-import { window, display, promptAction } from '@kit.ArkUI';
+import { window, display, promptAction, router } from '@kit.ArkUI';
 import { preferences } from '@kit.ArkData';
 import { BusinessError } from '@kit.BasicServicesKit';
 import { AppConstants, RouterConstants } from '../constants/AppConstants';
@@ -399,6 +399,14 @@ export class FloatingWindowManager {
     }
   }
 
+  /**
+   * 关闭面板并直接收缩为贴边半隐藏悬浮球
+   */
+  public collapseToDockedBall(): void {
+    this.switchToBallMode();
+    this.dockBall();
+  }
+
   // 拖拽手势起始基准坐标 (px)
   private dragStartBallPosX: number = 0;
   private dragStartBallPosY: number = 0;
@@ -663,6 +671,37 @@ export class FloatingWindowManager {
         // ignore
       }
       this.subWindow = null;
+    }
+  }
+
+  /**
+   * 将主窗口路由导航至指定页面（大屏跳转，确保悬浮窗小屏不受影响）
+   * @param url 页面路由（如 RouterConstants.PAGE_TABLE_UI）
+   * @param params 附加路由参数
+   * @returns 是否成功触发
+   */
+  public async navigateMainWindow(url: string, params?: Record<string, Object>): Promise<boolean> {
+    if (!this.windowStage) {
+      console.warn('[FloatingWindowManager] navigateMainWindow: windowStage is not ready');
+      return false;
+    }
+    try {
+      const mainWindow = this.windowStage.getMainWindowSync();
+      if (!mainWindow) {
+        console.warn('[FloatingWindowManager] navigateMainWindow: mainWindow is null');
+        return false;
+      }
+      const mainRouter = mainWindow.getUIContext().getRouter();
+      const options: router.RouterOptions = { url: url };
+      if (params !== undefined) {
+        options.params = params;
+      }
+      await mainRouter.pushUrl(options);
+      console.info(`[FloatingWindowManager] navigateMainWindow to ${url} succeeded`);
+      return true;
+    } catch (err) {
+      console.error(`[FloatingWindowManager] navigateMainWindow error: ${JSON.stringify(err)}`);
+      return false;
     }
   }
 }

@@ -1,6 +1,6 @@
 import { promptAction, curves } from '@kit.ArkUI';
 import { common } from '@kit.AbilityKit';
-import { AppConstants } from '../../common/constants/AppConstants';
+import { AppConstants, RouterConstants } from '../../common/constants/AppConstants';
 import { FloatingWindowManager } from '../../common/agent/FloatingWindowManager';
 import { PageContextTracker, PageSnapshot, PageActionDescriptor } from '../../common/agent/PageContextTracker';
 import { UIActionDispatcher, GuidanceState } from '../../common/agent/UIActionDispatcher';
@@ -26,10 +26,11 @@ const GUIDANCE_MASK_COLOR: string = 'rgba(0, 0, 0, 0.55)';
 @Entry
 @Component
 export struct FloatingSubWindowContent {
-  @StorageLink(AppConstants.FLOATING_WINDOW_MODE_KEY) windowMode: string = 'BALL';
+  @StorageLink(AppConstants.FLOATING_WINDOW_MODE_KEY) @Watch('onWindowModeChange') windowMode: string = 'BALL';
   @StorageLink('floating_ball_expand_state') expandState: string = 'HALF_HIDDEN';
   @StorageLink('floating_ball_dock_side') dockSide: string = 'RIGHT';
   @StorageLink('floating_ball_reset_timer') @Watch('onResetTimerTriggered') resetTimerTrigger: number = 0;
+  @StorageLink(AppConstants.AI_SESSIONS_UPDATE_TRIGGER_KEY) @Watch('onSessionsUpdateTrigger') sessionsUpdateTrigger: number = 0;
   @StorageProp(ThemeManager.THEME_STORAGE_KEY) isDarkMode: boolean = false;
 
   // 引导聚光灯：目标矩形（vp，主窗口 Index 测量后经 AppStorage 写入）与提示文案
@@ -45,6 +46,7 @@ export struct FloatingSubWindowContent {
 
   @State pageSnapshot: PageSnapshot = PageContextTracker.getInstance().getSnapshot();
   @State currentSessionId: string = '';
+  @State currentSessionTitle: string = '新对话';
   @State sessionMessages: ChatMessage[] = [];
   @State messages: MiniDisplayMessage[] = [
     {
@@ -151,6 +153,18 @@ export struct FloatingSubWindowContent {
     }
   }
 
+  private onWindowModeChange(): void {
+    if (this.windowMode === 'PANEL' && !this.isLoading) {
+      this.initOrLoadSession();
+    }
+  }
+
+  private onSessionsUpdateTrigger(): void {
+    if (this.windowMode === 'PANEL' && !this.isLoading) {
+      this.initOrLoadSession();
+    }
+  }
+
   private startCollapseTimer(): void {
     this.clearCollapseTimer();
     this.collapseTimer = setTimeout(() => {
@@ -173,11 +187,20 @@ export struct FloatingSubWindowContent {
       const context = getContext(this);
       const sessions = ChatSessionRepository.getSessions(context);
       if (sessions.length > 0) {
-        const latest = sessions[0];
-        this.currentSessionId = latest.id;
-        this.sessionMessages = [...latest.messages];
-        if (latest.displayMessages && latest.displayMessages.length > 0) {
-          this.messages = latest.displayMessages.map((d: ChatDisplayMessage): MiniDisplayMessage => ({
+        const activeId = AppStorage.get<string>(AppConstants.AI_ACTIVE_SESSION_ID_KEY);
+        let target = sessions[0];
+        if (activeId) {
+          const found = sessions.find((s: ChatSession) => s.id === activeId);
+          if (found) {
+            target = found;
+          }
+        }
+        this.currentSessionId = target.id;
+        this.currentSessionTitle = target.title;
+        AppStorage.setOrCreate(AppConstants.AI_ACTIVE_SESSION_ID_KEY, target.id);
+        this.sessionMessages = [...target.messages];
+        if (target.displayMessages && target.displayMessages.length > 0) {
+          this.messages = target.displayMessages.map((d: ChatDisplayMessage): MiniDisplayMessage => ({
             role: (d.role === 'user' ? 'user' : 'assistant') as 'user' | 'assistant' | 'tool',
             content: d.content,
             isError: d.isError,
@@ -213,6 +236,8 @@ export struct FloatingSubWindowContent {
     this.streamingContent = '';
     const newSession = ChatSessionRepository.createNewSession();
     this.currentSessionId = newSession.id;
+    this.currentSessionTitle = newSession.title;
+    AppStorage.setOrCreate(AppConstants.AI_ACTIVE_SESSION_ID_KEY, newSession.id);
     this.sessionMessages = [];
     this.messages = [
       {
@@ -283,13 +308,14 @@ export struct FloatingSubWindowContent {
       isError: !!m.isError
     }));
 
-    let title = '新对话';
+    let title = this.currentSessionTitle || '新对话';
     for (let i = 0; i < this.sessionMessages.length; i++) {
       if (this.sessionMessages[i].role === 'user') {
         title = this.sessionMessages[i].content.slice(0, 16);
         break;
       }
     }
+    this.currentSessionTitle = title;
 
     const session: ChatSession = {
       id: this.currentSessionId || `${Date.now()}`,
@@ -300,6 +326,7 @@ export struct FloatingSubWindowContent {
       updatedAt: Date.now()
     };
 
+    AppStorage.setOrCreate(AppConstants.AI_ACTIVE_SESSION_ID_KEY, session.id);
     ChatSessionRepository.saveOrUpdateSession(context, session);
   }
 
@@ -527,6 +554,77 @@ export struct FloatingSubWindowContent {
     }
   }
 
+  /**
+   * 处理顶部快捷指令点击：若属于页面导航则直接通过 FloatingWindowManager 调度主窗口大屏跳转，
+   * 确保悬浮窗小屏不受影响且保持 AI 伴随界面；非导航动作分发至 UIActionDispatcher。
+   */
+  private async handleQuickActionClick(act: PageActionDescriptor): Promise<void> {
+    switch (act.actionId) {
+      case 'open_map': {
+        const p: Record<string, string> = { 'title': '校园地图', 'url': AppConstants.GIS_MAP_URL };
+        const ok = await FloatingWindowManager.getInstance().navigateMainWindow(RouterConstants.PAGE_WEB, p);
+        promptAction.showToast({ message: ok ? `已在大屏打开：${act.label}` : '大屏跳转失败', duration: 1500 });
+        return;
+      }
+      case 'open_grades': {
+        const ok = await FloatingWindowManager.getInstance().navigateMainWindow(RouterConstants.PAGE_GRADE);
+        promptAction.showToast({ message: ok ? `已在大屏打开：${act.label}` : '大屏跳转失败', duration: 1500 });
+        return;
+      }
+      case 'open_library': {
+        const p: Record<string, string> = { 'title': '图书馆', 'url': AppConstants.LIB_FULL_URL };
+        const ok = await FloatingWindowManager.getInstance().navigateMainWindow(RouterConstants.PAGE_WEB, p);
+        promptAction.showToast({ message: ok ? `已在大屏打开：${act.label}` : '大屏跳转失败', duration: 1500 });
+        return;
+      }
+      case 'open_full_table': {
+        const ok = await FloatingWindowManager.getInstance().navigateMainWindow(RouterConstants.PAGE_TABLE_UI);
+        promptAction.showToast({ message: ok ? `已在大屏打开：${act.label}` : '大屏跳转失败', duration: 1500 });
+        return;
+      }
+      case 'open_calendar': {
+        const ok = await FloatingWindowManager.getInstance().navigateMainWindow(RouterConstants.PAGE_CALENDAR);
+        promptAction.showToast({ message: ok ? `已在大屏打开：${act.label}` : '大屏跳转失败', duration: 1500 });
+        return;
+      }
+      case 'open_settings': {
+        const ok = await FloatingWindowManager.getInstance().navigateMainWindow(RouterConstants.PAGE_SETTINGS);
+        promptAction.showToast({ message: ok ? `已在大屏打开：${act.label}` : '大屏跳转失败', duration: 1500 });
+        return;
+      }
+      case 'open_login': {
+        const ok = await FloatingWindowManager.getInstance().navigateMainWindow(RouterConstants.PAGE_LOGIN);
+        promptAction.showToast({ message: ok ? `已在大屏打开：${act.label}` : '大屏跳转失败', duration: 1500 });
+        return;
+      }
+      case 'open_course_import':
+      case 'import_courses': {
+        const p: Record<string, string> = { 'returnHome': '1' };
+        const ok = await FloatingWindowManager.getInstance().navigateMainWindow(RouterConstants.PAGE_COURSE_IMPORT, p);
+        promptAction.showToast({ message: ok ? `已在大屏打开：${act.label}` : '大屏跳转失败', duration: 1500 });
+        return;
+      }
+      case 'import_exams': {
+        const p: Record<string, string> = { 'returnHome': '0' };
+        const ok = await FloatingWindowManager.getInstance().navigateMainWindow(RouterConstants.PAGE_EXAM_IMPORT, p);
+        promptAction.showToast({ message: ok ? `已在大屏打开：${act.label}` : '大屏跳转失败', duration: 1500 });
+        return;
+      }
+      case 'import_grades': {
+        const ok = await FloatingWindowManager.getInstance().navigateMainWindow(RouterConstants.PAGE_GRADE_IMPORT);
+        promptAction.showToast({ message: ok ? `已在大屏打开：${act.label}` : '大屏跳转失败', duration: 1500 });
+        return;
+      }
+      default: {
+        const ok = await UIActionDispatcher.getInstance().dispatch(act.actionId, {});
+        promptAction.showToast({
+          message: ok ? `已执行：${act.label}` : '当前页面暂不支持该操作',
+          duration: 1500
+        });
+      }
+    }
+  }
+
   // === 悬浮球视图 (Ball Mode) ===
   @Builder
   private FloatingBallView(): void {
@@ -653,7 +751,7 @@ export struct FloatingSubWindowContent {
             .layoutWeight(1)
             .alignItems(VerticalAlign.Center);
 
-            // 右侧：新建对话 [+]、全屏跳转 [⛶]、缩小按钮 [-] 与 关闭悬浮球按钮 [X]
+            // 右侧：新建对话 [+]、全屏跳转 [⛶] 与 关闭/停靠悬浮球按钮 [✕]
             Row({ space: 6 }) {
               // 开启新对话 [+]
               Button() {
@@ -682,25 +780,11 @@ export struct FloatingSubWindowContent {
               .type(ButtonType.Circle)
               .backgroundColor(this.isDarkMode ? '#374151' : '#F3F4F6')
               .onClick(() => {
+                this.persistCurrentSession(getContext(this) as common.UIAbilityContext);
                 UIActionDispatcher.getInstance().dispatch('switch_tab', { 'tabIndex': 1 });
               });
 
-              // 缩小为悬浮球 [-]
-              Button() {
-                Text('－')
-                  .fontSize(15)
-                  .fontWeight(FontWeight.Bold)
-                  .fontColor(this.isDarkMode ? '#D1D5DB' : '#4B5563');
-              }
-              .width(28)
-              .height(28)
-              .type(ButtonType.Circle)
-              .backgroundColor(this.isDarkMode ? '#374151' : '#F3F4F6')
-              .onClick(() => {
-                FloatingWindowManager.getInstance().switchToBallMode();
-              });
-
-              // 收起面板并停靠悬浮球 [✕]
+              // 关闭面板并收起停靠悬浮球 [✕]
               Button() {
                 Text('✕')
                   .fontSize(12)
@@ -712,8 +796,7 @@ export struct FloatingSubWindowContent {
               .type(ButtonType.Circle)
               .backgroundColor('rgba(239, 68, 68, 0.1)')
               .onClick(() => {
-                FloatingWindowManager.getInstance().switchToBallMode();
-                FloatingWindowManager.getInstance().dockBall();
+                FloatingWindowManager.getInstance().collapseToDockedBall();
               });
             }
           }
@@ -777,10 +860,7 @@ export struct FloatingSubWindowContent {
               .backgroundColor('rgba(217, 119, 6, 0.1)')
               .borderRadius(12)
               .onClick(() => {
-                // 快捷动作本地直触发，绕过 LLM 转述（actionId 不进自然语言）
-                UIActionDispatcher.getInstance().dispatch(act.actionId, {}).then((ok: boolean) => {
-                  promptAction.showToast({ message: ok ? `已执行：${act.label}` : '当前页面暂不支持该操作', duration: 1500 });
-                });
+                this.handleQuickActionClick(act);
               });
             });
           }

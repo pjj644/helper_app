@@ -19,6 +19,7 @@ import { CourseService } from '../../service/CourseService';
 import { SyncService } from '../../service/SyncService';
 import { PageContextTracker } from '../../common/agent/PageContextTracker';
 import { UIActionDispatcher } from '../../common/agent/UIActionDispatcher';
+import { FloatingWindowManager } from '../../common/agent/FloatingWindowManager';
 
 @Entry
 @Component
@@ -90,7 +91,11 @@ struct TableUI {
     });
 
     this.unregisterImport = UIActionDispatcher.getInstance().registerHandler('import_courses', () => {
-      router.pushUrl({ url: 'pages/classTablePages/Index' });
+      FloatingWindowManager.getInstance().navigateMainWindow('pages/classTablePages/Index').then((ok: boolean) => {
+        if (!ok) {
+          router.pushUrl({ url: 'pages/classTablePages/Index' });
+        }
+      });
       return true;
     });
 

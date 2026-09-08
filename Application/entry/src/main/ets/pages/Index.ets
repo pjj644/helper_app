@@ -244,8 +244,10 @@ struct MainPage {
   }
 
   private updateCurrentTabContext(): void {
-    FloatingWindowManager.getInstance().setAssistantPageActive(this.currentTabIndex === 1);
-    if (this.currentTabIndex === 1) {
+    const isAssistantActive = this.currentTabIndex === 1;
+    FloatingWindowManager.getInstance().setAssistantPageActive(isAssistantActive);
+    AppStorage.setOrCreate(AppConstants.AI_ASSISTANT_TAB_ACTIVE_KEY, isAssistantActive);
+    if (isAssistantActive) {
       AgentEndpointConfig.syncConfiguredState(getContext(this));
     }
 
@@ -295,8 +297,9 @@ struct MainPage {
         '校园日历',
         '日程管理与系统日历事件',
         { 'todayEvents': this.todayEventCount },
-        // 无已注册 handler 的动作不做声明（原 add_schedule 无真实能力承接，已移除）
-        []
+        [
+          { actionId: 'open_calendar', label: '进入日历全屏', description: '跳转至独立校园日历页面' }
+        ]
       );
     } else if (this.currentTabIndex === 4) {
       PageContextTracker.getInstance().updateSnapshot(
@@ -433,31 +436,43 @@ struct MainPage {
   }
 
   private openImporter(): Promise<boolean> {
-    return router.pushUrl({
-      url: RouterConstants.PAGE_COURSE_IMPORT,
-      params: {
-        returnHome: '1',
-        semesterId: String(calculateSemesterId())
+    const navParams: Record<string, string> = {
+      'returnHome': '1',
+      'semesterId': String(calculateSemesterId())
+    };
+    return FloatingWindowManager.getInstance().navigateMainWindow(RouterConstants.PAGE_COURSE_IMPORT, navParams).then((ok: boolean) => {
+      if (ok) {
+        return true;
       }
-    }).then((): boolean => {
-      return true;
-    }).catch((error: Error): boolean => {
-      console.error('[Index] 跳转导入页面失败:', error);
-      return false;
+      return router.pushUrl({
+        url: RouterConstants.PAGE_COURSE_IMPORT,
+        params: navParams
+      }).then((): boolean => {
+        return true;
+      }).catch((error: Error): boolean => {
+        console.error('[Index] 跳转导入页面失败:', error);
+        return false;
+      });
     });
   }
 
-  /** 页面动作路由跳转统一封装：成功返回 true，失败记录日志并返回 false */
+  /** 页面动作路由跳转统一封装：优先大屏跳转，确保悬浮窗小屏不受影响 */
   private dispatchNavigate(url: string, params?: Record<string, string>): Promise<boolean> {
-    const options: router.RouterOptions = { url: url };
-    if (params !== undefined) {
-      options.params = params;
-    }
-    return router.pushUrl(options).then((): boolean => {
-      return true;
-    }).catch((error: Error): boolean => {
-      console.error(`[Index] 页面动作跳转 ${url} 失败:`, JSON.stringify(error));
-      return false;
+    const navParams: Record<string, Object> | undefined = params;
+    return FloatingWindowManager.getInstance().navigateMainWindow(url, navParams).then((ok: boolean) => {
+      if (ok) {
+        return true;
+      }
+      const options: router.RouterOptions = { url: url };
+      if (params !== undefined) {
+        options.params = params;
+      }
+      return router.pushUrl(options).then((): boolean => {
+        return true;
+      }).catch((error: Error): boolean => {
+        console.error(`[Index] 页面动作跳转 ${url} 失败:`, JSON.stringify(error));
+        return false;
+      });
     });
   }
 
@@ -468,32 +483,49 @@ struct MainPage {
   }
 
   private openTable(): void {
-    router.pushUrl({ url: RouterConstants.PAGE_TABLE_UI }).catch((error: Error) => {
-      console.error('[Index] 跳转课表页面失败:', error);
+    FloatingWindowManager.getInstance().navigateMainWindow(RouterConstants.PAGE_TABLE_UI).then((ok: boolean) => {
+      if (!ok) {
+        router.pushUrl({ url: RouterConstants.PAGE_TABLE_UI }).catch((error: Error) => {
+          console.error('[Index] 跳转课表页面失败:', error);
+        });
+      }
     });
   }
 
   private openExamPage(): void {
-    router.pushUrl({
-      url: RouterConstants.PAGE_EXAM,
-      params: {
-        examTypeId: String(this.getSelectedExamTypeId()),
-        semesterId: String(this.selectedSemesterId)
+    const navParams: Record<string, string> = {
+      'examTypeId': String(this.getSelectedExamTypeId()),
+      'semesterId': String(this.selectedSemesterId)
+    };
+    FloatingWindowManager.getInstance().navigateMainWindow(RouterConstants.PAGE_EXAM, navParams).then((ok: boolean) => {
+      if (!ok) {
+        router.pushUrl({
+          url: RouterConstants.PAGE_EXAM,
+          params: navParams
+        }).catch((error: Error) => {
+          console.error('[Index] 跳转考试页面失败:', error);
+        });
       }
-    }).catch((error: Error) => {
-      console.error('[Index] 跳转考试页面失败:', error);
     });
   }
 
   private openSchedule(): void {
-    router.pushUrl({ url: RouterConstants.PAGE_CALENDAR }).catch((error: Error) => {
-      console.error('[Index] 跳转日程页面失败:', error);
+    FloatingWindowManager.getInstance().navigateMainWindow(RouterConstants.PAGE_CALENDAR).then((ok: boolean) => {
+      if (!ok) {
+        router.pushUrl({ url: RouterConstants.PAGE_CALENDAR }).catch((error: Error) => {
+          console.error('[Index] 跳转日程页面失败:', error);
+        });
+      }
     });
   }
 
   private openSettings(): void {
-    router.pushUrl({ url: RouterConstants.PAGE_SETTINGS }).catch((error: Error) => {
-      console.error('[Index] 跳转设置页面失败:', error);
+    FloatingWindowManager.getInstance().navigateMainWindow(RouterConstants.PAGE_SETTINGS).then((ok: boolean) => {
+      if (!ok) {
+        router.pushUrl({ url: RouterConstants.PAGE_SETTINGS }).catch((error: Error) => {
+          console.error('[Index] 跳转设置页面失败:', error);
+        });
+      }
     });
   }
 

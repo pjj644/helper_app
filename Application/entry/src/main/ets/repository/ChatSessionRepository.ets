@@ -65,6 +65,8 @@ export class ChatSessionRepository {
       const pref = preferences.getPreferencesSync(context, { name: AppConstants.COURSE_TABLE_PREF_NAME });
       pref.putSync(AppConstants.AI_CHAT_SESSIONS_KEY, JSON.stringify(trimmed));
       pref.flushSync();
+      // 触发内存总线更新广播，驱动悬浮窗与主页面双向实时刷新会话列表
+      AppStorage.setOrCreate(AppConstants.AI_SESSIONS_UPDATE_TRIGGER_KEY, Date.now());
       // P2-7d：落盘成功后触发 AI 会话云同步（开关关闭/未登录/无网时在服务内部短路，软降不抛出）
       try {
         SessionSyncService.triggerSessionSyncIfEnabled(context);
@@ -87,27 +89,22 @@ export class ChatSessionRepository {
       const pref = preferences.getPreferencesSync(context, { name: AppConstants.COURSE_TABLE_PREF_NAME });
       pref.putSync(AppConstants.AI_CHAT_SESSIONS_KEY, JSON.stringify(trimmed));
       pref.flushSync();
+      AppStorage.setOrCreate(AppConstants.AI_SESSIONS_UPDATE_TRIGGER_KEY, Date.now());
     } catch (error) {
       console.error('[ChatSessionRepository] saveSessionsRaw error:', JSON.stringify(error));
     }
   }
 
   /**
-   * 新增或更新单个会话（置顶更新）
+   * 新增或更新单个会话（保证置顶更新）
    */
   static saveOrUpdateSession(context: Context, session: ChatSession): void {
     const sessions = ChatSessionRepository.getSessions(context);
-    let found = false;
-    for (let i = 0; i < sessions.length; i++) {
-      if (sessions[i].id === session.id) {
-        sessions[i] = session;
-        found = true;
-        break;
-      }
+    const foundIndex = sessions.findIndex((s: ChatSession) => s.id === session.id);
+    if (foundIndex >= 0) {
+      sessions.splice(foundIndex, 1);
     }
-    if (!found) {
-      sessions.unshift(session);
-    }
+    sessions.unshift(session);
     ChatSessionRepository.saveSessions(context, sessions);
   }
 

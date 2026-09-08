@@ -21,6 +21,7 @@ import { DataQueryEngine, QueryFilter } from './DataQueryEngine'
 import { PageContextTracker } from './PageContextTracker'
 import { UIActionDispatcher } from './UIActionDispatcher'
 import { SpotlightRegistry } from './SpotlightRegistry'
+import { FloatingWindowManager } from './FloatingWindowManager'
 
 export interface ToolResult {
   success: boolean
@@ -704,11 +705,19 @@ export class ToolExecutor {
         const titleArg: string = this.getStringArg(nested, 'title')
         const webTitle: string = titleArg.length > 0 ? titleArg : '页面'
         const webParams: Record<string, Object> = { 'title': webTitle, 'url': webUrl }
-        await router.pushUrl({ url: url, params: webParams })
-        return { success: true, data: JSON.stringify({ message: `已打开网页「${webTitle}」`, url: webUrl }) }
+        await this.navigateTarget(url, webParams)
+        return { success: true, data: JSON.stringify({ message: `已在主界面打开网页「${webTitle}」`, url: webUrl }) }
       }
-      await router.pushUrl({ url: url })
-      return { success: true, data: JSON.stringify({ message: `已导航到 ${page} 页面` }) }
+      if (page === 'home') {
+        // 优先尝试直接切换主界面 Tab 0
+        const switched = await UIActionDispatcher.getInstance().dispatch('switch_tab', { 'tabIndex': 0 })
+        if (!switched) {
+          await this.navigateTarget(url)
+        }
+        return { success: true, data: JSON.stringify({ message: '已在主界面切换到首页' }) }
+      }
+      await this.navigateTarget(url)
+      return { success: true, data: JSON.stringify({ message: `已在主界面打开 ${page} 页面` }) }
     } catch (err) {
       console.error(`[ToolExecutor] navigate error: ${String(err)}`)
       const detail: string = this.extractErrorMessage(err as Object)
@@ -716,6 +725,21 @@ export class ToolExecutor {
         success: false,
         data: JSON.stringify({ message: `跳转到 ${page} 页面失败`, error: detail })
       }
+    }
+  }
+
+  /**
+   * 优先调度主窗口（大屏）进行页面导航，确保小屏悬浮窗不被冲垮
+   */
+  private async navigateTarget(url: string, params?: Record<string, Object>): Promise<void> {
+    const success = await FloatingWindowManager.getInstance().navigateMainWindow(url, params)
+    if (!success) {
+      // 兜底：若主窗口不可用或未初始化，回退当前 router
+      const options: router.RouterOptions = { url: url }
+      if (params !== undefined) {
+        options.params = params
+      }
+      await router.pushUrl(options)
     }
   }
 
