@@ -601,103 +601,138 @@ export struct FloatingSubWindowContent {
     );
   }
 
-  // === Mini 助手覆盖层 (Panel Mode) ===
+  // === Mini 助手自由小窗 (Panel Mode) ===
   @Builder
   private MiniAssistantPanelView(): void {
-    Stack({ alignContent: Alignment.Bottom }) {
-      // 半透明背景遮罩（点击收起为悬浮球）
-      Rect()
-        .width('100%')
-        .height('100%')
-        .fill('rgba(0, 0, 0, 0.4)')
-        .onClick(() => {
-          FloatingWindowManager.getInstance().switchToBallMode();
-        });
-
+    Stack({ alignContent: Alignment.BottomEnd }) {
       // 浮动 Mini 助手主卡片
-      Column({ space: 8 }) {
-        // 顶部操作栏
-        Row() {
-          // 左侧：AI 图标与感知到的当前页面胶囊
-          Row({ space: 6 }) {
-            Image($r('app.media.ic_ai_assistant'))
-              .width(22)
-              .height(22)
-              .fillColor('#6366F1');
-
-            Text('AI 伴随助手')
-              .fontSize(15)
-              .fontWeight(FontWeight.Bold)
-              .fontColor(this.isDarkMode ? '#F3F4F6' : '#111827');
-
-            // 页面感知标识
-            Row({ space: 3 }) {
-              Circle({ width: 5, height: 5 }).fill('#10B981');
-              Text(this.pageSnapshot.pageTitle || '首页')
-                .fontSize(11)
-                .fontColor('#10B981')
-                .fontWeight(FontWeight.Medium);
-            }
-            .padding({ left: 6, right: 6, top: 2, bottom: 2 })
-            .backgroundColor('rgba(16, 185, 129, 0.12)')
-            .borderRadius(8);
+      Column({ space: 6 }) {
+        // 顶部操作区（包含胶囊拖拽把手与控制栏）
+        Column() {
+          // 1. 顶部小窗胶囊横条把手（系统小窗风格拖拽指示器）
+          Row() {
+            Row()
+              .width(36)
+              .height(4)
+              .borderRadius(2)
+              .backgroundColor(this.isDarkMode ? '#4B5563' : '#D1D5DB');
           }
+          .width('100%')
+          .height(14)
+          .justifyContent(FlexAlign.Center)
           .alignItems(VerticalAlign.Center);
 
-          Blank();
+          // 2. 顶部操作栏
+          Row() {
+            // 左侧：AI 图标与感知到的当前页面胶囊
+            Row({ space: 6 }) {
+              Image($r('app.media.ic_ai_assistant'))
+                .width(20)
+                .height(20)
+                .fillColor('#6366F1');
 
-          // 右侧：新建对话 [+]、缩小按钮 [-] 与 关闭悬浮球按钮 [X]
-          Row({ space: 8 }) {
-            // 开启新对话 [+]
-            Button() {
-              Text('＋')
-                .fontSize(16)
+              Text('AI 伴随助手')
+                .fontSize(14)
                 .fontWeight(FontWeight.Bold)
-                .fontColor(this.isDarkMode ? '#D1D5DB' : '#4B5563');
-            }
-            .width(30)
-            .height(30)
-            .type(ButtonType.Circle)
-            .backgroundColor(this.isDarkMode ? '#374151' : '#F3F4F6')
-            .onClick(() => {
-              this.startNewChat(true);
-            });
+                .fontColor(this.isDarkMode ? '#F3F4F6' : '#111827');
 
-            // 缩小为悬浮球 [-]
-            Button() {
-              Text('－')
-                .fontSize(16)
-                .fontWeight(FontWeight.Bold)
-                .fontColor(this.isDarkMode ? '#D1D5DB' : '#4B5563');
+              // 页面感知标识
+              Row({ space: 3 }) {
+                Circle({ width: 5, height: 5 }).fill('#10B981');
+                Text(this.pageSnapshot.pageTitle || '首页')
+                  .fontSize(10)
+                  .fontColor('#10B981')
+                  .fontWeight(FontWeight.Medium)
+                  .maxLines(1)
+                  .textOverflow({ overflow: TextOverflow.Ellipsis });
+              }
+              .padding({ left: 6, right: 6, top: 2, bottom: 2 })
+              .backgroundColor('rgba(16, 185, 129, 0.12)')
+              .borderRadius(8);
             }
-            .width(30)
-            .height(30)
-            .type(ButtonType.Circle)
-            .backgroundColor(this.isDarkMode ? '#374151' : '#F3F4F6')
-            .onClick(() => {
-              FloatingWindowManager.getInstance().switchToBallMode();
-            });
+            .layoutWeight(1)
+            .alignItems(VerticalAlign.Center);
 
-            // 收起面板并停靠悬浮球（禁用请到设置）
-            Button() {
-              Text('✕')
-                .fontSize(13)
-                .fontWeight(FontWeight.Bold)
-                .fontColor('#EF4444');
+            // 右侧：新建对话 [+]、全屏跳转 [⛶]、缩小按钮 [-] 与 关闭悬浮球按钮 [X]
+            Row({ space: 6 }) {
+              // 开启新对话 [+]
+              Button() {
+                Text('＋')
+                  .fontSize(15)
+                  .fontWeight(FontWeight.Bold)
+                  .fontColor(this.isDarkMode ? '#D1D5DB' : '#4B5563');
+              }
+              .width(28)
+              .height(28)
+              .type(ButtonType.Circle)
+              .backgroundColor(this.isDarkMode ? '#374151' : '#F3F4F6')
+              .onClick(() => {
+                this.startNewChat(true);
+              });
+
+              // 全屏跳转 [⛶]（直达主 Tab 1 AI 助手页面）
+              Button() {
+                Text('⛶')
+                  .fontSize(13)
+                  .fontWeight(FontWeight.Bold)
+                  .fontColor(this.isDarkMode ? '#D1D5DB' : '#4B5563');
+              }
+              .width(28)
+              .height(28)
+              .type(ButtonType.Circle)
+              .backgroundColor(this.isDarkMode ? '#374151' : '#F3F4F6')
+              .onClick(() => {
+                UIActionDispatcher.getInstance().dispatch('switch_tab', { 'tabIndex': 1 });
+              });
+
+              // 缩小为悬浮球 [-]
+              Button() {
+                Text('－')
+                  .fontSize(15)
+                  .fontWeight(FontWeight.Bold)
+                  .fontColor(this.isDarkMode ? '#D1D5DB' : '#4B5563');
+              }
+              .width(28)
+              .height(28)
+              .type(ButtonType.Circle)
+              .backgroundColor(this.isDarkMode ? '#374151' : '#F3F4F6')
+              .onClick(() => {
+                FloatingWindowManager.getInstance().switchToBallMode();
+              });
+
+              // 收起面板并停靠悬浮球 [✕]
+              Button() {
+                Text('✕')
+                  .fontSize(12)
+                  .fontWeight(FontWeight.Bold)
+                  .fontColor('#EF4444');
+              }
+              .width(28)
+              .height(28)
+              .type(ButtonType.Circle)
+              .backgroundColor('rgba(239, 68, 68, 0.1)')
+              .onClick(() => {
+                FloatingWindowManager.getInstance().switchToBallMode();
+                FloatingWindowManager.getInstance().dockBall();
+              });
             }
-            .width(30)
-            .height(30)
-            .type(ButtonType.Circle)
-            .backgroundColor('rgba(239, 68, 68, 0.1)')
-            .onClick(() => {
-              // 先把窗口缩回球，再停靠边缘并滑到半隐藏态，功能本身保持开启
-              FloatingWindowManager.getInstance().switchToBallMode();
-              FloatingWindowManager.getInstance().dockBall();
-            });
           }
+          .width('100%')
+          .padding({ left: 14, right: 14, bottom: 4 });
         }
         .width('100%')
-        .padding({ left: 16, right: 16, top: 14, bottom: 6 });
+        .gesture(
+          PanGesture({ fingers: 1, direction: PanDirection.All })
+            .onActionStart(() => {
+              FloatingWindowManager.getInstance().startPanelDrag();
+            })
+            .onActionUpdate((event: GestureEvent) => {
+              FloatingWindowManager.getInstance().updatePanelDrag(event.offsetX, event.offsetY);
+            })
+            .onActionEnd((event: GestureEvent) => {
+              FloatingWindowManager.getInstance().endPanelDrag(event.offsetX, event.offsetY);
+            })
+        );
 
         // 页面快捷感知与操作胶囊
         Scroll() {
@@ -929,17 +964,46 @@ export struct FloatingSubWindowContent {
           .width('100%')
           .padding({ bottom: 8 });
       }
-      .width('94%')
-      .height(440)
-      .margin({ bottom: 20 })
+      .width('100%')
+      .height('100%')
       .backgroundColor(this.isDarkMode ? '#1F2937' : '#FFFFFF')
-      .borderRadius(24)
+      .borderRadius(18)
+      .border({
+        width: 1,
+        color: this.isDarkMode ? 'rgba(255, 255, 255, 0.12)' : 'rgba(0, 0, 0, 0.08)'
+      })
       .shadow({
-        radius: 24,
-        color: 'rgba(0, 0, 0, 0.25)',
+        radius: 18,
+        color: this.isDarkMode ? 'rgba(0, 0, 0, 0.5)' : 'rgba(0, 0, 0, 0.15)',
         offsetX: 0,
-        offsetY: 8
-      });
+        offsetY: 6
+      })
+      .clip(true);
+
+      // 右下角尺寸拉伸调节手柄 (Resize Handle)
+      Row() {
+        Polygon({ width: 10, height: 10 })
+          .points([[10, 0], [10, 10], [0, 10]])
+          .fill(this.isDarkMode ? '#6B7280' : '#9CA3AF');
+      }
+      .width(26)
+      .height(26)
+      .justifyContent(FlexAlign.End)
+      .alignItems(VerticalAlign.Bottom)
+      .padding({ right: 4, bottom: 4 })
+      .hitTestBehavior(HitTestMode.Block)
+      .gesture(
+        PanGesture({ fingers: 1, direction: PanDirection.All })
+          .onActionStart(() => {
+            FloatingWindowManager.getInstance().startPanelResize();
+          })
+          .onActionUpdate((event: GestureEvent) => {
+            FloatingWindowManager.getInstance().updatePanelResize(event.offsetX, event.offsetY);
+          })
+          .onActionEnd((event: GestureEvent) => {
+            FloatingWindowManager.getInstance().endPanelResize(event.offsetX, event.offsetY);
+          })
+      );
     }
     .width('100%')
     .height('100%');

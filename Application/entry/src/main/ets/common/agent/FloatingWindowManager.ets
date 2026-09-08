@@ -37,6 +37,28 @@ export class FloatingWindowManager {
   private ballPosX: number = 850;
   private ballPosY: number = 1400;
 
+  // 小窗尺寸与坐标 (px/vp)
+  private panelWidthVp: number = 340;
+  private panelHeightVp: number = 470;
+  private panelWidthPx: number = 1020;
+  private panelHeightPx: number = 1410;
+  private panelPosX: number = 30;
+  private panelPosY: number = 600;
+
+  // 最小尺寸约束 (vp)
+  private readonly MIN_PANEL_WIDTH_VP: number = 280;
+  private readonly MIN_PANEL_HEIGHT_VP: number = 320;
+
+  // 拖拽小窗手势起始基准坐标 (px)
+  private dragStartPanelPosX: number = 0;
+  private dragStartPanelPosY: number = 0;
+
+  // 调整小窗尺寸手势起始基准 (px)
+  private resizeStartWidthPx: number = 0;
+  private resizeStartHeightPx: number = 0;
+  private resizeStartPosX: number = 0;
+  private resizeStartPosY: number = 0;
+
   private isCreating: boolean = false;
 
   private constructor() {}
@@ -61,6 +83,19 @@ export class FloatingWindowManager {
       this.screenHeightPx = disp.height;
       this.density = disp.densityPixels || 3.0;
       this.ballSizePx = Math.round(this.ballSizeVp * this.density);
+
+      // 计算小窗默认尺寸与居中坐标
+      const screenWidthVp = this.screenWidthPx / this.density;
+      const screenHeightVp = this.screenHeightPx / this.density;
+      this.panelWidthVp = Math.min(360, Math.max(280, Math.round(screenWidthVp * 0.90)));
+      this.panelHeightVp = Math.min(540, Math.max(400, Math.round(screenHeightVp * 0.52)));
+
+      this.panelWidthPx = Math.round(this.panelWidthVp * this.density);
+      this.panelHeightPx = Math.round(this.panelHeightVp * this.density);
+
+      // 默认小窗位置：水平居中，垂直居中偏上（让出底部，避让状态栏）
+      this.panelPosX = Math.max(0, Math.round((this.screenWidthPx - this.panelWidthPx) / 2));
+      this.panelPosY = Math.max(Math.round(60 * this.density), Math.round((this.screenHeightPx - this.panelHeightPx) * 0.35));
 
       // 默认停靠在右下侧，初始为半隐藏状态（50% 在屏幕外）
       this.dockSide = 'RIGHT';
@@ -199,7 +234,7 @@ export class FloatingWindowManager {
   }
 
   /**
-   * 切换到 Mini 助手展开面板模式
+   * 切换到 Mini 助手展开小窗模式
    */
   public switchToPanelMode(): void {
     if (!this.subWindow) {
@@ -209,12 +244,31 @@ export class FloatingWindowManager {
       this.currentMode = 'PANEL';
       AppStorage.setOrCreate(AppConstants.FLOATING_WINDOW_MODE_KEY, 'PANEL');
 
-      // 展开为全屏覆盖透明窗口（让 Panel 组件在其内部做半屏或抽屉展示）
-      this.subWindow.resize(this.screenWidthPx, this.screenHeightPx);
-      this.subWindow.moveWindowTo(0, 0);
+      // 确保小窗处于屏幕安全显示范围内
+      this.clampPanelPosition();
+
+      // 调整为小窗独立尺寸与停驻坐标（无全屏遮罩，主窗口可穿透操作）
+      this.subWindow.resize(this.panelWidthPx, this.panelHeightPx);
+      this.subWindow.moveWindowTo(this.panelPosX, this.panelPosY);
     } catch (e) {
       console.error('[FloatingWindowManager] switchToPanelMode error:', JSON.stringify(e));
     }
+  }
+
+  /**
+   * 限制小窗坐标在屏幕安全边界内（防滑出屏幕与遮挡顶底状态栏）
+   */
+  private clampPanelPosition(): void {
+    const marginPx = Math.round(8 * this.density);
+    const topLimitPx = Math.round(44 * this.density);
+    const bottomLimitPx = this.screenHeightPx - this.panelHeightPx - Math.round(36 * this.density);
+    const rightLimitPx = this.screenWidthPx - this.panelWidthPx - marginPx;
+
+    const effectiveRight = Math.max(marginPx, rightLimitPx);
+    const effectiveBottom = Math.max(topLimitPx, bottomLimitPx);
+
+    this.panelPosX = Math.max(marginPx, Math.min(effectiveRight, this.panelPosX));
+    this.panelPosY = Math.max(topLimitPx, Math.min(effectiveBottom, this.panelPosY));
   }
 
   /**
@@ -439,6 +493,134 @@ export class FloatingWindowManager {
     } else {
       this.updateDrag(deltaXPx / this.density, deltaYPx / this.density);
     }
+  }
+
+  // ==================== 小窗平移拖拽与拉伸缩放 API ====================
+
+  /**
+   * 开始拖拽小窗整体平移
+   */
+  public startPanelDrag(): void {
+    if (!this.subWindow || this.currentMode !== 'PANEL') {
+      return;
+    }
+    this.dragStartPanelPosX = this.panelPosX;
+    this.dragStartPanelPosY = this.panelPosY;
+  }
+
+  /**
+   * 小窗整体平移拖拽中（1:1 跟手移动物理窗口）
+   * @param offsetXVp PanGesture 的 offsetX (单位: vp)
+   * @param offsetYVp PanGesture 的 offsetY (单位: vp)
+   */
+  public updatePanelDrag(offsetXVp: number, offsetYVp: number): void {
+    if (!this.subWindow || this.currentMode !== 'PANEL') {
+      return;
+    }
+    const deltaXPx = offsetXVp * this.density;
+    const deltaYPx = offsetYVp * this.density;
+    const newX = Math.round(this.dragStartPanelPosX + deltaXPx);
+    const newY = Math.round(this.dragStartPanelPosY + deltaYPx);
+
+    try {
+      this.subWindow.moveWindowTo(newX, newY);
+    } catch (e) {
+      console.error('[FloatingWindowManager] updatePanelDrag moveWindowTo error:', JSON.stringify(e));
+    }
+  }
+
+  /**
+   * 小窗整体平移拖拽结束（计算最终停驻坐标并应用防溢出保护）
+   * @param offsetXVp PanGesture 的 offsetX (单位: vp)
+   * @param offsetYVp PanGesture 的 offsetY (单位: vp)
+   */
+  public endPanelDrag(offsetXVp: number, offsetYVp: number): void {
+    if (!this.subWindow || this.currentMode !== 'PANEL') {
+      return;
+    }
+    const deltaXPx = offsetXVp * this.density;
+    const deltaYPx = offsetYVp * this.density;
+    this.panelPosX = Math.round(this.dragStartPanelPosX + deltaXPx);
+    this.panelPosY = Math.round(this.dragStartPanelPosY + deltaYPx);
+
+    this.clampPanelPosition();
+
+    try {
+      this.subWindow.moveWindowTo(this.panelPosX, this.panelPosY);
+    } catch (e) {
+      console.error('[FloatingWindowManager] endPanelDrag moveWindowTo error:', JSON.stringify(e));
+    }
+  }
+
+  /**
+   * 开始调整小窗尺寸手势
+   */
+  public startPanelResize(): void {
+    if (!this.subWindow || this.currentMode !== 'PANEL') {
+      return;
+    }
+    this.resizeStartWidthPx = this.panelWidthPx;
+    this.resizeStartHeightPx = this.panelHeightPx;
+    this.resizeStartPosX = this.panelPosX;
+    this.resizeStartPosY = this.panelPosY;
+  }
+
+  /**
+   * 调整小窗尺寸中（拖动右下角角标）
+   * @param offsetXVp PanGesture 的 offsetX (单位: vp)
+   * @param offsetYVp PanGesture 的 offsetY (单位: vp)
+   */
+  public updatePanelResize(offsetXVp: number, offsetYVp: number): void {
+    if (!this.subWindow || this.currentMode !== 'PANEL') {
+      return;
+    }
+    const deltaWPx = offsetXVp * this.density;
+    const deltaHPx = offsetYVp * this.density;
+
+    const minWPx = Math.round(this.MIN_PANEL_WIDTH_VP * this.density);
+    const minHPx = Math.round(this.MIN_PANEL_HEIGHT_VP * this.density);
+    const maxWPx = this.screenWidthPx - Math.round(16 * this.density);
+    const maxHPx = this.screenHeightPx - Math.round(90 * this.density);
+
+    const targetW = Math.max(minWPx, Math.min(maxWPx, Math.round(this.resizeStartWidthPx + deltaWPx)));
+    const targetH = Math.max(minHPx, Math.min(maxHPx, Math.round(this.resizeStartHeightPx + deltaHPx)));
+
+    // 如果扩展时右边或下边超出屏幕边界，则同步向内推动小窗左/上坐标，保证内容完整展现
+    const marginPx = Math.round(8 * this.density);
+    const bottomLimitMarginPx = Math.round(36 * this.density);
+
+    let newPosX = this.resizeStartPosX;
+    if (newPosX + targetW > this.screenWidthPx - marginPx) {
+      newPosX = Math.max(marginPx, this.screenWidthPx - marginPx - targetW);
+    }
+
+    let newPosY = this.resizeStartPosY;
+    if (newPosY + targetH > this.screenHeightPx - bottomLimitMarginPx) {
+      newPosY = Math.max(Math.round(44 * this.density), this.screenHeightPx - bottomLimitMarginPx - targetH);
+    }
+
+    this.panelWidthPx = targetW;
+    this.panelHeightPx = targetH;
+    this.panelWidthVp = targetW / this.density;
+    this.panelHeightVp = targetH / this.density;
+    this.panelPosX = newPosX;
+    this.panelPosY = newPosY;
+
+    try {
+      this.subWindow.resize(this.panelWidthPx, this.panelHeightPx);
+      this.subWindow.moveWindowTo(this.panelPosX, this.panelPosY);
+    } catch (e) {
+      console.error('[FloatingWindowManager] updatePanelResize error:', JSON.stringify(e));
+    }
+  }
+
+  /**
+   * 调整小窗尺寸结束
+   * @param offsetXVp PanGesture 的 offsetX (单位: vp)
+   * @param offsetYVp PanGesture 的 offsetY (单位: vp)
+   */
+  public endPanelResize(offsetXVp: number, offsetYVp: number): void {
+    this.updatePanelResize(offsetXVp, offsetYVp);
   }
 
   public show(): void {
