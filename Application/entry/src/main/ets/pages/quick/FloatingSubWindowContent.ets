@@ -1,6 +1,6 @@
 import { promptAction, curves } from '@kit.ArkUI';
 import { common } from '@kit.AbilityKit';
-import { AppConstants } from '../../common/constants/AppConstants';
+import { AppConstants, RouterConstants } from '../../common/constants/AppConstants';
 import { FloatingWindowManager } from '../../common/agent/FloatingWindowManager';
 import { PageContextTracker, PageSnapshot, PageActionDescriptor } from '../../common/agent/PageContextTracker';
 import { UIActionDispatcher, GuidanceState } from '../../common/agent/UIActionDispatcher';
@@ -554,6 +554,77 @@ export struct FloatingSubWindowContent {
     }
   }
 
+  /**
+   * 处理顶部快捷指令点击：若属于页面导航则直接通过 FloatingWindowManager 调度主窗口大屏跳转，
+   * 确保悬浮窗小屏不受影响且保持 AI 伴随界面；非导航动作分发至 UIActionDispatcher。
+   */
+  private async handleQuickActionClick(act: PageActionDescriptor): Promise<void> {
+    switch (act.actionId) {
+      case 'open_map': {
+        const p: Record<string, string> = { 'title': '校园地图', 'url': AppConstants.GIS_MAP_URL };
+        const ok = await FloatingWindowManager.getInstance().navigateMainWindow(RouterConstants.PAGE_WEB, p);
+        promptAction.showToast({ message: ok ? `已在大屏打开：${act.label}` : '大屏跳转失败', duration: 1500 });
+        return;
+      }
+      case 'open_grades': {
+        const ok = await FloatingWindowManager.getInstance().navigateMainWindow(RouterConstants.PAGE_GRADE);
+        promptAction.showToast({ message: ok ? `已在大屏打开：${act.label}` : '大屏跳转失败', duration: 1500 });
+        return;
+      }
+      case 'open_library': {
+        const p: Record<string, string> = { 'title': '图书馆', 'url': AppConstants.LIB_FULL_URL };
+        const ok = await FloatingWindowManager.getInstance().navigateMainWindow(RouterConstants.PAGE_WEB, p);
+        promptAction.showToast({ message: ok ? `已在大屏打开：${act.label}` : '大屏跳转失败', duration: 1500 });
+        return;
+      }
+      case 'open_full_table': {
+        const ok = await FloatingWindowManager.getInstance().navigateMainWindow(RouterConstants.PAGE_TABLE_UI);
+        promptAction.showToast({ message: ok ? `已在大屏打开：${act.label}` : '大屏跳转失败', duration: 1500 });
+        return;
+      }
+      case 'open_calendar': {
+        const ok = await FloatingWindowManager.getInstance().navigateMainWindow(RouterConstants.PAGE_CALENDAR);
+        promptAction.showToast({ message: ok ? `已在大屏打开：${act.label}` : '大屏跳转失败', duration: 1500 });
+        return;
+      }
+      case 'open_settings': {
+        const ok = await FloatingWindowManager.getInstance().navigateMainWindow(RouterConstants.PAGE_SETTINGS);
+        promptAction.showToast({ message: ok ? `已在大屏打开：${act.label}` : '大屏跳转失败', duration: 1500 });
+        return;
+      }
+      case 'open_login': {
+        const ok = await FloatingWindowManager.getInstance().navigateMainWindow(RouterConstants.PAGE_LOGIN);
+        promptAction.showToast({ message: ok ? `已在大屏打开：${act.label}` : '大屏跳转失败', duration: 1500 });
+        return;
+      }
+      case 'open_course_import':
+      case 'import_courses': {
+        const p: Record<string, string> = { 'returnHome': '1' };
+        const ok = await FloatingWindowManager.getInstance().navigateMainWindow(RouterConstants.PAGE_COURSE_IMPORT, p);
+        promptAction.showToast({ message: ok ? `已在大屏打开：${act.label}` : '大屏跳转失败', duration: 1500 });
+        return;
+      }
+      case 'import_exams': {
+        const p: Record<string, string> = { 'returnHome': '0' };
+        const ok = await FloatingWindowManager.getInstance().navigateMainWindow(RouterConstants.PAGE_EXAM_IMPORT, p);
+        promptAction.showToast({ message: ok ? `已在大屏打开：${act.label}` : '大屏跳转失败', duration: 1500 });
+        return;
+      }
+      case 'import_grades': {
+        const ok = await FloatingWindowManager.getInstance().navigateMainWindow(RouterConstants.PAGE_GRADE_IMPORT);
+        promptAction.showToast({ message: ok ? `已在大屏打开：${act.label}` : '大屏跳转失败', duration: 1500 });
+        return;
+      }
+      default: {
+        const ok = await UIActionDispatcher.getInstance().dispatch(act.actionId, {});
+        promptAction.showToast({
+          message: ok ? `已执行：${act.label}` : '当前页面暂不支持该操作',
+          duration: 1500
+        });
+      }
+    }
+  }
+
   // === 悬浮球视图 (Ball Mode) ===
   @Builder
   private FloatingBallView(): void {
@@ -789,10 +860,7 @@ export struct FloatingSubWindowContent {
               .backgroundColor('rgba(217, 119, 6, 0.1)')
               .borderRadius(12)
               .onClick(() => {
-                // 快捷动作本地直触发，绕过 LLM 转述（actionId 不进自然语言）
-                UIActionDispatcher.getInstance().dispatch(act.actionId, {}).then((ok: boolean) => {
-                  promptAction.showToast({ message: ok ? `已执行：${act.label}` : '当前页面暂不支持该操作', duration: 1500 });
-                });
+                this.handleQuickActionClick(act);
               });
             });
           }

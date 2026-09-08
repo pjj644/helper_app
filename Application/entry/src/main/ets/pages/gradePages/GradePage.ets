@@ -9,6 +9,7 @@ import { UIActionDispatcher } from '../../common/agent/UIActionDispatcher';
 import { VisionScheduleHelper, VisionGradeReportResult } from '../../common/agent/VisionScheduleHelper';
 import { VisionImportPreviewDialog } from '../../components/import/VisionImportPreviewDialog';
 import { VisionGradePreviewItem, createGradePreviewItems, parseClampedNumber } from '../../model/VisionImportModel';
+import { FloatingWindowManager } from '../../common/agent/FloatingWindowManager';
 
 @Entry
 @Component
@@ -78,9 +79,14 @@ struct GradePage {
   private openGradeImport(): void {
     const currentSemId: number = this.getSelectedSemesterId();
     const targetSemId: number = currentSemId > 0 ? currentSemId : getPreviousSemesterId();
-    router.pushUrl({
-      url: 'pages/gradePages/GradeImport',
-      params: { semesterId: targetSemId }
+    const navParams: Record<string, number> = { 'semesterId': targetSemId };
+    FloatingWindowManager.getInstance().navigateMainWindow('pages/gradePages/GradeImport', navParams).then((ok: boolean) => {
+      if (!ok) {
+        router.pushUrl({
+          url: 'pages/gradePages/GradeImport',
+          params: navParams
+        });
+      }
     });
   }
 

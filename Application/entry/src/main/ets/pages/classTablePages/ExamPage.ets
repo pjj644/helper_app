@@ -8,6 +8,7 @@ import { ThemeManager } from '../../common/utils/ThemeManager';
 import { PageContextTracker } from '../../common/agent/PageContextTracker';
 import { UIActionDispatcher } from '../../common/agent/UIActionDispatcher';
 import { AppConstants } from '../../common/constants/AppConstants';
+import { FloatingWindowManager } from '../../common/agent/FloatingWindowManager';
 
 @Entry
 @Component
@@ -165,12 +166,18 @@ struct ExamPage {
 
   private openImport(): void {
     const selectedSemesterId: number = this.getSelectedSemesterId() || calculateSemesterId();
-    router.pushUrl({
-      url: 'pages/classTablePages/ExamImport',
-      params: {
-        returnHome: '0',
-        examTypeId: String(this.getSelectedExamTypeId()),
-        semesterId: String(selectedSemesterId),
+    const navParams: Record<string, string> = {
+      'returnHome': '0',
+      'semesterId': String(selectedSemesterId)
+    };
+    FloatingWindowManager.getInstance().navigateMainWindow('pages/classTablePages/ExamImport', navParams).then((ok: boolean) => {
+      if (!ok) {
+        router.pushUrl({
+          url: 'pages/classTablePages/ExamImport',
+          params: navParams
+        }).catch((e: Error) => {
+          console.error('[ExamPage] 跳转导入页面失败', e);
+        });
       }
     });
   }
