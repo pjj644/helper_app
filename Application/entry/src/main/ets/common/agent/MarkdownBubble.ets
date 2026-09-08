@@ -6,6 +6,7 @@ export interface InlineSpanItem {
   text: string;
   isBold?: boolean;
   isCode?: boolean;
+  linkUrl?: string;
 }
 
 export interface KeyValueItem {
@@ -41,7 +42,7 @@ export class MarkdownParser {
       return spans;
     }
 
-    const regex = /(\*\*([^*]+)\*\*|`([^`]+)`)/g;
+    const regex = /(\*\*([^*]+)\*\*|`([^`]+)`|\[([^\]]+)\]\(((?:https?:\/\/|\/pages\/|pages\/)[^\s)]+)\))/g;
     let lastIdx = 0;
     let match: RegExpExecArray | null = null;
 
@@ -54,6 +55,9 @@ export class MarkdownParser {
         spans.push({ text: match[2], isBold: true, isCode: false });
       } else if (match[3] !== undefined) {
         spans.push({ text: match[3], isBold: false, isCode: true });
+      } else if (match[4] !== undefined) {
+        // 行内链接 [text](url)：保留可点击 URL，避免原始 Markdown 语法裸露
+        spans.push({ text: match[4], isBold: false, isCode: false, linkUrl: match[5] });
       }
       lastIdx = regex.lastIndex;
     }
@@ -254,7 +258,15 @@ export class MarkdownParser {
             // 匹配属性项（如 - 教师：陈碟 或 - 时间：19:00 或 • 地点：品学楼）
             if (nextTrimmed.startsWith('- ') || nextTrimmed.startsWith('• ') || nextTrimmed.startsWith('-') || nextTrimmed.startsWith('•')) {
               const itemText = nextTrimmed.replace(/^[-•]\s*/, '');
-              const colonIdx = itemText.indexOf('：') !== -1 ? itemText.indexOf('：') : itemText.indexOf(':');
+              // 全角冒号优先；仅当全角缺失且 ASCII 冒号靠近行首、非 https:// 协议冒号时才降级切分，
+              // 避免值中的 URL 冒号把整句误切成「长标签 + 残值」
+              let colonIdx = itemText.indexOf('：');
+              if (colonIdx === -1) {
+                const asciiColon = itemText.indexOf(':');
+                if (asciiColon !== -1 && asciiColon <= 12 && itemText.substring(asciiColon + 1, asciiColon + 3) !== '//') {
+                  colonIdx = asciiColon;
+                }
+              }
 
               if (colonIdx !== -1) {
                 const labelPart = itemText.substring(0, colonIdx).trim();
@@ -429,11 +441,29 @@ export struct MarkdownBubble {
                       .backgroundColor(this.isDarkMode ? '#242C3D' : '#EAEFF8')
                       .borderRadius(4)
                       .flexShrink(0)
+                      // 限制标签最大宽度，防止长标签把 layoutWeight 值列挤压成单字竖排
+                      .constraintSize({ maxWidth: '40%' })
 
-                    Text(field.value)
-                      .fontSize(13)
-                      .fontColor(ThemeManager.getTextPrimaryColor())
-                      .layoutWeight(1)
+                    // 值区走行内解析：加粗/代码/可点击链接，Flex 自动换行
+                    Flex({ wrap: FlexWrap.Wrap, alignItems: ItemAlign.Center }) {
+                      ForEach(MarkdownParser.parseInlineSpans(field.value), (span: InlineSpanItem, spanIdx: number) => {
+                        if (span.linkUrl !== undefined) {
+                          Text(span.text)
+                            .fontSize(13)
+                            .fontColor('#007AFF')
+                            .decoration({ type: TextDecorationType.Underline, color: '#007AFF' })
+                            .onClick(() => {
+                              this.handleLinkClick(span.text, span.linkUrl || '');
+                            })
+                        } else {
+                          Text(span.text)
+                            .fontSize(13)
+                            .fontWeight(span.isBold ? FontWeight.Bold : FontWeight.Normal)
+                            .fontColor(span.isCode ? '#D63200' : ThemeManager.getTextPrimaryColor())
+                        }
+                      }, (span: InlineSpanItem, spanIdx: number) => `s_${spanIdx}_${span.text}`)
+                    }
+                    .layoutWeight(1)
                   }
                   .width('100%')
                   .alignItems(VerticalAlign.Center)
