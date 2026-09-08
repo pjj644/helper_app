@@ -5,6 +5,8 @@
 .opencode/
 skills-lock.json
 *.code-workspace
+AGENTS.md
+doc/
 
 # Node 依赖
 node_modules/
