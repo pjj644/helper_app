@@ -105,6 +105,12 @@ export class AppConstants {
   static readonly FLOATING_SUBWINDOW_NAME: string = 'ai_floating_subwindow';
   /** 悬浮窗形态 AppStorage 键（BALL/PANEL/GUIDANCE），FloatingWindowManager 与子窗口内容共用 */
   static readonly FLOATING_WINDOW_MODE_KEY: string = 'floating_window_mode';
+  /** AI 会话更新广播版本触发器（时间戳），用于悬浮窗与主页面双向实时同步 */
+  static readonly AI_SESSIONS_UPDATE_TRIGGER_KEY: string = 'ai_sessions_update_trigger';
+  /** AI 助手主页面 Tab 是否处于激活前台显示状态 */
+  static readonly AI_ASSISTANT_TAB_ACTIVE_KEY: string = 'ai_assistant_tab_active';
+  /** 当前正在查看/对话的活跃会话 ID 共享键 */
+  static readonly AI_ACTIVE_SESSION_ID_KEY: string = 'ai_active_session_id';
   /** AI 助手 SSE 首包 watchdog 阈值（毫秒）：超时未收到任何事件按首事件前失败处理 */
   static readonly AI_FIRST_PACKET_WATCHDOG_MS: number = 45000;
   /** AI 助手首事件前失败的指数退避重试间隔（毫秒），共重试 2 次 */

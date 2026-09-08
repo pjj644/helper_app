@@ -50,6 +50,8 @@ export struct AssistantPage {
   @State pulsePhase: number = 0;
   @StorageLink('floating_ball_enabled') isFloatingBallEnabled: boolean = true;
   @StorageLink(AgentEndpointConfig.STORAGE_KEY_CONFIGURED) @Watch('onConfiguredStateChange') isBackendConfigured: boolean = false;
+  @StorageLink(AppConstants.AI_ASSISTANT_TAB_ACTIVE_KEY) @Watch('onTabActiveChange') isTabActive: boolean = false;
+  @StorageLink(AppConstants.AI_SESSIONS_UPDATE_TRIGGER_KEY) @Watch('onSessionsUpdateTrigger') sessionsUpdateTrigger: number = 0;
   @State isRecording: boolean = false;
   @State showBackendGuide: boolean = false;
   @State backendGuideHint: string = '';
@@ -126,6 +128,30 @@ export struct AssistantPage {
     }, 300);
   }
 
+  private onTabActiveChange(): void {
+    if (this.isTabActive) {
+      // 切换到 AI 助手 Tab 时，自动从 ChatSessionRepository 重载最新会话，实现与悬浮窗对话实时同步
+      const activeSessionId = AppStorage.get<string>(AppConstants.AI_ACTIVE_SESSION_ID_KEY);
+      this.loadSessions(activeSessionId);
+      this.loadToolCallDisplaySetting();
+      this.refreshBackendGuide();
+      setTimeout(() => {
+        this.scroller.scrollEdge(Edge.Bottom);
+      }, 200);
+    } else {
+      this.syncCurrentSession();
+      this.saveSessions();
+    }
+  }
+
+  private onSessionsUpdateTrigger(): void {
+    // 仅在当前处于活跃 Tab 且没有正在进行流式输出时静默同步，避免重入
+    if (this.isTabActive && !this.isLoading) {
+      const activeSessionId = AppStorage.get<string>(AppConstants.AI_ACTIVE_SESSION_ID_KEY);
+      this.loadSessions(activeSessionId);
+    }
+  }
+
   private onConfiguredStateChange(): void {
     this.refreshBackendGuide();
   }
@@ -154,8 +180,8 @@ export struct AssistantPage {
     }
   }
 
-  private loadSessions(): void {
-    console.info('[AssistantPage] loadSessions start');
+  private loadSessions(targetSessionId?: string): void {
+    console.info('[AssistantPage] loadSessions start, targetSessionId:', targetSessionId);
     try {
       const context = getContext(this);
       this.sessions = ChatSessionRepository.getSessions(context);
@@ -165,10 +191,18 @@ export struct AssistantPage {
     }
     console.info('[AssistantPage] sessions count:', this.sessions.length);
     if (this.sessions.length > 0) {
-      this.currentSessionId = this.sessions[0].id;
-      this.messages = this.sessions[0].messages;
-      this.displayMessages = this.withUid(this.sessions[0].displayMessages || []);
-      console.info('[AssistantPage] restored session:', this.sessions[0].id, 'title:', this.sessions[0].title);
+      let target: ChatSession = this.sessions[0];
+      if (targetSessionId) {
+        const found = this.sessions.find((s: ChatSession) => s.id === targetSessionId);
+        if (found) {
+          target = found;
+        }
+      }
+      this.currentSessionId = target.id;
+      AppStorage.setOrCreate(AppConstants.AI_ACTIVE_SESSION_ID_KEY, target.id);
+      this.messages = target.messages || [];
+      this.displayMessages = this.withUid(target.displayMessages || []);
+      console.info('[AssistantPage] restored session:', target.id, 'title:', target.title);
     } else {
       this.messages = [];
       this.displayMessages = [];
@@ -188,6 +222,13 @@ export struct AssistantPage {
         ChatSessionRepository.clearAllSessions(context);
         return;
       }
+      // 置顶当前活跃会话
+      const activeIdx = this.sessions.findIndex((s: ChatSession) => s.id === this.currentSessionId);
+      if (activeIdx > 0) {
+        const active = this.sessions.splice(activeIdx, 1)[0];
+        this.sessions.unshift(active);
+      }
+      AppStorage.setOrCreate(AppConstants.AI_ACTIVE_SESSION_ID_KEY, this.currentSessionId);
       ChatSessionRepository.saveSessions(context, this.sessions);
     } catch (error) {
       console.error('[AssistantPage] saveSessions error:', JSON.stringify(error));
@@ -281,6 +322,7 @@ export struct AssistantPage {
     };
     this.sessions = [newSession, ...this.sessions];
     this.currentSessionId = newSession.id;
+    AppStorage.setOrCreate(AppConstants.AI_ACTIVE_SESSION_ID_KEY, newSession.id);
     this.messages = [];
     this.displayMessages = [];
     this.trimSessions();
@@ -301,6 +343,7 @@ export struct AssistantPage {
     for (let i = 0; i < this.sessions.length; i++) {
       if (this.sessions[i].id === sessionId) {
         this.currentSessionId = sessionId;
+        AppStorage.setOrCreate(AppConstants.AI_ACTIVE_SESSION_ID_KEY, sessionId);
         this.messages = [...this.sessions[i].messages];
         this.displayMessages = this.withUid(this.sessions[i].displayMessages || []);
         break;
@@ -318,6 +361,7 @@ export struct AssistantPage {
     if (sessionId === this.currentSessionId) {
       if (remaining.length > 0) {
         this.currentSessionId = remaining[0].id;
+        AppStorage.setOrCreate(AppConstants.AI_ACTIVE_SESSION_ID_KEY, this.currentSessionId);
         this.messages = [...remaining[0].messages];
         this.displayMessages = this.withUid(remaining[0].displayMessages || []);
         // 切换到其他会话：清空中断标记、流式镜像与重发上下文载荷，避免跨会话复用

@@ -244,8 +244,10 @@ struct MainPage {
   }
 
   private updateCurrentTabContext(): void {
-    FloatingWindowManager.getInstance().setAssistantPageActive(this.currentTabIndex === 1);
-    if (this.currentTabIndex === 1) {
+    const isAssistantActive = this.currentTabIndex === 1;
+    FloatingWindowManager.getInstance().setAssistantPageActive(isAssistantActive);
+    AppStorage.setOrCreate(AppConstants.AI_ASSISTANT_TAB_ACTIVE_KEY, isAssistantActive);
+    if (isAssistantActive) {
       AgentEndpointConfig.syncConfiguredState(getContext(this));
     }
 

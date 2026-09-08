@@ -1,6 +1,7 @@
 import { router } from '@kit.ArkUI';
 import { ThemeManager } from '../utils/ThemeManager';
 import { RouterConstants } from '../constants/AppConstants';
+import { FloatingWindowManager } from './FloatingWindowManager';
 
 export interface InlineSpanItem {
   text: string;
@@ -682,15 +683,24 @@ export struct MarkdownBubble {
   private handleLinkClick(title: string, url: string): void {
     if (url.startsWith('pages/') || url.startsWith('/pages/')) {
       const targetUrl = url.startsWith('/') ? url.substring(1) : url;
-      router.pushUrl({ url: targetUrl }).catch((e: Error) => {
-        console.error('[MarkdownBubble] 跳转页面失败', e);
+      FloatingWindowManager.getInstance().navigateMainWindow(targetUrl).then((ok: boolean) => {
+        if (!ok) {
+          router.pushUrl({ url: targetUrl }).catch((e: Error) => {
+            console.error('[MarkdownBubble] 跳转页面失败', e);
+          });
+        }
       });
     } else if (url.startsWith('http://') || url.startsWith('https://')) {
-      router.pushUrl({
-        url: RouterConstants.PAGE_WEB,
-        params: { title: title, url: url }
-      }).catch((e: Error) => {
-        console.error('[MarkdownBubble] 打开网页失败', e);
+      const webParams: Record<string, Object> = { 'title': title, 'url': url };
+      FloatingWindowManager.getInstance().navigateMainWindow(RouterConstants.PAGE_WEB, webParams).then((ok: boolean) => {
+        if (!ok) {
+          router.pushUrl({
+            url: RouterConstants.PAGE_WEB,
+            params: webParams
+          }).catch((e: Error) => {
+            console.error('[MarkdownBubble] 打开网页失败', e);
+          });
+        }
       });
     }
   }
