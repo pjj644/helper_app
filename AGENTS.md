@@ -92,8 +92,7 @@ devecocli check compat                                       # 跨 SDK API 兼�
 
 ## 7. 按需查阅详细文档
 
-| 需要了解的模块 | 详细文档路径 |
-|---|---|
+| 业务全景：全部 10 大子系统 / 60+ 功能特性全量详单与规格 | [`doc/FEATURES.md`](./doc/FEATURES.md) |
 | 完整架构 / 分层 / 数据流 / 五 Tab 结构 / 抓取 / 学期计算 | [`doc/ARCHITECTURE.md`](./doc/ARCHITECTURE.md) |
 | AI 助手：架构图 / 状态机 / 5大元工具 / 悬浮窗 / Markdown渲染 / 日历联动 | [`doc/AI_AGENT.md`](./doc/AI_AGENT.md) |
 | 构建 / 运行 / 联调 / 签名 / 权限 / 完整测试用例清单 | [`doc/BUILD_AND_TEST.md`](./doc/BUILD_AND_TEST.md) |
