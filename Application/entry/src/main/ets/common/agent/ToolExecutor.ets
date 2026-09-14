@@ -63,6 +63,24 @@ interface BackendGuideResponse {
   data?: GuideItem[]
 }
 
+/** 后端 GET /api/jwc/search 响应中的通知条目（字段均可选以容错） */
+interface JwcNoticeItem {
+  title?: string
+  date?: string
+  url?: string
+  category?: string
+}
+
+/** 后端 GET /api/jwc/search 的响应形状（字段均可选以容错） */
+interface JwcSearchResponse {
+  success?: boolean
+  total?: number
+  notices?: JwcNoticeItem[]
+  /** 数据来源：jwc_search=官网标题检索命中 / homepage_feed=零命中静默降级的首页通知流 */
+  source?: string
+  error?: string
+}
+
 interface UpcomingExamStudyItem {
   courseName: string
   date: string
@@ -958,6 +976,29 @@ export class ToolExecutor {
         let resStr = response.result as string
         if (typeof resStr !== 'string') {
           resStr = JSON.stringify(response.result)
+        }
+        // 官网标题搜索零命中时 scraper 会静默降级为首页通知流（source==='homepage_feed'，url 全为首页），
+        // 端侧如实改判 success:false，避免模型误以为「官网已查过无结果」或误引首页链接（与 web 端执行器哨兵对齐）。
+        try {
+          const parsed = JSON.parse(resStr) as JwcSearchResponse
+          if (parsed && parsed.source === 'homepage_feed') {
+            const notices: JwcNoticeItem[] = parsed.notices || []
+            const top: JwcNoticeItem[] = notices.length > 5 ? notices.slice(0, 5) : notices
+            let summary: string = ''
+            for (let i = 0; i < top.length; i++) {
+              const n: JwcNoticeItem = top[i]
+              if (i > 0) {
+                summary += '、'
+              }
+              summary += `${n.title || ''}(${n.date || ''})`
+            }
+            return {
+              success: false,
+              data: `教务处官网未检索到与「${keyword}」直接相关的公告，以下为首页最新通知（url 为首页、与关键词未必相关，不得作为该问题的权威来源引用；请改用更短的核心关键词重试，如“重修”“补考”“选课”）：${summary}`
+            }
+          }
+        } catch (e) {
+          // 响应非 JSON（如网关错误页），保持原样透传
         }
         return { success: true, data: resStr }
       }
