@@ -292,6 +292,7 @@ struct MainPage {
         ]
       );
     } else if (this.currentTabIndex === 3) {
+      AppStorage.setOrCreate(AppConstants.SCHEDULE_DATA_VERSION_KEY, Date.now());
       PageContextTracker.getInstance().updateSnapshot(
         'calendar',
         '校园日历',

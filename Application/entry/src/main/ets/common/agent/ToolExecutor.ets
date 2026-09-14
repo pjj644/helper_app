@@ -512,6 +512,7 @@ export class ToolExecutor {
         const filtered: ScheduleEvent[] = allSchedules.filter((s: ScheduleEvent) => s.calendarEventId !== calId)
         if (filtered.length !== allSchedules.length) {
           await ScheduleRepository.saveSchedules(this.context, filtered)
+          ScheduleService.notifyScheduleDataChanged()
         }
         return { success: ok, data: JSON.stringify({ message: ok ? '日历事件已删除' : '删除失败', calendarEventId: calId }) }
       }

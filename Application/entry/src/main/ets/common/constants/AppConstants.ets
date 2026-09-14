@@ -20,6 +20,8 @@ export class AppConstants {
 
   static readonly GRADE_DATA_KEY: string = 'grade_data_json';
   static readonly SCHEDULE_DATA_KEY: string = 'schedule_data_json';
+  /** 日程数据变更响应式版本键（AppStorage 驱动 CalendarPage 跨 Tab/跨窗口响应式重载） */
+  static readonly SCHEDULE_DATA_VERSION_KEY: string = 'schedule_data_version';
   /** 桌面卡片「下一节课」缓存键（CourseService 写入，EntryFormAbility / WidgetUpdateService 读取） */
   static readonly NEXT_COURSE_CACHE_KEY: string = 'next_course_cache';
   /** 桌面卡片实例 ID 列表键（EntryFormAbility 维护，WidgetUpdateService 消费） */

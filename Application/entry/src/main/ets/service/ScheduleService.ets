@@ -8,6 +8,7 @@ import { CalendarKitReminderService } from './CalendarKitReminderService';
 import { ExamUtils } from '../common/utils/ExamUtils';
 import { calculateSemesterId } from '../model/classTableModel/ExamAccessRules';
 import { parseIsoDateToMidnight } from '../model/SemesterConfig';
+import { AppConstants } from '../common/constants/AppConstants';
 
 export class ScheduleService {
   static async loadCustomSchedules(context: Context, syncWithCalendar: boolean = true): Promise<ScheduleEvent[]> {
@@ -82,6 +83,7 @@ export class ScheduleService {
       console.info(`[ReminderDebug] ScheduleService.saveSchedule: id=${event.id}, title=${event.title}, date=${event.date}, startTime=${event.startTime}, endTime=${event.endTime}, timeRange=${event.timeRange}, remindMinutes=${event.remindMinutes}, type=${event.type}, calId=${event.calendarEventId}`);
       await ScheduleRepository.addSchedule(context, event);
       console.info(`[ReminderDebug] ScheduleService.saveSchedule: saved successfully`);
+      ScheduleService.notifyScheduleDataChanged();
       // 学期守卫：日程变更后顺手清理越界的自动日程（幂等；仓库无自动日程候选时零额外 IO）
       await ScheduleService.pruneNonCurrentSemesterAutoSchedules(context);
     } catch (error) {
@@ -104,6 +106,7 @@ export class ScheduleService {
         event.calendarEventId = 0;
       }
       await ScheduleRepository.updateSchedule(context, event);
+      ScheduleService.notifyScheduleDataChanged();
       // 学期守卫：日程变更后顺手清理越界的自动日程（幂等）
       await ScheduleService.pruneNonCurrentSemesterAutoSchedules(context);
     } catch (error) {
@@ -120,10 +123,20 @@ export class ScheduleService {
         console.info(`[ScheduleService] deleted calendar event for schedule=${eventId}`);
       }
       await ScheduleRepository.deleteSchedule(context, eventId);
+      ScheduleService.notifyScheduleDataChanged();
       // 学期守卫：删除后顺手清理剩余越界的自动日程（被删条目已不在仓库，与上方日历清理天然不冲突）
       await ScheduleService.pruneNonCurrentSemesterAutoSchedules(context);
     } catch (error) {
       console.error('[ScheduleService] deleteSchedule error:', JSON.stringify(error));
+    }
+  }
+
+  /** 通知全端日程数据发生变更（AppStorage 响应式驱动 CalendarPage 跨 Tab/跨窗口刷新） */
+  static notifyScheduleDataChanged(): void {
+    try {
+      AppStorage.setOrCreate(AppConstants.SCHEDULE_DATA_VERSION_KEY, Date.now());
+    } catch (err) {
+      console.warn('[ScheduleService] notifyScheduleDataChanged error:', JSON.stringify(err));
     }
   }
 

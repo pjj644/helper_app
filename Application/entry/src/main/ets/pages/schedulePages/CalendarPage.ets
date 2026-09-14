@@ -13,6 +13,7 @@ import { ScheduleEditor } from '../../components/ScheduleEditor';
 import { ScheduleSettingsPanel } from '../../components/ScheduleSettingsPanel';
 import { PageContextTracker } from '../../common/agent/PageContextTracker';
 import { UIActionDispatcher } from '../../common/agent/UIActionDispatcher';
+import { AppConstants } from '../../common/constants/AppConstants';
 
 const WEEK_HEADERS: string[] = ['日', '一', '二', '三', '四', '五', '六'];
 const TOTAL_GRID_CELLS: number = 42;
@@ -36,6 +37,7 @@ export struct CalendarPage {
   @State conflictingEventIds: Set<string> = new Set<string>();
   @State private renderVersion: number = 0;
   @StorageLink(ThemeManager.THEME_STORAGE_KEY) isDarkMode: boolean = false;
+  @StorageLink(AppConstants.SCHEDULE_DATA_VERSION_KEY) @Watch('onScheduleDataVersionChange') scheduleDataVersion: number = 0;
   private dialogController: CustomDialogController | null = null;
   private settingsDialogController: CustomDialogController | null = null;
 
@@ -55,6 +57,10 @@ export struct CalendarPage {
   onPageShow(): void {
     this.loadAllEvents();
     this.reportPageContext();
+  }
+
+  private onScheduleDataVersionChange(): void {
+    this.loadAllEvents();
   }
 
   private reportPageContext(): void {
