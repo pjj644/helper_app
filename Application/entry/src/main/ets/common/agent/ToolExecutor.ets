@@ -76,7 +76,7 @@ interface JwcSearchResponse {
   success?: boolean
   total?: number
   notices?: JwcNoticeItem[]
-  /** 数据来源：jwc_search=官网标题检索命中 / homepage_feed=零命中静默降级的首页通知流 */
+  /** 数据来源：official_search=官网标题检索命中 / homepage_feed=零命中静默降级的首页通知流 */
   source?: string
   error?: string
 }
@@ -981,6 +981,9 @@ export class ToolExecutor {
         // 端侧如实改判 success:false，避免模型误以为「官网已查过无结果」或误引首页链接（与 web 端执行器哨兵对齐）。
         try {
           const parsed = JSON.parse(resStr) as JwcSearchResponse
+          if (parsed.success === false) {
+            return { success: false, data: `教务处官网实时检索失败：${parsed.error || '未获取到结果'}` }
+          }
           if (parsed && parsed.source === 'homepage_feed') {
             const notices: JwcNoticeItem[] = parsed.notices || []
             const top: JwcNoticeItem[] = notices.length > 5 ? notices.slice(0, 5) : notices
