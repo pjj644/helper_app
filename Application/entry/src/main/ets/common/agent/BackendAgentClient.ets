@@ -258,7 +258,8 @@ export class BackendAgentClient {
         // 场景(mid-stream-reset)：已收到事件后传输层异常中断（RST/截断/异常关闭）→ 中断态
         this.markInterrupted('网络连接中断，回复未完成')
       } else {
-        this.handlePreEventFailure(job, `无法连接助手后端：${String(err)}`)
+        const errMsg: string = (err && (err.message || JSON.stringify(err))) ? (err.message || JSON.stringify(err)) : String(err)
+        this.handlePreEventFailure(job, `无法连接助手后端：${errMsg}`)
       }
     })
   }

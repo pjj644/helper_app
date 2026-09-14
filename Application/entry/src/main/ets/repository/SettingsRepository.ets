@@ -63,7 +63,8 @@ export class SettingsRepository {
     const pref = await preferences.getPreferences(abilityContext, AppConstants.COURSE_TABLE_PREF_NAME);
     const url: string = (await pref.get(AppConstants.SETTING_AGENT_BACKEND_URL_KEY, AppConstants.AI_AGENT_URL)) as string;
     const isOldLanAddress: boolean = !!url && (url.includes('192.168.') || url.includes('localhost') || url.includes('127.0.0.1'));
-    if (!url || url.length === 0 || isOldLanAddress) {
+    const isInvalid: boolean = !url || url.length === 0 || isOldLanAddress || !url.startsWith('http') || url.includes('我要的是');
+    if (isInvalid) {
       await pref.put(AppConstants.SETTING_AGENT_BACKEND_URL_KEY, AppConstants.AI_AGENT_URL);
       await pref.flush();
       return AppConstants.AI_AGENT_URL;

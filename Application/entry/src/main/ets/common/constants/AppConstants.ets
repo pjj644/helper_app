@@ -66,7 +66,7 @@ export class AppConstants {
   static readonly EAMS_COURSE_TABLE_URL: string = 'https://eams.uestc.edu.cn/eams/courseTableForStd.action';
 
   static readonly ONLINE_URL: string = 'https://online.uestc.edu.cn/';
-  static readonly GIS_MAP_URL: string = 'https://gis.uestc.edu.cn/#/';
+  static readonly GIS_MAP_URL: string = 'https://gis.uestc.edu.cn/';
   static readonly LIB_FULL_URL: string = 'https://www.lib.uestc.edu.cn/engine2/general/more?appId=4483334&websiteId=464744&wfwfid=22855&pageId=877838&typeId=10937088&currentBranch=1';
   static readonly LIB_URL: string = 'https://www.lib.uestc.edu.cn';
   static readonly QINGSHUI_RIVER_URL: string = 'https://bbs.uestc.edu.cn/new';

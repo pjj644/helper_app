@@ -21,6 +21,7 @@ struct WebPage {
   @StorageLink(ThemeManager.THEME_STORAGE_KEY) isDarkMode: boolean = false;
   private originalUrl: string = '';
   private hasSwitchedToVpn: boolean = false;
+  private isMainDocumentLoaded: boolean = false;
 
   aboutToAppear(): void {
     const params = router.getParams() as Record<string, string>;
@@ -68,6 +69,7 @@ struct WebPage {
   private reloadPage(): void {
     this.hasLoadError = false;
     this.showVpnOption = false;
+    this.isMainDocumentLoaded = false;
     this.isLoading = true;
     this.controller.refresh();
   }
@@ -156,14 +158,31 @@ struct WebPage {
             this.isLoading = true;
             this.hasLoadError = false;
             this.showVpnOption = false;
+            this.isMainDocumentLoaded = false;
             console.info('[WebPage] onPageBegin, url:', this.url);
           })
           .onProgressChange((event) => {
             this.progress = event.newProgress;
           })
           .onHttpErrorReceive((event) => {
-            // 过滤子资源请求：仅当主框架页面文档导航失败时才阻断页面
-            const isMain: boolean = event.request ? event.request.isMainFrame() : true;
+            // 核心守卫 1：若主文档已完成加载（页面已正常渲染），后续异步瓦片/子接口报错绝不遮蔽阻断页面
+            if (this.isMainDocumentLoaded) {
+              return;
+            }
+
+            // 核心守卫 2：健壮校验是否为主文档导航请求
+            let isMain: boolean = false;
+            if (event.request) {
+              try {
+                if (typeof event.request.isMainFrame === 'function') {
+                  isMain = event.request.isMainFrame();
+                } else if (event.request.isMainFrame !== undefined) {
+                  isMain = Boolean(event.request.isMainFrame);
+                }
+              } catch (_err) {
+                isMain = false;
+              }
+            }
             if (!isMain) {
               return;
             }
@@ -204,8 +223,24 @@ struct WebPage {
             }
           })
           .onErrorReceive((event) => {
-            // 过滤子资源网络错误：仅主文档请求失败才处理
-            const isMain: boolean = event.request ? event.request.isMainFrame() : true;
+            // 核心守卫 1：若主文档已完成加载，后续网络微小波动不阻断页面
+            if (this.isMainDocumentLoaded) {
+              return;
+            }
+
+            // 核心守卫 2：健壮校验是否为主文档网络错误
+            let isMain: boolean = false;
+            if (event.request) {
+              try {
+                if (typeof event.request.isMainFrame === 'function') {
+                  isMain = event.request.isMainFrame();
+                } else if (event.request.isMainFrame !== undefined) {
+                  isMain = Boolean(event.request.isMainFrame);
+                }
+              } catch (_err) {
+                isMain = false;
+              }
+            }
             if (!isMain) {
               return;
             }
@@ -232,6 +267,7 @@ struct WebPage {
           })
           .onPageEnd(() => {
             this.isLoading = false;
+            this.isMainDocumentLoaded = true;
             const currentUrl = this.controller.getUrl();
             if (currentUrl && currentUrl.length > 0) {
               this.url = currentUrl;
