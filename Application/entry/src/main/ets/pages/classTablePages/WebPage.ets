@@ -17,6 +17,7 @@ struct WebPage {
   @State hasLoadError: boolean = false;
   @State errorMessage: string = '';
   @State isVpnMode: boolean = false;
+  @State showVpnOption: boolean = false;
   @StorageLink(ThemeManager.THEME_STORAGE_KEY) isDarkMode: boolean = false;
   private originalUrl: string = '';
   private hasSwitchedToVpn: boolean = false;
@@ -66,6 +67,7 @@ struct WebPage {
 
   private reloadPage(): void {
     this.hasLoadError = false;
+    this.showVpnOption = false;
     this.isLoading = true;
     this.controller.refresh();
   }
@@ -153,24 +155,63 @@ struct WebPage {
           .onPageBegin(() => {
             this.isLoading = true;
             this.hasLoadError = false;
+            this.showVpnOption = false;
             console.info('[WebPage] onPageBegin, url:', this.url);
           })
           .onProgressChange((event) => {
             this.progress = event.newProgress;
           })
           .onHttpErrorReceive((event) => {
+            // 过滤子资源请求：仅当主框架页面文档导航失败时才阻断页面
+            const isMain: boolean = event.request ? event.request.isMainFrame() : true;
+            if (!isMain) {
+              return;
+            }
+
             const statusCode = event.response.getResponseCode();
-            console.error('[WebPage] HTTP error, status:', statusCode);
-            if (!this.hasSwitchedToVpn && (statusCode === 403 || statusCode === 502 || statusCode === 504)) {
-              this.switchToVpnMode();
-            } else if (statusCode >= 400) {
+            console.error('[WebPage] Main frame HTTP error, status:', statusCode);
+
+            // 明确需要 WebVPN 的状态码：
+            // 403 (Forbidden): 校外 IP 访问受限直接被防火墙拦截
+            // 502 (Bad Gateway) / 504 (Gateway Timeout): 校外访问受限反向代理无响应
+            if (statusCode === 403 || statusCode === 502 || statusCode === 504) {
+              if (!this.hasSwitchedToVpn) {
+                this.switchToVpnMode();
+              } else {
+                this.hasLoadError = true;
+                this.showVpnOption = true;
+                this.errorMessage = `校内服务访问受限 (HTTP ${statusCode})，WebVPN 模式下仍无法访问`;
+              }
+            } else if (statusCode === 404) {
+              // 404 页面不存在：明确属于链接失效或资源不存在，不提示 VPN
               this.hasLoadError = true;
-              this.errorMessage = `页面响应异常 (HTTP ${statusCode})`;
+              this.showVpnOption = false;
+              this.errorMessage = '页面未找到 (HTTP 404)，请核对链接地址';
+            } else if (statusCode === 500 || statusCode === 503) {
+              // 500 / 503 服务器内部错误或维护
+              this.hasLoadError = true;
+              this.showVpnOption = false;
+              this.errorMessage = `服务器暂时不可用 (HTTP ${statusCode})，请稍后再试`;
+            } else if (statusCode === 401) {
+              // 401 未授权：明确提示需要身份认证或登录，不属于 VPN 范畴
+              this.hasLoadError = true;
+              this.showVpnOption = false;
+              this.errorMessage = '该页面需要登录或统一身份认证权限 (HTTP 401)';
+            } else if (statusCode === 400 || statusCode === 405 || statusCode === 408) {
+              this.hasLoadError = true;
+              this.showVpnOption = false;
+              this.errorMessage = `页面请求异常 (HTTP ${statusCode})`;
             }
           })
           .onErrorReceive((event) => {
+            // 过滤子资源网络错误：仅主文档请求失败才处理
+            const isMain: boolean = event.request ? event.request.isMainFrame() : true;
+            if (!isMain) {
+              return;
+            }
+
             const err = event.error.getErrorInfo();
-            console.error('[WebPage] error:', err);
+            console.error('[WebPage] Main frame network error:', err);
             const isConnIssue: boolean =
               err.includes('net::ERR_CONNECTION') ||
               err.includes('net::ERR_NAME_NOT_RESOLVED') ||
@@ -183,7 +224,10 @@ struct WebPage {
               this.switchToVpnMode();
             } else {
               this.hasLoadError = true;
-              this.errorMessage = '网页加载失败，该服务可能仅限校园网访问';
+              this.showVpnOption = isConnIssue;
+              this.errorMessage = isConnIssue
+                ? '网络连接超时或无法解析，该校内服务可能仅限校园网访问'
+                : '网页加载遇到网络故障，请检查网络连接后重试';
             }
           })
           .onPageEnd(() => {
@@ -212,19 +256,19 @@ struct WebPage {
             Text('🌐')
               .fontSize(42);
 
-            Text('页面访问受限或加载失败')
+            Text(this.showVpnOption ? '校内服务访问受限' : '页面加载失败')
               .fontSize(17)
               .fontWeight(FontWeight.Bold)
               .fontColor(ThemeManager.getTextPrimaryColor());
 
-            Text(this.errorMessage.length > 0 ? this.errorMessage : '一卡通及部分校内服务需在校园网或 WebVPN 环境下使用')
+            Text(this.errorMessage.length > 0 ? this.errorMessage : '网络请求失败，请稍后重试')
               .fontSize(13)
               .fontColor(ThemeManager.getTextSecondaryColor())
               .textAlign(TextAlign.Center)
               .padding({ left: 24, right: 24 });
 
             Row({ space: 12 }) {
-              if (!this.isVpnMode) {
+              if (this.showVpnOption && !this.isVpnMode) {
                 Button('切换 WebVPN 访问')
                   .fontSize(13)
                   .fontWeight(FontWeight.Medium)
