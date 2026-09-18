@@ -264,7 +264,7 @@ export struct FloatingSubWindowContent {
 
   /**
    * 工具执行确认弹窗（与 AssistantPage.requestConfirmation 同一口径）：
-   * 展示工具中文名与参数摘要，高危操作附加警示；拒绝/允许分别 resolve false/true。
+   * 展示工具中文名，高危操作附加警示；不外露内部 json 参数数据；拒绝/允许分别 resolve false/true。
    */
   private requestConfirmation(toolName: string, args: string): Promise<boolean> {
     return new Promise<boolean>((resolve: (value: boolean) => void) => {
@@ -273,10 +273,6 @@ export struct FloatingSubWindowContent {
       let message: string = `AI助手请求执行：${displayName}`;
       if (riskLevel === 'high') {
         message += '\n\n⚠️ 此操作涉及数据变更，请谨慎确认';
-      }
-      if (args.length > 0) {
-        const argsPreview: string = args.length > 300 ? args.substring(0, 300) + '...' : args;
-        message += `\n\n参数：${argsPreview}`;
       }
       AlertDialog.show({
         title: '操作确认',

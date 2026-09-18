@@ -863,10 +863,6 @@ export struct AssistantPage {
       if (riskLevel === 'high') {
         message += '\n\n⚠️ 此操作涉及数据变更，请谨慎确认';
       }
-      if (args.length > 0) {
-        const argsPreview: string = args.length > 300 ? args.substring(0, 300) + '...' : args;
-        message += `\n\n参数：${argsPreview}`;
-      }
 
       AlertDialog.show({
         title: '操作确认',
